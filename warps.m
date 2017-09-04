@@ -212,7 +212,7 @@ function y = compose(varargin)
             cur_lat = size(cur_y);
             cur_lat = cur_lat(1:3);
             id = identity(cur_lat, cur_vs);
-            y = do_warp(cur_y - id, y, cur_vs, itrp, 1) + y;
+            y = warp(cur_y - id, y, cur_vs, itrp, 1) + y;
         end
     end
 end
