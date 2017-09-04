@@ -1,19 +1,12 @@
-function varargout = warp(varargin)
-% FORMAT out = warp(('warp'), in, y, (vs_in), (itrp), (bnd))
-% in    - Input image (or function R^3 -> R^d).
-% y     - Non-linear warp.
-% vs_in - Voxel size of the input image lattice [default: 1 1 1].
-% itrp  - Interpolation order [default: 1 1 1].
-% bnd   - Boundary conditions (0/1 = mirror/circulant) [default: 0 0 0]
-% Warps an image with a non-linear transform.
-%
-% FORMAT y = warp('compose', y_1, (vs_1), ..., y_n, (vs_n), (itrp))
-% FORMAT y = warp('identity', lat_dim, (lat_vs))
-% FORMAT y = warp('translation', T, lat_dim, (lat_vs))
-% FORMAT y = warp('linear', L, lat_dim, (lat_vs))
-% FORMAT y = warp('affine', A, lat_dim, (lat_vs))
-% FORMAT y = warp('mm2vox', y, vs)
-% FORMAT y = warp('transform', A, y)
+function varargout = warps(varargin)
+% FORMAT out = warps(('warp'), in, y, (vs_in), (itrp), (bnd))
+% FORMAT y   = warps('compose', y_1, (vs_1), ..., y_n, (vs_n), (itrp))
+% FORMAT y   = warps('identity', lat_dim, (lat_vs))
+% FORMAT y   = warps('translation', T, lat_dim, (lat_vs))
+% FORMAT y   = warps('linear', L, lat_dim, (lat_vs))
+% FORMAT y   = warps('affine', A, lat_dim, (lat_vs))
+% FORMAT y   = warps('mm2vox', y, vs)
+% FORMAT y   = warps('transform', A, y)
 %
 % Collection of tools for manipulating non-linear transformation (warps).
 %
@@ -23,14 +16,14 @@ function varargout = warp(varargin)
         error('Not enough argument. Type ''help warp'' for help');
     end
     if ~ischar(varargin{1})
-        [varargout{1:nargout}] = do_warp(varargin{:});
+        [varargout{1:nargout}] = warp(varargin{:});
     else
         id = varargin{1};
         varargin = varargin(2:end);
     end
     switch id
         case 'warp'
-            [varargout{1:nargout}] = do_warp(varargin{:});
+            [varargout{1:nargout}] = warp(varargin{:});
         case 'compose'
             [varargout{1:nargout}] = compose(varargin{:});
         case 'identity'
@@ -52,7 +45,7 @@ end
 %% === Functions ==========================================================
 
 function y = identity(lat_dim, lat_vs)
-% FORMAT y = warp('identity', lat_dim, (lat_vs))
+% FORMAT y = warps('identity', lat_dim, (lat_vs))
 % lat_dim - Dimensions of the lattice on which to compute the map
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
 %
@@ -75,7 +68,7 @@ function y = identity(lat_dim, lat_vs)
 end
 
 function y = translation(T, lat_dim, lat_vs)
-% FORMAT y = warp('translation', T, lat_dim, (lat_vs))
+% FORMAT y = warps('translation', T, lat_dim, (lat_vs))
 % T       - [3 double] Translation
 % lat_dim - Dimensions of the lattice on which to compute the map
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
@@ -101,7 +94,7 @@ function y = translation(T, lat_dim, lat_vs)
 end
 
 function y = linear(L, lat_dim, lat_vs)
-% FORMAT y = warp('linear', L, lat_dim, (lat_vs))
+% FORMAT y = warps('linear', L, lat_dim, (lat_vs))
 % L       - [3x3 double] Linear transform
 % lat_dim - Dimensions of the lattice on which to compute the map
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
@@ -126,7 +119,7 @@ function y = linear(L, lat_dim, lat_vs)
 end
 
 function y = affine(A, lat_dim, lat_vs)
-% FORMAT y = warp('affine', A, lat_dim, (lat_vs))
+% FORMAT y = warps('affine', A, lat_dim, (lat_vs))
 % A       - [4x4 double] Affine transform
 % lat_dim - Dimensions of the lattice on which to compute the map
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
@@ -152,7 +145,7 @@ function y = affine(A, lat_dim, lat_vs)
 end
 
 function y = compose(varargin)
-% FORMAT y = warp('compose', y_1, (vs_1), ..., y_n, (vs_n), (itrp))
+% FORMAT y = warps('compose', y_1, (vs_1), ..., y_n, (vs_n), (itrp))
 % y_i  - A warp OR an affine matrix.
 % vs_i - Voxel size of the lattice (for warps only) [default: 1 1 1]
 % itrp - Interpolation degree [default: 1]
@@ -224,8 +217,8 @@ function y = compose(varargin)
     end
 end
 
-function out = do_warp(in, y, vs_in, itrp, bnd)
-% FORMAT out = warp(in, y, (vs_in), (itrp), (bnd))
+function out = warp(in, y, vs_in, itrp, bnd)
+% FORMAT out = warps(('warp'), in, y, (vs_in), (itrp), (bnd))
 % in    - Input image (or function R^3 -> R^d).
 % y     - Non-linear warp.
 % vs_in - Voxel size of the input image lattice [default: 1 1 1].
@@ -269,7 +262,7 @@ function out = do_warp(in, y, vs_in, itrp, bnd)
 end
 
 function y = mm2vox(y, vs)
-% FORMAT y = warp('mm2vox', y, vs)
+% FORMAT y = warps('mm2vox', y, vs)
 % y  - Non-linear warp
 % vs - Voxel size of the target lattice
 %
@@ -284,7 +277,7 @@ function y = mm2vox(y, vs)
 end
 
 function y = transform(A, y)
-% FORMAT y = warp('transform', A, y)
+% FORMAT y = warps('transform', A, y)
 % A - Affine matrix
 % y - Non-linear warp
 %
