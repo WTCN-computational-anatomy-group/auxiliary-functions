@@ -38,6 +38,8 @@ function varargout = warps(varargin)
             [varargout{1:nargout}] = mm2vox(varargin{:});
         case 'transform'
             [varargout{1:nargout}] = transform(varargin{:});
+        otherwise
+            error('Unknown function %s', id)
     end
 end
 
@@ -223,13 +225,13 @@ function out = warp(in, y, vs_in, itrp, bnd)
 % y     - Non-linear warp.
 % vs_in - Voxel size of the input image lattice [default: 1 1 1].
 % itrp  - Interpolation order [default: 1 1 1].
-% bnd   - Boundary conditions (0/1 = mirror/circulant) [default: 0 0 0]
+% bnd   - Boundary conditions (0/1 = mirror/circulant) [default: 1 1 1]
 %
 % Warps an image with a non-linear transform, i.e., computes in(y).
 % The input image can be non-scalar.
 
     if nargin < 5
-        bnd = [0 0 0];
+        bnd = [1 1 1];
         if nargin < 4
             itrp = [1 1 1];
             if nargin < 3
@@ -298,8 +300,9 @@ function out = warp_scalar(in, y, vs_in, itrp, bnd)
 % FORMAT out = warp(in, y, (vs_in), (itrp))
 % in    - Input _scalar_ image (or function R^3 -> R).
 % y     - Non-linear warp.
-% vs_in - Voxel size of the input image lattice [default: 1 1 1].
-% itrp  - Interpolation order [default: 1 1 1].
+% vs_in - Voxel size of the input image lattice..
+% itrp  - Interpolation order.
+% bnd   - Boundary conditions (0/1 = mirror/circulant).
 %
 % Warps an image with a non-linear transform, i.e., computes in(y).
 % The input image must be scalar.
