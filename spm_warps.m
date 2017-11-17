@@ -25,7 +25,7 @@ function varargout = spm_warps(varargin)
         id = varargin{1};
         varargin = varargin(2:end);
     end
-    switch id
+    switch lower(id)
         case 'warp'
             [varargout{1:nargout}] = warp(varargin{:});
         case 'compose'
