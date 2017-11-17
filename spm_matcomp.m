@@ -4,9 +4,10 @@ function varargout = spm_matcomp(varargin)
 %
 % FORMAT out = spm_matcomp('name', input)
 %
-% FORMAT ld = spm_matcomp('logdet', A)
-% FORMAT c  = spm_matcomp('pointwise3', a, (b), (op))
-% FORMAT c  = spm_matcomp('pointwise', a, (b), (op), (sym))
+% FORMAT  ld = spm_matcomp('logdet', A)
+% FORMAT   c = spm_matcomp('pointwise3', a, (b), (op))
+% FORMAT   c = spm_matcomp('pointwise', a, (b), (op), (sym))
+% FORMAT ind = spm_matcomp('symIndices', k)
 %
 % FORMAT help spm_matcomp>function
 % Returns the help file of the selected function.
@@ -18,13 +19,15 @@ function varargout = spm_matcomp(varargin)
     end
     id = varargin{1};
     varargin = varargin(2:end);
-    switch id
+    switch lower(id)
         case 'pointwise3'
             [varargout{1:nargout}] = pointwise3(varargin{:});
         case 'pointwise'
             [varargout{1:nargout}] = pointwise(varargin{:});
         case 'logdet'
             [varargout{1:nargout}] = logdet(varargin{:});
+        case 'symindices'
+            [varargout{1:nargout}] = symIndices(varargin{:});
         otherwise
             help spm_matcomp
             error('Unknown function %s. Type ''help spm_matcomp'' for help.', id)
@@ -60,6 +63,54 @@ function ld = logdet(A)
     % And:   log|A| = log|C'*C| = log(|C|^2) = 2 * sum(log(diag(C)))
     ld = 2 * sum(log(diag(C)));
 
+end
+
+%% === symindices =========================================================
+
+function [ind, n] = symIndices(k, side)
+% FORMAT [ind, n] = spm_matcomp('symIndices', k, ('k'))
+% FORMAT [ind, k] = spm_matcomp('symIndices', n, 'n')
+% k - Length of the linearized and sparse symmetric matrix
+% n - Side size of the corresponding square matrix
+%
+% Returns a converter between row/col and linear indices for sparse
+% symmetric matrices.
+%
+% 1) If needed, finds n the size of the corresponding square matrix
+% 2) Returns a n*n matrix which links subscripts (ex: (1,2) or (2,3)) to a
+% corresponding linear index when the data is stored "sparsely" to save
+% redunduncies.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+    if nargin == 2
+        side = strcmpi(side, 'n');
+    else
+        side = false;
+    end
+
+    % 1) Compute n
+    if ~side
+        n = round(max(roots([1 1 -2*k])));
+    else
+        n = k;
+        k = n*(n+1)/2;
+    end
+    
+    % 2) Build the correspondance matrix
+    ind = diag(1:n);
+    l = n;
+    for i1=1:n
+        for i2=(i1+1):n
+            l = l + 1;
+            ind(i1, i2) = l;
+            ind(i2, i1) = l;
+        end
+    end
+    
+    if side
+        n = k;
+    end
 end
 
 %% === pointwise3 =========================================================
