@@ -1,4 +1,7 @@
 function varargout = spm_warps(varargin)
+%__________________________________________________________________________
+% Collection of tools for manipulating non-linear transformations (warps).
+%
 % FORMAT out = spm_warps(('warp'), in, y, (vs_in), (itrp), (bnd))
 % FORMAT y   = spm_warps('compose', y_1, (vs_1), ..., y_n, (vs_n), (itrp))
 % FORMAT y   = spm_warps('identity', lat_dim, (lat_vs))
@@ -8,12 +11,13 @@ function varargout = spm_warps(varargin)
 % FORMAT y   = spm_warps('mm2vox', y, vs)
 % FORMAT y   = spm_warps('transform', A, y)
 %
-% Collection of tools for manipulating non-linear transformation (warps).
-%
 % FORMAT help spm_warps>function
 % Returns the help file of the selected function.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
     if nargin == 0
-        error('Not enough argument. Type ''help warp'' for help');
+        help spm_warps
+        error('Not enough argument. Type ''help spm_warps'' for help.');
     end
     if ~ischar(varargin{1})
         [varargout{1:nargout}] = warp(varargin{:});
@@ -39,7 +43,8 @@ function varargout = spm_warps(varargin)
         case 'transform'
             [varargout{1:nargout}] = transform(varargin{:});
         otherwise
-            error('Unknown function %s', id)
+            help spm_warps
+            error('Unknown function %s. Type ''help spm_warps'' for help.', id)
     end
 end
 
@@ -52,6 +57,8 @@ function y = identity(lat_dim, lat_vs)
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
 %
 % Generate the identity warp on a given lattice.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     if nargin < 2
         lat_vs = [1 1 1];
@@ -69,6 +76,8 @@ function y = identity(lat_dim, lat_vs)
                lat_vs(3) * single(1:lat_dim(3)));
 end
 
+%%
+
 function y = translation(T, lat_dim, lat_vs)
 % FORMAT y = spm_warps('translation', T, lat_dim, (lat_vs))
 % T       - [3 double] Translation
@@ -76,6 +85,8 @@ function y = translation(T, lat_dim, lat_vs)
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
 %
 % Generate a translation warp on a given lattice.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     if nargin < 3
         lat_vs = [1 1 1];
@@ -95,6 +106,8 @@ function y = translation(T, lat_dim, lat_vs)
                lat_vs(3) * single(1:lat_dim(3)) + T(3));
 end
 
+%%
+
 function y = linear(L, lat_dim, lat_vs)
 % FORMAT y = spm_warps('linear', L, lat_dim, (lat_vs))
 % L       - [3x3 double] Linear transform
@@ -102,6 +115,8 @@ function y = linear(L, lat_dim, lat_vs)
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
 %
 % Generate a linear warp on a given lattice.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     if nargin < 3
         lat_vs = [1 1 1];
@@ -120,6 +135,8 @@ function y = linear(L, lat_dim, lat_vs)
     y = reshape(y', lat_dim, 3);
 end
 
+%%
+
 function y = affine(A, lat_dim, lat_vs)
 % FORMAT y = spm_warps('affine', A, lat_dim, (lat_vs))
 % A       - [4x4 double] Affine transform
@@ -127,6 +144,8 @@ function y = affine(A, lat_dim, lat_vs)
 % lat_vs  - Voxel size of the lattice [default: 1 1 1]
 %
 % Generate an affine warp on a given lattice.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     if nargin < 3
         lat_vs = [1 1 1];
@@ -145,6 +164,8 @@ function y = affine(A, lat_dim, lat_vs)
     y = bsxfun(@plus, y, A(1:3,4));
     y = reshape(y', [lat_dim 3]);
 end
+
+%%
 
 function y = compose(varargin)
 % FORMAT y = spm_warps('compose', y_1, (vs_1), ..., y_n, (vs_n), (itrp))
@@ -165,6 +186,8 @@ function y = compose(varargin)
 % - If the last argument is scalar              : Interpolation order
 %
 % Compose a series of transformations.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     if nargin == 0
         y = [];
@@ -219,6 +242,8 @@ function y = compose(varargin)
     end
 end
 
+%%
+
 function out = warp(in, y, vs_in, itrp, bnd)
 % FORMAT out = spm_warps(('warp'), in, y, (vs_in), (itrp), (bnd))
 % in    - Input image (or function R^3 -> R^d).
@@ -229,6 +254,8 @@ function out = warp(in, y, vs_in, itrp, bnd)
 %
 % Warps an image with a non-linear transform, i.e., computes in(y).
 % The input image can be non-scalar.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     if nargin < 5
         bnd = [1 1 1];
@@ -263,6 +290,8 @@ function out = warp(in, y, vs_in, itrp, bnd)
 
 end
 
+%%
+
 function y = mm2vox(y, vs)
 % FORMAT y = spm_warps('mm2vox', y, vs)
 % y  - Non-linear warp
@@ -272,11 +301,15 @@ function y = mm2vox(y, vs)
 %
 % Transform millimetric warps into voxel warps.
 % Target coordinates are divided by the voxel size of the target image.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
     dim = size(y);
     y = reshape(y, [], 3);
     y = bsxfun(@times, y', vs(:));
     y = reshape(y', dim);
 end
+
+%%
 
 function y = transform(A, y)
 % FORMAT y = spm_warps('transform', A, y)
@@ -285,6 +318,8 @@ function y = transform(A, y)
 %
 % Affine transform a warp.
 % Note that you can obtain the same result by doing warp('compose', A, y).
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     dim = size(y);
     dim = dim(1:3);
@@ -294,10 +329,10 @@ function y = transform(A, y)
     y = reshape(y', [dim 3]);
 end
 
-%% === Hepers =============================================================
+%% === Helpers ============================================================
 
 function out = warp_scalar(in, y, vs_in, itrp, bnd)
-% FORMAT out = warp(in, y, (vs_in), (itrp))
+% FORMAT out = warp_scalar(in, y, (vs_in), (itrp))
 % in    - Input _scalar_ image (or function R^3 -> R).
 % y     - Non-linear warp.
 % vs_in - Voxel size of the input image lattice..
@@ -306,6 +341,8 @@ function out = warp_scalar(in, y, vs_in, itrp, bnd)
 %
 % Warps an image with a non-linear transform, i.e., computes in(y).
 % The input image must be scalar.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     % Interpolate input image with circulant boundaries
     in_coeff = spm_diffeo('bsplinc', single(in), [itrp bnd]);
