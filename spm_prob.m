@@ -14,6 +14,26 @@ function varargout = spm_prob(varargin)
 %
 % FORMAT help spm_prob>function
 % Returns the help file of the selected function.
+%
+%--------------------------------------------------------------------------
+% TODO
+% ----
+%
+% - Functions returning only
+%     * the parameter-dependent
+%     * the normalising constant
+%   of the log-pdf.
+% - Distributions:
+%     * (Inv)-Wishart + Normal-(Inv)-Wishart
+%     * Inv-Gamma     + Normal-(Inv)-Gamma
+%     * Bernoulli/Categorical
+%     * Dirichlet
+%     * Laplace
+% - Maximum-likelihood estimators (?)
+% - Make functions work on arrays of observations
+%   (for know it usually only works on scalar inputs)
+%   It could allow using them for template update for exemple.
+%   -> Needs standard inputs, especially in multivariate cases
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
