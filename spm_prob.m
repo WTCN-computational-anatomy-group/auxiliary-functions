@@ -46,34 +46,46 @@ function varargout = normal(varargin)
 %   [kl]        Kullback-Leibler divergence
 %   [up/update] Conjugate (or Bayesian) update
 %
+%--------------------------------------------------------------------------
+% General distribution
+% --------------------
+%
+% The Normal distribution is parameterised by a mean parameter (mu) and
+% a (co)variance (sigma) or precision (lambda) parameter. 
+% For multivariate distributions, sigma is a KxK covariance matrix. 
+% In the univariate case, it reduces to a scalar value, the variance.
+%
 % FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, sigma)
 % FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, lambda, 'precision')
 % FORMAT ll  = spm_prob('Normal', 'logpdf', x, mu, sigma)
 % FORMAT ll  = spm_prob('Normal', 'logpdf', x, mu, lambda, 'precision')
 %   >> (Log) Probability density function.
 %
-% FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, n, sigma)
-% FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, n, lambda, 'precision')
-% FORMAT ll  = spm_prob('Normal', 'logpdf', x, mu, n, sigma)
-% FORMAT ll  = spm_prob('Normal', 'logpdf', x, mu, n, lambda, 'precision')
-%   >> Reparameterisation of the (log)-PDF when the Normal distribution
-%      is used as a distribution for a Normal mean with known variance.
-%
 % FORMAT kl  = spm_prob('Normal', 'kl', mu1, sigma1,  mu0, sigma0)
 % FORMAT kl  = spm_prob('Normal', 'kl', mu1, lambda1, mu0, lambda0, 'precision')
 %   >> Kullback-Leibler divergence from N0 to N1 = KL(N1||N0)
 %
+%--------------------------------------------------------------------------
+% Normal mean conjugate
+% ---------------------
+%
+% The Normal distribution can be used as a conjugate prior for the mean
+% parameter of another Normal distribution with known covariance.
+% It is then parameterised by an expected mean (mu), a degrees of freedom 
+% (n) and a known covariance (sigma) or precision (lambda). 
+%
+% FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, n, sigma)
+% FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, n, lambda, 'precision')
+% FORMAT ll  = spm_prob('Normal', 'logpdf', x, mu, n, sigma)
+% FORMAT ll  = spm_prob('Normal', 'logpdf', x, mu, n, lambda, 'precision')
+%   >> (Log) Probability density function.
+%
 % FORMAT kl  = spm_prob('Normal', 'kl', mu1, n1, mu0, n0, sigma)
 % FORMAT kl  = spm_prob('Normal', 'kl', mu1, n1, mu0, n0, lambda, 'precision')
-%   >> Reparameterisation of the KL-divergence when the Normal distribution
-%      is used as a conjugate prior for a Normal mean with known variance.
+%   >> Kullback-Leibler divergence from N0 to N1 = KL(N1||N0)
 %
 % FORMAT [mu1, n1] = spm_prob('Normal', 'update', mu, n, mu0, n0)
-%   >> Posterior parameters of the Normal distribution over a Normal mean
-%      computed from prior parameters and the sample mean.
-%
-% FORMAT help spm_prob>function
-%   >> Returns the help file of the selected function.
+%   >> Posterior parameters of the Normal distribution.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
     if nargin == 0
@@ -91,6 +103,8 @@ function varargout = normal(varargin)
             [varargout{1:nargout}] = normal_kl(varargin{:});
         case {'up', 'update'}
             [varargout{1:nargout}] = normal_up(varargin{:});
+        case 'help'
+            help spm_prob>normal
         otherwise
             help spm_prob>normal
             error('Unknown function %s. Type ''help spm_prob>normal'' for help.', id)
@@ -187,10 +201,10 @@ end
 % -------------------------------------------------------------------------
 
 function kl = normal_kl(mu1, par1, mu0, par0, varargin)
-% FORMAT kl  = spm_prob('Normal', 'kl', mu1, sigma1,  mu0, sigma0)
-% FORMAT kl  = spm_prob('Normal', 'kl', mu1, lambda1, mu0, lambda0, 'precision')
-% FORMAT kl  = spm_prob('Normal', 'kl', mu1, n1,      mu0, n0,      sigma)
-% FORMAT kl  = spm_prob('Normal', 'kl', mu1, n1,      mu0, n0,      lambda, 'precision')
+% FORMAT kl = spm_prob('Normal', 'kl', mu1, sigma1,  mu0, sigma0)
+% FORMAT kl = spm_prob('Normal', 'kl', mu1, lambda1, mu0, lambda0, 'precision')
+% FORMAT kl = spm_prob('Normal', 'kl', mu1, n1,      mu0, n0,      sigma)
+% FORMAT kl = spm_prob('Normal', 'kl', mu1, n1,      mu0, n0,      lambda, 'precision')
 
     % Check if we are in the reparameterised case
     if nargin == 6
@@ -257,36 +271,85 @@ function varargout = gamma(varargin)
 %   [ll/logpdf] Log-probability density function
 %   [kl]        Kullback-Leibler divergence
 %   [up/update] Conjugate (or Bayesian) update
+%   [E]         Expected value (E[x])
+%   [Elog]      Expected log (E[ln x])
+%   [V]         Variance (V[x])
+%   [Vlog]      Variance of the log (V[ln x])
+%
+% The Gamma distribution is a conjugate prior for a Normal precision (or
+% precision magnitude) with known mean, for a Gamma rate with known shape 
+% or in general for any rate parameter of an Exponential family
+% distribution.
+%
+%--------------------------------------------------------------------------
+% General distribution
+% --------------------
+%
+% The Gamma distribution is parameterised by a shape parameter (alpha) and
+% a rate parameter (beta).
 %
 % FORMAT pdf = spm_prob('Gamma', 'pdf',    x, alpha, beta)
 % FORMAT ll  = spm_prob('Gamma', 'logpdf', x, alpha, alpha)
 %   >> (Log) Probability density function.
 %
-% FORMAT pdf = spm_prob('Gamma', 'pdf',    x, lambda, n, K)
-% FORMAT ll  = spm_prob('Gamma', 'logpdf', x, lambda, n, K)
-%   >> Reparameterisation of the (log)-PDF when the Gamma distribution is
-%      used as a distribution for an univariate Normal precision with known 
-%      mean (K=1) or for a multivariate Normal precision magnitude with 
-%      known mean (K>1).
+% FORMAT e  = spm_prob('Gamma', 'E',    alpha, beta)
+% FORMAT el = spm_prob('Gamma', 'Elog', alpha, beta)
+% FORMAT v  = spm_prob('Gamma', 'V',    alpha, beta)
+% FORMAT vl = spm_prob('Gamma', 'Vlog', alpha, beta)
+%   >> Mean and variance
 %
 % FORMAT kl  = spm_prob('Gamma', 'kl', alpha1, beta1, alpha0, beta0)
 %   >> Kullback-Leibler divergence from G0 to G1 = KL(G1||G0).
 %
-% FORMAT kl  = spm_prob('Gamma', 'kl', lambda1, n1, lambda0, n0, K)
-%   >> Reparameterisation of the KL-divergence when the Gamma distribution
-%      is used as a conjugate prior for an univariate Normal precision with  
-%      known mean (K=1) or for a multivariate Normal precision magnitude  
-%      with known mean (K>1).
+%--------------------------------------------------------------------------
+% Normal precision conjugate
+% --------------------------
 %
-% FORMAT [lam1, n1] = spm_prob('Gamma', 'up', lam, n,     lam0, n0)
+% The Gamma distribution is parameterised by a mean precision parameter 
+% (lambda) and a degrees of freedom (n). It can be a precision *magnitude*
+% parameter of K > 1.
+%
+% FORMAT pdf = spm_prob('Gamma', 'pdf',    x, lambda, n, K, ('normal'))
+% FORMAT ll  = spm_prob('Gamma', 'logpdf', x, lambda, n, K, ('normal'))
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Gamma', 'E',    lambda, n, K, ('normal'))
+% FORMAT el = spm_prob('Gamma', 'Elog', lambda, n, K, ('normal'))
+% FORMAT v  = spm_prob('Gamma', 'V',    lambda, n, K, ('normal'))
+% FORMAT vl = spm_prob('Gamma', 'Vlog', lambda, n, K, ('normal'))
+%   >> Mean and variance.
+%
+% FORMAT kl  = spm_prob('Gamma', 'kl', lam1, n1, lam0, n0, K, ('normal'))
+%   >> Kullback-Leibler divergence from G0 to G1 = KL(G1||G0).
+%
+% FORMAT [lam1, n1] = spm_prob('Gamma', 'up', lam, n,     lam0, n0, ('normal'))
 % FORMAT [lam1, n1] = spm_prob('Gamma', 'up', s0, s1, s2, lam0, n0, 
-%                                             (mu=0), (Lam=eye))
-%   >> Posterior parameters of the Gamma distribution over an univariate 
-%      Normal precision or a multivariate Normal precision magnitude 
-%      with known mean.
+%                                             (mu=0), (Lam=eye), ('normal'))
+%   >> Posterior parameters of the Gamma distribution.
 %
-% FORMAT help spm_prob>function
-%   >> Returns the help file of the selected function.
+%--------------------------------------------------------------------------
+% Gamma rate conjugate
+% --------------------
+%
+% The Gamma distribution is parameterised by a mean rate parameter 
+% (beta), a degrees of freedom (n), and a known shape parameter (alpha).
+%
+% FORMAT pdf = spm_prob('Gamma', 'pdf',    x, beta, n, alpha, 'gamma')
+% FORMAT ll  = spm_prob('Gamma', 'logpdf', x, beta, n, alpha, 'gamma')
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Gamma', 'E',    beta, n, alpha, 'gamma')
+% FORMAT el = spm_prob('Gamma', 'Elog', beta, n, alpha, 'gamma')
+% FORMAT v  = spm_prob('Gamma', 'V',    beta, n, alpha, 'gamma')
+% FORMAT vl = spm_prob('Gamma', 'Vlog', beta, n, alpha, 'gamma')
+%   >> Mean and variance.
+%
+% FORMAT kl  = spm_prob('Gamma', 'kl', beta1, n1, beta0, n0, alpha, 'gamma')
+%   >> Kullback-Leibler divergence from G0 to G1 = KL(G1||G0).
+%
+% FORMAT [beta1, n1] = spm_prob('Gamma', 'up', beta, n, beta0, n0, 'gamma')
+% FORMAT [beta1, n1] = spm_prob('Gamma', 'up', s0, s1,  beta0, n0, alpha, 'gamma')
+%   >> Posterior parameters of the Gamma distribution.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
     if nargin == 0
@@ -304,6 +367,16 @@ function varargout = gamma(varargin)
             [varargout{1:nargout}] = gamma_kl(varargin{:});
         case {'up', 'update'}
             [varargout{1:nargout}] = gamma_up(varargin{:});
+        case 'e'
+            [varargout{1:nargout}] = gamma_e(varargin{:});
+        case 'v'
+            [varargout{1:nargout}] = gamma_v(varargin{:});
+        case 'elog'
+            [varargout{1:nargout}] = gamma_elog(varargin{:});
+        case 'vlog'
+            [varargout{1:nargout}] = gamma_vlog(varargin{:});
+        case 'help'
+            help spm_prob>gamma
         otherwise
             help spm_prob>gamma
             error('Unknown function %s. Type ''help spm_prob>gamma'' for help.', id)
@@ -314,19 +387,33 @@ end
 
 function pdf = gamma_pdf(x, varargin)
 % FORMAT pdf = gamma_pdf(x, alpha,  beta)
-% FORMAT pdf = gamma_pdf(x, lambda, n,    K)
+% FORMAT pdf = gamma_pdf(x, lambda, n,    K,     ('normal'))
+% FORMAT pdf = gamma_pdf(x, beta,   n,    alpha, 'gamma')
 
     % Check if we are in the reparameterised case
     if nargin == 4
+        if ischar(varargin{3})
+            varargin{3} = 1;
+        end
         pdf = gamma_pdf(x, 0.5*varargin{3}*varargin{2}, ...
                            0.5*varargin{3}*varargin{2}/varargin{1});
         return
+    elseif nargin > 4 
+        if startsWith(varargin{4}, 'n', 'IgnoreCase', true)
+            pdf = gamma_pdf(x, 0.5*varargin{3}*varargin{2}, ...
+                               0.5*varargin{3}*varargin{2}/varargin{1});
+            return
+        elseif startsWith(varargin{4}, 'g', 'IgnoreCase', true)
+            pdf = gamma_pdf(x, varargin{3}*varargin{2}, ...
+                               varargin{3}*varargin{2}/varargin{1});
+            return
+        end
     end
     
     % Usual pdf
     alpha = varargin{1};
     beta  = varargin{2};
-    pdf   = beta^alpha * x^(alpha-1) .* exp(-beta*x) / gamma(alpha);
+    pdf   = beta^alpha * x^(alpha-1) .* exp(-beta*x) / builtin('gamma', alpha);
     
 end
 
@@ -334,13 +421,27 @@ end
 
 function pdf = gamma_logpdf(x, varargin)
 % FORMAT pdf = gamma_logpdf(x, alpha,  beta)
-% FORMAT pdf = gamma_logpdf(x, lambda, n,    K)
+% FORMAT pdf = gamma_logpdf(x, lambda, n,    K,     ('normal'))
+% FORMAT pdf = gamma_logpdf(x, beta,   n,    alpha, 'gamma')
 
     % Check if we are in the reparameterised case
     if nargin == 4
+        if ischar(varargin{3})
+            varargin{3} = 1;
+        end
         pdf = gamma_logpdf(x, 0.5*varargin{3}*varargin{2}, ...
                               0.5*varargin{3}*varargin{2}/varargin{1});
         return
+    elseif nargin > 4 
+        if startsWith(varargin{4}, 'n', 'IgnoreCase', true)
+            pdf = gamma_logpdf(x, 0.5*varargin{3}*varargin{2}, ...
+                                  0.5*varargin{3}*varargin{2}/varargin{1});
+            return
+        elseif startsWith(varargin{4}, 'g', 'IgnoreCase', true)
+            pdf = gamma_logpdf(x, varargin{3}*varargin{2}, ...
+                                  varargin{3}*varargin{2}/varargin{1});
+            return
+        end
     end
     
     % Usual pdf
@@ -353,16 +454,34 @@ end
 % -------------------------------------------------------------------------
 
 function kl = gamma_kl(varargin)
-% FORMAT pdf = gamma_pdf(alpha1,  beta1, alpha0,  beta0)
-% FORMAT pdf = gamma_pdf(lambda1, n1,    lambda0, n0,    K)
+% FORMAT pdf = gamma_kl(alpha1,  beta1, alpha0,  beta0)
+% FORMAT pdf = gamma_kl(lambda1, n1,    lambda0, n0,    K,     ('normal'))
+% FORMAT pdf = gamma_kl(beta1,   n1,    beta0,   n0,    alpha, 'gamma')
 
     % Check if we are in the reparameterised case
     if nargin == 5
+        if ischar(varargin{5})
+            varargin{5} = 1;
+        end
         kl = gamma_kl(0.5*varargin{5}*varargin{2}, ...
                       0.5*varargin{5}*varargin{2}/varargin{1}, ...
                       0.5*varargin{5}*varargin{4}, ...
                       0.5*varargin{5}*varargin{4}/varargin{3});
         return
+    elseif nargin > 5
+        if startsWith(varargin{6}, 'n', 'IgnoreCase', true)
+            kl = gamma_kl(0.5*varargin{5}*varargin{2}, ...
+                          0.5*varargin{5}*varargin{2}/varargin{1}, ...
+                          0.5*varargin{5}*varargin{4}, ...
+                          0.5*varargin{5}*varargin{4}/varargin{3});
+            return
+        elseif startsWith(varargin{6}, 'g', 'IgnoreCase', true)
+            kl = gamma_kl(varargin{5}*varargin{2}, ...
+                          varargin{5}*varargin{2}/varargin{1}, ...
+                          varargin{5}*varargin{4}, ...
+                          varargin{5}*varargin{4}/varargin{3});
+            return
+        end
     end
     
     % Usual KL
@@ -379,43 +498,182 @@ end
 
 % -------------------------------------------------------------------------
 
-function [lambda1, n1] = gamma_up(varargin)
-% FORMAT [lambda1, n1] = gamma_up(lambda, n,     lambda0, n0)
-% FORMAT [lambda1, n1] = gamma_up(ss0, ss1, ss2, lambda0, n0, (mu=0), (Lambda=eye))
+function [par1, n1] = gamma_up(varargin)
+% FORMAT [lam1, n1]  = gamma_up(lam, n,        lam0, n0, ('normal'))
+% FORMAT [lam1, n1]  = gamma_up(ss0, ss1, ss2, lam0, n0, (mu=0), (Lambda=eye), 'normal')
+% FORMAT [beta1, n1] = gamma_up(beta, n, beta0, n0, 'gamma')
+% FORMAT [beta1, n1] = gamma_up(ss0, ss1,  beta0, n0, alpha, 'gamma')
 
-    if nargin > 4
-        % Sufficient statistics case
-        ss0     = varargin{1};
-        ss1     = varargin{2};
-        ss2     = varargin{3};
-        lambda0 = varargin{4};
-        n0      = varargin{5};
-        K  = size(ss2, 1);
-        if nargin < 7
-            Lambda = eye(K);
-            if nargin < 6
-                mu = zeros(size(ss1));
-            else
-                mu = varargin{6};
-            end
+    if ischar(varargin{end}) && ...
+       startsWith(varargin{end}, 'g', 'IgnoreCase', true)
+        % -----
+        % GAMMA
+        % -----
+        varargin = varargin(1:end-1);
+        
+        if nargin > 4
+            % Sufficient statistics case
+            ss0   = varargin{1};
+            ss1   = varargin{2};
+            beta0 = varargin{3};
+            n0    = varargin{4};
+            alpha = varargin{5};
+            n1 = n0 + ss0;
+            par1 = n0/beta0 + ss1/alpha;
+            par1 = n1 / par1;
         else
-            Lambda = varargin{7};
+            % Average case
+            beta    = varargin{1};
+            n       = varargin{2};
+            beta0   = varargin{3};
+            n0      = varargin{4};
+            n1      = n + n0;
+            par1 = n1 / (n0/beta0 + n/beta);
         end
-        n      = ss0;
-        lambda = trace(ss2*Lambda) ...
-                 - 2 * mu'*Lambda*ss1 ...
-                 + ss0 * mu'*Lambda*mu;
-        lambda = K*ss0/lambda;
-        [lambda1, n1] = gamma_up(lambda, n, lambda0, n0);
+        
     else
-        % Average case
-        lambda  = varargin{1};
-        n       = varargin{2};
-        lambda0 = varargin{3};
-        n0      = varargin{4};
-        n1      = n + n0;
-        lambda1 = n1 / (n0/lambda0 + n/lambda);
+        % ------
+        % NORMAL
+        % ------
+        if ischar(varargin{end})
+            varargin = varargin(1:end-1);
+        end
+    
+        if nargin > 4
+            % Sufficient statistics case
+            ss0     = varargin{1};
+            ss1     = varargin{2};
+            ss2     = varargin{3};
+            lambda0 = varargin{4};
+            n0      = varargin{5};
+            K  = size(ss2, 1);
+            if nargin < 7
+                Lambda = eye(K);
+                if nargin < 6
+                    mu = zeros(size(ss1));
+                else
+                    mu = varargin{6};
+                end
+            else
+                Lambda = varargin{7};
+            end
+            n      = ss0;
+            lambda = trace(ss2*Lambda) ...
+                     - 2 * mu'*Lambda*ss1 ...
+                     + ss0 * mu'*Lambda*mu;
+            lambda = K*ss0/lambda;
+            [par1, n1] = gamma_up(lambda, n, lambda0, n0);
+        else
+            % Average case
+            lambda  = varargin{1};
+            n       = varargin{2};
+            lambda0 = varargin{3};
+            n0      = varargin{4};
+            n1      = n + n0;
+            par1 = n1 / (n0/lambda0 + n/lambda);
+        end
+    
     end
     
-    
+end
+
+% -------------------------------------------------------------------------
+
+function out = gamma_e(varargin)
+    if ischar(varargin{end}) && ...
+       startsWith(varargin{end}, 'g', 'IgnoreCase', true)
+        % ----------
+        % GAMMA CONJ
+        % ----------
+            out = varargin{2};
+    elseif ( ischar(varargin{end}) && ...
+             startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
+           (nargin == 3)
+        % -----------
+        % NORMAL CONJ
+        % -----------
+            out = varargin{2};
+    else
+        % -----
+        % GAMMA
+        % -----
+            out = varargin{1}/varargin{2};
+    end
+end
+
+function out = gamma_v(varargin)
+    if ischar(varargin{end}) && ...
+       startsWith(varargin{end}, 'g', 'IgnoreCase', true)
+        % ----------
+        % GAMMA CONJ
+        % ----------
+            out = varargin{2}*varargin{3}*(varargin{1}^2);
+    elseif ( ischar(varargin{end}) && ...
+             startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
+           (nargin == 3)
+        % -----------
+        % NORMAL CONJ
+        % -----------
+            if ischar(varargin{3})
+                varargin{3} = 1;
+            end
+            out = 0.5*varargin{2}*varargin{3}*(varargin{1}^2);
+    else
+        % -----
+        % GAMMA
+        % -----
+            out = varargin{1}/(varargin{2}^2);
+    end
+end
+
+function out = gamma_elog(varargin)
+    if ischar(varargin{end}) && ...
+       startsWith(varargin{end}, 'g', 'IgnoreCase', true)
+        % ----------
+        % GAMMA CONJ
+        % ----------
+            out = log(varargin{1}) + psi(varargin{2}) - log(varargin{2});
+    elseif ( ischar(varargin{end}) && ...
+             startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
+           (nargin == 3)
+        % -----------
+        % NORMAL CONJ
+        % -----------
+            if ischar(varargin{3})
+                varargin{3} = 1;
+            end
+            out = log(varargin{1}) ...
+                  + psi(0.5*varargin{2}*varargin{3}) ...
+                  - log(0.5*varargin{2}*varargin{3});
+    else
+        % -----
+        % GAMMA
+        % -----
+            out = psi(varargin{1}) - log(varargin{2});
+    end
+end
+
+function out = gamma_vlog(varargin)
+    if ischar(varargin{end}) && ...
+       startsWith(varargin{end}, 'g', 'IgnoreCase', true)
+        % ----------
+        % GAMMA CONJ
+        % ----------
+            out = psi(1, varargin{2}*varargin{3});
+    elseif ( ischar(varargin{end}) && ...
+             startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
+           (nargin == 3)
+        % -----------
+        % NORMAL CONJ
+        % -----------
+            if ischar(varargin{3})
+                varargin{3} = 1;
+            end
+            out = psi(1, 0.5*varargin{2}*varargin{3});
+    else
+        % -----
+        % GAMMA
+        % -----
+            out = psi(1,varargin{1});
+    end
 end
