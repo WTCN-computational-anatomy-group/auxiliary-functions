@@ -41,7 +41,7 @@ function ld = logdet(A)
 % A  - A square matrix
 % ld - Logarithm of determinant of A
 %
-% Log-determinant of a matrix
+% Log-determinant of a postive-definite matrix.
 % Cholesky factorisation is used to compute a more stable log-determinant.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
