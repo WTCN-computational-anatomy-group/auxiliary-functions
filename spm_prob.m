@@ -9,12 +9,24 @@ function varargout = spm_prob(varargin)
 %   [ng/normal-gamma]
 %   [nw/normal-wishart]
 %
-% FORMAT out = spm_prob('Normal', ...)
-% FORMAT out = spm_prob('Gamma', ...)
+% FORMAT out = spm_prob('Normal',  ...)
+% FORMAT out = spm_prob('Gamma',   ...)
+% FORMAT out = spm_prob('Wishart', ...)
 %
 % FORMAT help spm_prob>function
 % Returns the help file of the selected function.
 %
+%--------------------------------------------------------------------------
+% MISC
+% ----
+%
+% FORMAT lg = spm_prob('LogGamma', a, p)
+%   > Log of multivariate gamma function of order p
+% FORMAT dg = spm_prob('DiGamma', a, p)
+%   > Multivariate digamma function of order p
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
 %--------------------------------------------------------------------------
 % TODO
 % ----
@@ -34,8 +46,26 @@ function varargout = spm_prob(varargin)
 %   (for know it usually only works on scalar inputs)
 %   It could allow using them for template update for exemple.
 %   -> Needs standard inputs, especially in multivariate cases
-%__________________________________________________________________________
-% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+%--------------------------------------------------------------------------
+%
+% If we want to extend these functions to volumes of observations or
+% parameters, the input convention could be something along those lines:
+%
+% INPUT FORMAT
+% ------------
+% 
+% - Single observations or single parameters should be scalar (or 1
+%   dimensional vectors in the multivariate case).
+% - Multiple observations should be of dimension > 3, with the 4th 
+%   dimension (+5th in the multivariate case) being the feature space.
+%   This allows us to deal with images or volumes in which each voxel is an
+%   independent random variable.
+% - Implicit expansion is performed if observations and parameters have
+%   different dimensions.
+% - Update functions need pre-computed ML estimators or sufficient
+%   statistics. We do not deal with multiple observations of the same 
+%   random variable.
+%--------------------------------------------------------------------------
 
     if nargin == 0
         help spm_prob
@@ -48,12 +78,47 @@ function varargout = spm_prob(varargin)
             [varargout{1:nargout}] = normal(varargin{:});
         case {'gamma', 'g'}
             [varargout{1:nargout}] = gamma(varargin{:});
+        case {'wishart', 'w'}
+            [varargout{1:nargout}] = wishart(varargin{:});
+        case {'loggamma'}
+            [varargout{1:nargout}] = LogGamma(varargin{:});
+        case {'digamma'}
+            [varargout{1:nargout}] = DiGamma(varargin{:});
         otherwise
             help spm_prob
             error('Unknown function %s. Type ''help spm_prob'' for help.', id)
     end
 end
 
+%%
+% =========================================================================
+%   MISC
+% =========================================================================
+
+% -------------------------------------------------------------------------
+function lg = LogGamma(a, p)
+    if nargin < 2
+        p = 1;
+    end
+    lg = (p*(p-1)/4)*log(pi);
+    for i=1:p
+        lg = lg + gammaln(a + (1-p)/2);
+    end
+end
+
+% -------------------------------------------------------------------------
+
+function dg = DiGamma(a, p)
+    if nargin < 2
+        p = 1;
+    end
+    dg = 0;
+    for i=1:p
+        dg = dg + psi(a + (1-p)/2);
+    end
+end
+
+%%
 % =========================================================================
 %   NORMAL
 % =========================================================================
@@ -110,7 +175,7 @@ function varargout = normal(varargin)
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
     if nargin == 0
         help spm_prob>normal
-        error('Not enough argument. Type ''help spm_prob>normal'' for help.');
+        error('Not enough argument. Type ''help spm_prob>Normal'' for help.');
     end
     id = varargin{1};
     varargin = varargin(2:end);
@@ -127,7 +192,7 @@ function varargout = normal(varargin)
             help spm_prob>normal
         otherwise
             help spm_prob>normal
-            error('Unknown function %s. Type ''help spm_prob>normal'' for help.', id)
+            error('Unknown function %s. Type ''help spm_prob>Normal'' for help.', id)
     end
 end
 
@@ -280,6 +345,7 @@ function [mu1, n1] = normal_up(mu, n, mu0, n0)
 
 end
 
+%%
 % =========================================================================
 %   GAMMA
 % =========================================================================
@@ -374,7 +440,7 @@ function varargout = gamma(varargin)
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
     if nargin == 0
         help spm_prob>gamma
-        error('Not enough argument. Type ''help spm_prob>gamma'' for help.');
+        error('Not enough argument. Type ''help spm_prob>Gamma'' for help.');
     end
     id = varargin{1};
     varargin = varargin(2:end);
@@ -399,7 +465,7 @@ function varargout = gamma(varargin)
             help spm_prob>gamma
         otherwise
             help spm_prob>gamma
-            error('Unknown function %s. Type ''help spm_prob>gamma'' for help.', id)
+            error('Unknown function %s. Type ''help spm_prob>Gamma'' for help.', id)
     end
 end
 
@@ -695,5 +761,234 @@ function out = gamma_vlog(varargin)
         % GAMMA
         % -----
             out = psi(1,varargin{1});
+    end
+end
+
+%%
+% =========================================================================
+%   WISHART
+% =========================================================================
+
+function varargout = wishart(varargin)
+%__________________________________________________________________________
+% Characteristic functions of the Wishart distribution:
+%   [pdf]       Probability density function
+%   [ll/logpdf] Log-probability density function
+%   [kl]        Kullback-Leibler divergence
+%   [up/update] Conjugate (or Bayesian) update
+%   [E]         Expected value (E[X])
+%   [Elogdet]   Expected log determinant (E[ln det X])
+%   [V]         Variance (V[X])
+%   [Vlogdet]   Variance of the log determinant (V[ln det X])
+%
+% The Wishart distribution is a conjugate prior for a multivariate Normal 
+% precision matrix with known mean.
+%
+%--------------------------------------------------------------------------
+% General distribution
+% --------------------
+%
+% The Wishart distribution is parameterised by a scale matrix (V) and a
+% degrees of freedom (n). It can be seen as the distribution of the sum of
+% n independent centered multivariate Normal variables with precision 
+% matrix V.
+%
+% FORMAT pdf = spm_prob('Wishart', 'pdf',    X, V, n)
+% FORMAT ll  = spm_prob('Wishart', 'logpdf', X, V, n)
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Wishart', 'E',       V, n)
+% FORMAT el = spm_prob('Wishart', 'Elogdet', V, n)
+% FORMAT v  = spm_prob('Wishart', 'V',       V, n)
+% FORMAT vl = spm_prob('Wishart', 'Vlogdet', V, n)
+%   >> Mean and variance
+%
+% FORMAT kl  = spm_prob('Wishart', 'kl', V1, n1, V0, n0)
+%   >> Kullback-Leibler divergence from W0 to W1 = KL(W1||W0).
+%
+%--------------------------------------------------------------------------
+% Normal precision matrix conjugate
+% ---------------------------------
+%
+% The Wishart distribution is parameterised by a mean precision parameter 
+% (Lambda) and a degrees of freedom (n).
+%
+% FORMAT pdf = spm_prob('Wishart', 'pdf',    X, Lambda, n, 'normal')
+% FORMAT ll  = spm_prob('Wishart', 'logpdf', X, Lambda, n, 'normal')
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Wishart', 'E',       Lambda, n, 'normal')
+% FORMAT el = spm_prob('Wishart', 'Elogdet', Lambda, n, 'normal')
+% FORMAT v  = spm_prob('Wishart', 'V',       Lambda, n, 'normal')
+% FORMAT vl = spm_prob('Wishart', 'Vlogdet', Lambda, n, 'normal')
+%   >> Mean and variance.
+%
+% FORMAT kl  = spm_prob('Wishart', 'kl', Lam1, n1, Lam0, n0, 'normal')
+%   >> Kullback-Leibler divergence from W0 to W1 = KL(W1||W0).
+%
+% FORMAT [lam1, n1] = spm_prob('Wishart', 'up', Lam, n,     Lam0, n0)
+% FORMAT [lam1, n1] = spm_prob('Wishart', 'up', s0, s1, s2, Lam0, n0, (mu=0))
+%   >> Posterior parameters of the Wishart distribution.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+    if nargin == 0
+        help spm_prob>wishart
+        error('Not enough argument. Type ''help spm_prob>Wishart'' for help.');
+    end
+    id = varargin{1};
+    varargin = varargin(2:end);
+    switch lower(id)
+        case 'pdf'
+            [varargout{1:nargout}] = wishart_pdf(varargin{:});
+        case {'logpdf', 'll'}
+            [varargout{1:nargout}] = wishart_logpdf(varargin{:});
+        case 'kl'
+            [varargout{1:nargout}] = wishart_kl(varargin{:});
+        case {'up', 'update'}
+            [varargout{1:nargout}] = wishart_up(varargin{:});
+        case 'e'
+            [varargout{1:nargout}] = wishart_e(varargin{:});
+        case 'elogdet'
+            [varargout{1:nargout}] = wishart_elogdet(varargin{:});
+        case 'vloget'
+            [varargout{1:nargout}] = wishart_vlogdet(varargin{:});
+        case 'help'
+            help spm_prob>wishart
+        otherwise
+            help spm_prob>wishart
+            error('Unknown function %s. Type ''help spm_prob>Wishart'' for help.', id)
+    end
+end
+
+% -------------------------------------------------------------------------
+
+function pdf = wishart_pdf(X, varargin)
+% FORMAT pdf = wishart_pdf(X, V,      n)
+% FORMAT pdf = wishart_pdf(X, Lambda, n, 'normal')
+
+    % Check if we are in the reparameterised case
+    if nargin == 4
+        pdf = wishart_pdf(X, varargin{1}/varargin{2}, varargin{2});
+        return
+    end
+    
+    % Usual pdf
+    V   = varargin{1};
+    n   = varargin{2};
+    K   = size(V, 1);
+    pdf = det(X)^(n-K-1) * exp(-0.5*trace(V\X)) ...
+          / ( 2^(n*K/2) * det(V)^(n/2) * exp(LogGamma(0.5*n, K)) );
+    
+end
+
+% -------------------------------------------------------------------------
+
+function pdf = wishart_logpdf(X, varargin)
+% FORMAT pdf = wishart_logpdf(X, V,      n)
+% FORMAT pdf = wishart_logpdf(X, Lambda, n, 'normal')
+
+    % Check if we are in the reparameterised case
+    if nargin == 4
+        pdf = wishart_logpdf(X, varargin{1}/varargin{2}, varargin{2});
+        return
+    end
+    
+    % Usual pdf
+    V   = varargin{1};
+    n   = varargin{2};
+    K   = size(V, 1);
+    pdf =   0.5*(n-K-1)*spm_matcomp('LogDet', X) ...
+          - 0.5*trace(V\X) ...
+          - 0.5*n*K*log(2) ...
+          - 0.5*n*spm_matcomp('LogDet', V) ...
+          - LogGamma(0.5*n, K);
+    
+end
+
+% -------------------------------------------------------------------------
+
+function kl = wishart_kl(varargin)
+% FORMAT kl = wishart_kl(V1,      n1, V0,      n0)
+% FORMAT kl = wishart_kl(lambda1, n1, lambda0, n0, 'normal')
+
+    % Check if we are in the reparameterised case
+    if nargin == 5
+        kl = gamma_kl(varargin{1}/varargin{2}, varargin{2}, ...
+                      varargin{3}/varargin{4}, varargin{4});
+        return
+    end
+    
+    % Usual KL
+    V1 = varargin{1};
+    n1 = varargin{2};
+    V0 = varargin{3};
+    n0 = varargin{4};
+    K  = size(V1, 1);
+    kl =   0.5*(spm_matcomp('LogDet', V0) - spm_matcomp('LogDet', V1)) ...
+         + 0.5*n1*(trace(V0\V1) - K) ...
+         + 0.5*(n1 - n0)*DiGamma(0.5*n1, K) ...
+         + LogGamma(0.5*n0, K) - LogGamma(0.5*n1, K);
+    
+end
+
+% -------------------------------------------------------------------------
+
+function [Lam1, n1] = wishart_up(varargin)
+% FORMAT [Lam1, n1]  = wishart_up(Lam, n,        Lam0, n0)
+% FORMAT [Lam1, n1]  = wishart_up(ss0, ss1, ss2, Lam0, n0, (mu=0))
+
+    
+    if nargin > 4
+        % Sufficient statistics case
+        ss0  = varargin{1};
+        ss1  = varargin{2};
+        ss2  = varargin{3};
+        Lam0 = varargin{4};
+        n0   = varargin{5};
+        if nargin < 6
+            iV = ss2;
+        else
+            iV = ss2 - 2*ss1*mu' + ss0*mu*mu';
+        end
+        n1   = n0+ss0;
+        Lam1 = n1/(n0/Lam0 + iV);
+    else
+        % Average case
+        Lam  = varargin{1};
+        n    = varargin{2};
+        Lam0 = varargin{3};
+        n0   = varargin{4};
+        n1   = n + n0;
+        Lam1 = n1/(n0/Lam0 + n/Lam);
+    end
+    
+    
+end
+
+% -------------------------------------------------------------------------
+
+function out = wishart_e(V, n, mode)
+    if nargin < 3 || mode(1) ~= 'n'
+        out = n*V;
+    else
+        out = V;
+    end
+end
+
+function out = wishart_elogdet(V, n, mode)
+    if nargin < 3 || mode(1) ~= 'n'
+        K   = size(V, 1);
+        out = DiGamma(0.5*n, K) + K*log(2) + spm_matcomp('LogDet', V);
+    else
+        K   = size(V, 1);
+        out = DiGamma(0.5*n, K) + K*log(n/2) + spm_matcomp('LogDet', V);
+    end
+end
+
+function out = wishart_vlogdet(V, n, ~)
+    K = size(V, 1);
+    out = 0;
+    for i=1:K
+        out = out + psi(1, 0.5*(n+1-i));
     end
 end
