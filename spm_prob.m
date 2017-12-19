@@ -32,7 +32,7 @@ function varargout = spm_prob(varargin)
 % ----
 %
 % - Functions returning only
-%     * the parameter-dependent
+%     * the parameter-dependent part
 %     * the normalising constant
 %   of the log-pdf.
 % - Distributions:
@@ -207,13 +207,13 @@ function pdf = normal_pdf(x, mu, varargin)
     % Check if we are in the reparameterised case
     if nargin == 5
         if startsWith(varargin{3}, 'p', 'IgnoreCase', true);
-            pdf = normal_pdf(x, mu, varargin{2}*varargin{1}, 'precision');
+            pdf = normal_pdf(x, mu, varargin{2}.*varargin{1}, 'precision');
         else
-            pdf = normal_pdf(x, mu, varargin{2}/varargin{1});
+            pdf = normal_pdf(x, mu, varargin{2}./varargin{1});
         end
         return
     elseif nargin == 4 && ~ischar(varargin{2})
-        pdf = normal_pdf(x, mu, varargin{2}/varargin{1});
+        pdf = normal_pdf(x, mu, varargin{2}./varargin{1});
         return
     end
     
@@ -233,9 +233,9 @@ function pdf = normal_pdf(x, mu, varargin)
     
     % Usual PDF
     if precision
-        pdf = (det(varargin{1}/(2*pi)))^(0.5) * exp(-0.5*(x(:)-mu(:))'*varargin{1}*(x(:)-mu(:)));
+        pdf = (exp(spm_matcomp('LogDet', varargin{1}/(2*pi))))^(0.5) * exp(-0.5*(x(:)-mu(:))'*varargin{1}*(x(:)-mu(:)));
     else
-        pdf = (det(varargin{1}*2*pi))^(-0.5) * exp(-0.5*(x(:)-mu(:))'*(varargin{1}\(x(:)-mu(:))));
+        pdf = (exp(spm_matcomp('LogDet', varargin{1}*2*pi)))^(-0.5) * exp(-0.5*(x(:)-mu(:))'*(varargin{1}\(x(:)-mu(:))));
     end
     
 end
@@ -951,7 +951,10 @@ function [Lam1, n1] = wishart_up(varargin)
             iV = ss2 - 2*ss1*mu' + ss0*mu*mu';
         end
         n1   = n0+ss0;
-        Lam1 = n1/(n0/Lam0 + iV);
+        if n0, Lam1 = (n0/Lam0 + iV)/n1;
+        else,  Lam1 = iV/n1; end
+        % stable inverse
+        Lam1 = spm_matcomp('Inv', Lam1);
     else
         % Average case
         Lam  = varargin{1};
@@ -959,7 +962,8 @@ function [Lam1, n1] = wishart_up(varargin)
         Lam0 = varargin{3};
         n0   = varargin{4};
         n1   = n + n0;
-        Lam1 = n1/(n0/Lam0 + n/Lam);
+        if n0, Lam1 = n1/(n0/Lam0 + n/Lam);
+        else,  Lam1 = Lam; end
     end
     
     
