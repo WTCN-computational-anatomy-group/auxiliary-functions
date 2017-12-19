@@ -4,10 +4,12 @@ function varargout = spm_matcomp(varargin)
 %
 % FORMAT out = spm_matcomp('name', input)
 %
-% FORMAT  ld = spm_matcomp('logdet', A)
-% FORMAT   c = spm_matcomp('pointwise3', a, (b), (op))
-% FORMAT   c = spm_matcomp('pointwise', a, (b), (op), (sym))
-% FORMAT ind = spm_matcomp('symIndices', k)
+% FORMAT  ld = spm_matcomp('LogDet', A)
+% FORMAT   A = spm_matcomp('LoadDiag', A)
+% FORMAT  iA = spm_matcomp('Inv', A)
+% FORMAT   c = spm_matcomp('Pointwise3', a, (b), (op))
+% FORMAT   c = spm_matcomp('Pointwise', a, (b), (op), (sym))
+% FORMAT ind = spm_matcomp('SymIndices', k)
 %
 % FORMAT help spm_matcomp>function
 % Returns the help file of the selected function.
@@ -28,6 +30,10 @@ function varargout = spm_matcomp(varargin)
             [varargout{1:nargout}] = logdet(varargin{:});
         case 'symindices'
             [varargout{1:nargout}] = symIndices(varargin{:});
+        case 'loaddiag'
+            [varargout{1:nargout}] = loaddiag(varargin{:});
+        case {'inv', 'inverse'}
+            [varargout{1:nargout}] = inv(varargin{:});
         otherwise
             help spm_matcomp
             error('Unknown function %s. Type ''help spm_matcomp'' for help.', id)
@@ -37,11 +43,11 @@ end
 %% === logdet =============================================================
 
 function ld = logdet(A)
-% FORMAT ld = spm_matcomp('logdet', A)
-% A  - A square matrix
+% FORMAT ld = spm_matcomp('LogDet', A)
+% A  - A postive-definite square matrix
 % ld - Logarithm of determinant of A
 %
-% Log-determinant of a postive-definite matrix.
+% Log-determinant of a positive-definite matrix.
 % Cholesky factorisation is used to compute a more stable log-determinant.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
@@ -65,11 +71,47 @@ function ld = logdet(A)
 
 end
 
+%% === loaddiag ===========================================================
+
+function A = loaddiag(A)
+% FORMAT A = spm_matcomp('LoadDiag', A)
+% A  - A square matrix
+%
+% Load A's diagonal until it is well conditioned for inversion.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+    factor = 1e-7;
+    while rcond(A) < 1e-5
+        A = A + factor * max(diag(A)) * eye(size(A));
+        factor = 10 * factor;
+    end
+
+end
+
+%% === inv ================================================================
+
+function A = inv(A)
+% FORMAT iA = spm_matcomp('Inv', A)
+% A  - A positive-definite square matrix
+% iA - Its inverse
+%
+% Stable inverse of a positive-definite matrix.
+% Eigendecomposition is used to compute a more stable inverse.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+    [V,D] = eig(A);
+    D     = loaddiag(D);
+    A     = real(V * (D \ V'));
+
+end
+
 %% === symindices =========================================================
 
 function [ind, n] = symIndices(k, side)
-% FORMAT [ind, n] = spm_matcomp('symIndices', k, ('k'))
-% FORMAT [ind, k] = spm_matcomp('symIndices', n, 'n')
+% FORMAT [ind, n] = spm_matcomp('SymIndices', k, ('k'))
+% FORMAT [ind, k] = spm_matcomp('SymIndices', n, 'n')
 % k - Length of the linearized and sparse symmetric matrix
 % n - Side size of the corresponding square matrix
 %
@@ -116,7 +158,7 @@ end
 %% === pointwise3 =========================================================
 
 function c = pointwise3(a, b, op)
-% FORMAT c = spm_matcomp('pointwise3', a, (b), (op))
+% FORMAT c = spm_matcomp('Pointwise3', a, (b), (op))
 % a  - [nx nz nz 3 (3)] ND-array of vectors/matrices
 % b  - [nx nz nz 3 (3)] ND-array of vectors/matrices
 % op - Operation(s) to apply to an element of a before multiplying it 
@@ -631,7 +673,7 @@ end
 %% === pointwise ==========================================================
 
 function c = pointwise(a, varargin)
-% FORMAT c = spm_matcomp('pointwise', a, (b), (op), (sym))
+% FORMAT c = spm_matcomp('Pointwise', a, (b), (op), (sym))
 % a  - [nx nz nz A (B)] ND-array of vectors/matrices
 % b  - [nx nz nz C (D)] ND-array of vectors/matrices
 % op - Operation(s) to apply to an element of a before multiplying it 
