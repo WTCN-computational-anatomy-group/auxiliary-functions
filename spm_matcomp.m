@@ -4,10 +4,12 @@ function varargout = spm_matcomp(varargin)
 %
 % FORMAT out = spm_matcomp('name', input)
 %
-% FORMAT  ld = spm_matcomp('logdet', A)
-% FORMAT   c = spm_matcomp('pointwise3', a, (b), (op))
-% FORMAT   c = spm_matcomp('pointwise', a, (b), (op), (sym))
-% FORMAT ind = spm_matcomp('symIndices', k)
+% FORMAT  ld = spm_matcomp('LogDet', A)
+% FORMAT   A = spm_matcomp('LoadDiag', A)
+% FORMAT  iA = spm_matcomp('Inv', A)
+% FORMAT   c = spm_matcomp('Pointwise3', a, (b), (op))
+% FORMAT   c = spm_matcomp('Pointwise', a, (b), (op), (sym))
+% FORMAT ind = spm_matcomp('SymIndices', k)
 %
 % FORMAT help spm_matcomp>function
 % Returns the help file of the selected function.
@@ -28,6 +30,10 @@ function varargout = spm_matcomp(varargin)
             [varargout{1:nargout}] = logdet(varargin{:});
         case 'symindices'
             [varargout{1:nargout}] = symIndices(varargin{:});
+        case 'loaddiag'
+            [varargout{1:nargout}] = loaddiag(varargin{:});
+        case {'inv', 'inverse'}
+            [varargout{1:nargout}] = inv(varargin{:});
         otherwise
             help spm_matcomp
             error('Unknown function %s. Type ''help spm_matcomp'' for help.', id)
@@ -37,11 +43,11 @@ end
 %% === logdet =============================================================
 
 function ld = logdet(A)
-% FORMAT ld = spm_matcomp('logdet', A)
-% A  - A square matrix
+% FORMAT ld = spm_matcomp('LogDet', A)
+% A  - A postive-definite square matrix
 % ld - Logarithm of determinant of A
 %
-% Log-determinant of a matrix
+% Log-determinant of a positive-definite matrix.
 % Cholesky factorisation is used to compute a more stable log-determinant.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
@@ -65,11 +71,47 @@ function ld = logdet(A)
 
 end
 
+%% === loaddiag ===========================================================
+
+function A = loaddiag(A)
+% FORMAT A = spm_matcomp('LoadDiag', A)
+% A  - A square matrix
+%
+% Load A's diagonal until it is well conditioned for inversion.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+    factor = 1e-7;
+    while rcond(A) < 1e-5
+        A = A + factor * max(diag(A)) * eye(size(A));
+        factor = 10 * factor;
+    end
+
+end
+
+%% === inv ================================================================
+
+function A = inv(A)
+% FORMAT iA = spm_matcomp('Inv', A)
+% A  - A positive-definite square matrix
+% iA - Its inverse
+%
+% Stable inverse of a positive-definite matrix.
+% Eigendecomposition is used to compute a more stable inverse.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+    [V,D] = eig(A);
+    D     = loaddiag(D);
+    A     = real(V * (D \ V'));
+
+end
+
 %% === symindices =========================================================
 
 function [ind, n] = symIndices(k, side)
-% FORMAT [ind, n] = spm_matcomp('symIndices', k, ('k'))
-% FORMAT [ind, k] = spm_matcomp('symIndices', n, 'n')
+% FORMAT [ind, n] = spm_matcomp('SymIndices', k, ('k'))
+% FORMAT [ind, k] = spm_matcomp('SymIndices', n, 'n')
 % k - Length of the linearized and sparse symmetric matrix
 % n - Side size of the corresponding square matrix
 %
@@ -116,7 +158,7 @@ end
 %% === pointwise3 =========================================================
 
 function c = pointwise3(a, b, op)
-% FORMAT c = spm_matcomp('pointwise3', a, (b), (op))
+% FORMAT c = spm_matcomp('Pointwise3', a, (b), (op))
 % a  - [nx nz nz 3 (3)] ND-array of vectors/matrices
 % b  - [nx nz nz 3 (3)] ND-array of vectors/matrices
 % op - Operation(s) to apply to an element of a before multiplying it 
@@ -133,8 +175,10 @@ function c = pointwise3(a, b, op)
 % Note that
 % - if one (or both) entry is a vector, the adequate transpose
 %   operation is usually automatically detected.
-% - a and b can be fields of sparse square matrices. In this case, they
+% - a and b can be fields of sparse symmetric matrices. In this case, they
 %   have the form of a 6 element vector, which is automatically detected.
+% - Implicit expansion of the lattice is performed when one of the input
+%   dimensions is singular.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
@@ -172,8 +216,17 @@ function c = pointwise3(a, b, op)
             error('Inputs must be vector or tensor fields')
         end
     end
-    if binary && ~issame(dim.a(1:3), dim.b(1:3))
-        error('Input fields must have the same lattice')
+    % The corresponding dimensions of A and B must be equal to each other, 
+    % or equal to one.
+    if binary
+        dima = dim.a(1:3);
+        dimb = dim.b(1:3);
+        same = dima == dimb;
+        diff = min(dima(~same), dimb(~same));
+        if  any(diff ~= 1)
+            error(['The corresponding lattice dimensions of A and B ' ...
+                   'must be equal to each other, or equal to one.']);
+        end
     end
     
     % --- Deal with cases
@@ -334,20 +387,22 @@ function c = pw3_mamb(a, b)
 % b - 3x3 tensor field
 % c - 3x3 tensor field
 % Returns pointwise a * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3 3], 'like', a);
     
-    c(:,:,:,1,1) = a(:,:,:,1,1) .* b(:,:,:,1,1) + a(:,:,:,1,2) .* b(:,:,:,2,1) + a(:,:,:,1,3) .* b(:,:,:,3,1);
-    c(:,:,:,1,2) = a(:,:,:,1,1) .* b(:,:,:,1,2) + a(:,:,:,1,2) .* b(:,:,:,2,2) + a(:,:,:,1,3) .* b(:,:,:,3,2);
-    c(:,:,:,1,3) = a(:,:,:,1,1) .* b(:,:,:,1,3) + a(:,:,:,1,2) .* b(:,:,:,2,3) + a(:,:,:,1,3) .* b(:,:,:,3,3);
+    c(:,:,:,1,1) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,1,2), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,1,3), b(:,:,:,3,1));
+    c(:,:,:,1,2) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,1,2), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,1,3), b(:,:,:,3,2));
+    c(:,:,:,1,3) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,1,2), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,1,3), b(:,:,:,3,3));
     
-    c(:,:,:,2,1) = a(:,:,:,2,1) .* b(:,:,:,1,1) + a(:,:,:,2,2) .* b(:,:,:,2,1) + a(:,:,:,2,3) .* b(:,:,:,3,1);
-    c(:,:,:,2,2) = a(:,:,:,2,1) .* b(:,:,:,1,2) + a(:,:,:,2,2) .* b(:,:,:,2,2) + a(:,:,:,2,3) .* b(:,:,:,3,2);
-    c(:,:,:,2,3) = a(:,:,:,2,1) .* b(:,:,:,1,3) + a(:,:,:,2,2) .* b(:,:,:,2,3) + a(:,:,:,2,3) .* b(:,:,:,3,3);
+    c(:,:,:,2,1) = bsxfun(@times, a(:,:,:,2,1), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,3,1));
+    c(:,:,:,2,2) = bsxfun(@times, a(:,:,:,2,1), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,3,2));
+    c(:,:,:,2,3) = bsxfun(@times, a(:,:,:,2,1), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,3,3));
     
-    c(:,:,:,3,1) = a(:,:,:,3,1) .* b(:,:,:,1,1) + a(:,:,:,3,2) .* b(:,:,:,2,1) + a(:,:,:,3,3) .* b(:,:,:,3,1);
-    c(:,:,:,3,2) = a(:,:,:,3,1) .* b(:,:,:,1,2) + a(:,:,:,3,2) .* b(:,:,:,2,2) + a(:,:,:,3,3) .* b(:,:,:,3,2);
-    c(:,:,:,3,3) = a(:,:,:,3,1) .* b(:,:,:,1,3) + a(:,:,:,3,2) .* b(:,:,:,2,3) + a(:,:,:,3,3) .* b(:,:,:,3,3);
+    c(:,:,:,3,1) = bsxfun(@times, a(:,:,:,3,1), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,3,1));
+    c(:,:,:,3,2) = bsxfun(@times, a(:,:,:,3,1), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,3,2));
+    c(:,:,:,3,3) = bsxfun(@times, a(:,:,:,3,1), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,3,3));
 end
 
 function c = pw3_masb(a, b)
@@ -355,22 +410,24 @@ function c = pw3_masb(a, b)
 % b - 3x3 symmetric tensor field = 6d vector field
 % c - 3x3 tensor field
 % Returns pointwise a * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3 3], 'like', a);
     
     ind = symIndices(size(b, 4));
     
-    c(:,:,:,1,1) = a(:,:,:,1,1) .* b(:,:,:,ind(1,1)) + a(:,:,:,1,2) .* b(:,:,:,ind(2,1)) + a(:,:,:,1,3) .* b(:,:,:,ind(3,1));
-    c(:,:,:,1,2) = a(:,:,:,1,1) .* b(:,:,:,ind(1,2)) + a(:,:,:,1,2) .* b(:,:,:,ind(2,2)) + a(:,:,:,1,3) .* b(:,:,:,ind(3,2));
-    c(:,:,:,1,3) = a(:,:,:,1,1) .* b(:,:,:,ind(1,3)) + a(:,:,:,1,2) .* b(:,:,:,ind(2,3)) + a(:,:,:,1,3) .* b(:,:,:,ind(3,3));
+    c(:,:,:,1,1) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,ind(1,1))) + bsxfun(@times, a(:,:,:,1,2), b(:,:,:,ind(2,1))) + bsxfun(@times, a(:,:,:,1,3), b(:,:,:,ind(3,1)));
+    c(:,:,:,1,2) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,ind(1,2))) + bsxfun(@times, a(:,:,:,1,2), b(:,:,:,ind(2,2))) + bsxfun(@times, a(:,:,:,1,3), b(:,:,:,ind(3,2)));
+    c(:,:,:,1,3) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,ind(1,3))) + bsxfun(@times, a(:,:,:,1,2), b(:,:,:,ind(2,3))) + bsxfun(@times, a(:,:,:,1,3), b(:,:,:,ind(3,3)));
     
-    c(:,:,:,2,1) = a(:,:,:,2,1) .* b(:,:,:,ind(1,1)) + a(:,:,:,2,2) .* b(:,:,:,ind(2,1)) + a(:,:,:,2,3) .* b(:,:,:,ind(3,1));
-    c(:,:,:,2,2) = a(:,:,:,2,1) .* b(:,:,:,ind(1,2)) + a(:,:,:,2,2) .* b(:,:,:,ind(2,2)) + a(:,:,:,2,3) .* b(:,:,:,ind(3,2));
-    c(:,:,:,2,3) = a(:,:,:,2,1) .* b(:,:,:,ind(1,3)) + a(:,:,:,2,2) .* b(:,:,:,ind(2,3)) + a(:,:,:,2,3) .* b(:,:,:,ind(3,3));
+    c(:,:,:,2,1) = bsxfun(@times, a(:,:,:,2,1), b(:,:,:,ind(1,1))) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,ind(2,1))) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,ind(3,1)));
+    c(:,:,:,2,2) = bsxfun(@times, a(:,:,:,2,1), b(:,:,:,ind(1,2))) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,ind(2,2))) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,ind(3,2)));
+    c(:,:,:,2,3) = bsxfun(@times, a(:,:,:,2,1), b(:,:,:,ind(1,3))) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,ind(2,3))) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,ind(3,3)));
     
-    c(:,:,:,3,1) = a(:,:,:,3,1) .* b(:,:,:,ind(1,1)) + a(:,:,:,3,2) .* b(:,:,:,ind(2,1)) + a(:,:,:,3,3) .* b(:,:,:,ind(3,1));
-    c(:,:,:,3,2) = a(:,:,:,3,1) .* b(:,:,:,ind(1,2)) + a(:,:,:,3,2) .* b(:,:,:,ind(2,2)) + a(:,:,:,3,3) .* b(:,:,:,ind(3,2));
-    c(:,:,:,3,3) = a(:,:,:,3,1) .* b(:,:,:,ind(1,3)) + a(:,:,:,3,2) .* b(:,:,:,ind(2,3)) + a(:,:,:,3,3) .* b(:,:,:,ind(3,3));
+    c(:,:,:,3,1) = bsxfun(@times, a(:,:,:,3,1), b(:,:,:,ind(1,1))) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,ind(2,1))) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,ind(3,1)));
+    c(:,:,:,3,2) = bsxfun(@times, a(:,:,:,3,1), b(:,:,:,ind(1,2))) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,ind(2,2))) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,ind(3,2)));
+    c(:,:,:,3,3) = bsxfun(@times, a(:,:,:,3,1), b(:,:,:,ind(1,3))) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,ind(2,3))) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,ind(3,3)));
 end
 
 function c = pw3_samb(a, b)
@@ -378,22 +435,24 @@ function c = pw3_samb(a, b)
 % b - 3x3 tensor field
 % c - 3x3 tensor field
 % Returns pointwise a * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3 3], 'like', a);
     
     ind = symIndices(size(a, 4));
     
-    c(:,:,:,1,1) = a(:,:,:,ind(1,1)) .* b(:,:,:,1,1) + a(:,:,:,ind(1,2)) .* b(:,:,:,2,1) + a(:,:,:,ind(1,3)) .* b(:,:,:,3,1);
-    c(:,:,:,1,2) = a(:,:,:,ind(1,1)) .* b(:,:,:,1,2) + a(:,:,:,ind(1,2)) .* b(:,:,:,2,2) + a(:,:,:,ind(1,3)) .* b(:,:,:,3,2);
-    c(:,:,:,1,3) = a(:,:,:,ind(1,1)) .* b(:,:,:,1,3) + a(:,:,:,ind(1,2)) .* b(:,:,:,2,3) + a(:,:,:,ind(1,3)) .* b(:,:,:,3,3);
+    c(:,:,:,1,1) = bsxfun(@times, a(:,:,:,ind(1,1)), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,ind(1,2)), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,ind(1,3)), b(:,:,:,3,1));
+    c(:,:,:,1,2) = bsxfun(@times, a(:,:,:,ind(1,1)), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,ind(1,2)), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,ind(1,3)), b(:,:,:,3,2));
+    c(:,:,:,1,3) = bsxfun(@times, a(:,:,:,ind(1,1)), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,ind(1,2)), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,ind(1,3)), b(:,:,:,3,3));
     
-    c(:,:,:,2,1) = a(:,:,:,ind(2,1)) .* b(:,:,:,1,1) + a(:,:,:,ind(2,2)) .* b(:,:,:,2,1) + a(:,:,:,ind(2,3)) .* b(:,:,:,3,1);
-    c(:,:,:,2,2) = a(:,:,:,ind(2,1)) .* b(:,:,:,1,2) + a(:,:,:,ind(2,2)) .* b(:,:,:,2,2) + a(:,:,:,ind(2,3)) .* b(:,:,:,3,2);
-    c(:,:,:,2,3) = a(:,:,:,ind(2,1)) .* b(:,:,:,1,3) + a(:,:,:,ind(2,2)) .* b(:,:,:,2,3) + a(:,:,:,ind(2,3)) .* b(:,:,:,3,3);
+    c(:,:,:,2,1) = bsxfun(@times, a(:,:,:,ind(2,1)), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,ind(2,2)), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,ind(2,3)), b(:,:,:,3,1));
+    c(:,:,:,2,2) = bsxfun(@times, a(:,:,:,ind(2,1)), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,ind(2,2)), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,ind(2,3)), b(:,:,:,3,2));
+    c(:,:,:,2,3) = bsxfun(@times, a(:,:,:,ind(2,1)), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,ind(2,2)), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,ind(2,3)), b(:,:,:,3,3));
     
-    c(:,:,:,3,1) = a(:,:,:,ind(3,1)) .* b(:,:,:,1,1) + a(:,:,:,ind(3,2)) .* b(:,:,:,2,1) + a(:,:,:,ind(3,3)) .* b(:,:,:,3,1);
-    c(:,:,:,3,2) = a(:,:,:,ind(3,1)) .* b(:,:,:,1,2) + a(:,:,:,ind(3,2)) .* b(:,:,:,2,2) + a(:,:,:,ind(3,3)) .* b(:,:,:,3,2);
-    c(:,:,:,3,3) = a(:,:,:,ind(3,1)) .* b(:,:,:,1,3) + a(:,:,:,ind(3,2)) .* b(:,:,:,2,3) + a(:,:,:,ind(3,3)) .* b(:,:,:,3,3);
+    c(:,:,:,3,1) = bsxfun(@times, a(:,:,:,ind(3,1)), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,ind(3,2)), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,ind(3,3)), b(:,:,:,3,1));
+    c(:,:,:,3,2) = bsxfun(@times, a(:,:,:,ind(3,1)), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,ind(3,2)), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,ind(3,3)), b(:,:,:,3,2));
+    c(:,:,:,3,3) = bsxfun(@times, a(:,:,:,ind(3,1)), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,ind(3,2)), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,ind(3,3)), b(:,:,:,3,3));
 end
 
 function c = pw3_sasb(a, b)
@@ -401,22 +460,24 @@ function c = pw3_sasb(a, b)
 % b - 3x3 symmetric tensor field = 6d vector field
 % c - 3x3 tensor field
 % Returns pointwise a * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3 3], 'like', a);
     
     ind = symIndices(size(a, 4));
     
-    c(:,:,:,1,1) = a(:,:,:,ind(1,1)) .* b(:,:,:,ind(1,1)) + a(:,:,:,ind(1,2)) .* b(:,:,:,ind(2,1)) + a(:,:,:,ind(1,3)) .* b(:,:,:,ind(3,1));
-    c(:,:,:,1,2) = a(:,:,:,ind(1,1)) .* b(:,:,:,ind(1,2)) + a(:,:,:,ind(1,2)) .* b(:,:,:,ind(2,2)) + a(:,:,:,ind(1,3)) .* b(:,:,:,ind(3,2));
-    c(:,:,:,1,3) = a(:,:,:,ind(1,1)) .* b(:,:,:,ind(1,3)) + a(:,:,:,ind(1,2)) .* b(:,:,:,ind(2,3)) + a(:,:,:,ind(1,3)) .* b(:,:,:,ind(3,3));
+    c(:,:,:,1,1) = bsxfun(@times, a(:,:,:,ind(1,1)), b(:,:,:,ind(1,1))) + bsxfun(@times, a(:,:,:,ind(1,2)), b(:,:,:,ind(2,1))) + bsxfun(@times, a(:,:,:,ind(1,3)), b(:,:,:,ind(3,1)));
+    c(:,:,:,1,2) = bsxfun(@times, a(:,:,:,ind(1,1)), b(:,:,:,ind(1,2))) + bsxfun(@times, a(:,:,:,ind(1,2)), b(:,:,:,ind(2,2))) + bsxfun(@times, a(:,:,:,ind(1,3)), b(:,:,:,ind(3,2)));
+    c(:,:,:,1,3) = bsxfun(@times, a(:,:,:,ind(1,1)), b(:,:,:,ind(1,3))) + bsxfun(@times, a(:,:,:,ind(1,2)), b(:,:,:,ind(2,3))) + bsxfun(@times, a(:,:,:,ind(1,3)), b(:,:,:,ind(3,3)));
     
-    c(:,:,:,2,1) = a(:,:,:,ind(2,1)) .* b(:,:,:,ind(1,1)) + a(:,:,:,ind(2,2)) .* b(:,:,:,ind(2,1)) + a(:,:,:,ind(2,3)) .* b(:,:,:,ind(3,1));
-    c(:,:,:,2,2) = a(:,:,:,ind(2,1)) .* b(:,:,:,ind(1,2)) + a(:,:,:,ind(2,2)) .* b(:,:,:,ind(2,2)) + a(:,:,:,ind(2,3)) .* b(:,:,:,ind(3,2));
-    c(:,:,:,2,3) = a(:,:,:,ind(2,1)) .* b(:,:,:,ind(1,3)) + a(:,:,:,ind(2,2)) .* b(:,:,:,ind(2,3)) + a(:,:,:,ind(2,3)) .* b(:,:,:,ind(3,3));
+    c(:,:,:,2,1) = bsxfun(@times, a(:,:,:,ind(2,1)), b(:,:,:,ind(1,1))) + bsxfun(@times, a(:,:,:,ind(2,2)), b(:,:,:,ind(2,1))) + bsxfun(@times, a(:,:,:,ind(2,3)), b(:,:,:,ind(3,1)));
+    c(:,:,:,2,2) = bsxfun(@times, a(:,:,:,ind(2,1)), b(:,:,:,ind(1,2))) + bsxfun(@times, a(:,:,:,ind(2,2)), b(:,:,:,ind(2,2))) + bsxfun(@times, a(:,:,:,ind(2,3)), b(:,:,:,ind(3,2)));
+    c(:,:,:,2,3) = bsxfun(@times, a(:,:,:,ind(2,1)), b(:,:,:,ind(1,3))) + bsxfun(@times, a(:,:,:,ind(2,2)), b(:,:,:,ind(2,3))) + bsxfun(@times, a(:,:,:,ind(2,3)), b(:,:,:,ind(3,3)));
     
-    c(:,:,:,3,1) = a(:,:,:,ind(3,1)) .* b(:,:,:,ind(1,1)) + a(:,:,:,ind(3,2)) .* b(:,:,:,ind(2,1)) + a(:,:,:,ind(3,3)) .* b(:,:,:,ind(3,1));
-    c(:,:,:,3,2) = a(:,:,:,ind(3,1)) .* b(:,:,:,ind(1,2)) + a(:,:,:,ind(3,2)) .* b(:,:,:,ind(2,2)) + a(:,:,:,ind(3,3)) .* b(:,:,:,ind(3,2));
-    c(:,:,:,3,3) = a(:,:,:,ind(3,1)) .* b(:,:,:,ind(1,3)) + a(:,:,:,ind(3,2)) .* b(:,:,:,ind(2,3)) + a(:,:,:,ind(3,3)) .* b(:,:,:,ind(3,3));
+    c(:,:,:,3,1) = bsxfun(@times, a(:,:,:,ind(3,1)), b(:,:,:,ind(1,1))) + bsxfun(@times, a(:,:,:,ind(3,2)), b(:,:,:,ind(2,1))) + bsxfun(@times, a(:,:,:,ind(3,3)), b(:,:,:,ind(3,1)));
+    c(:,:,:,3,2) = bsxfun(@times, a(:,:,:,ind(3,1)), b(:,:,:,ind(1,2))) + bsxfun(@times, a(:,:,:,ind(3,2)), b(:,:,:,ind(2,2))) + bsxfun(@times, a(:,:,:,ind(3,3)), b(:,:,:,ind(3,2)));
+    c(:,:,:,3,3) = bsxfun(@times, a(:,:,:,ind(3,1)), b(:,:,:,ind(1,3))) + bsxfun(@times, a(:,:,:,ind(3,2)), b(:,:,:,ind(2,3))) + bsxfun(@times, a(:,:,:,ind(3,3)), b(:,:,:,ind(3,3)));
 end
 
 function c = pw3_mavb(a, b)
@@ -424,12 +485,14 @@ function c = pw3_mavb(a, b)
 % b - 3d  vector field
 % b - 3d  vector field
 % Returns pointwise a * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3], 'like', a);
     
-    c(:,:,:,1) = a(:,:,:,1,1) .* b(:,:,:,1) + a(:,:,:,1,2) .* b(:,:,:,2) + a(:,:,:,1,3) .* b(:,:,:,3);
-    c(:,:,:,2) = a(:,:,:,2,1) .* b(:,:,:,1) + a(:,:,:,2,2) .* b(:,:,:,2) + a(:,:,:,2,3) .* b(:,:,:,3);
-    c(:,:,:,3) = a(:,:,:,3,1) .* b(:,:,:,1) + a(:,:,:,3,2) .* b(:,:,:,2) + a(:,:,:,3,3) .* b(:,:,:,3);
+    c(:,:,:,1) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,1)) + bsxfun(@times, a(:,:,:,1,2), b(:,:,:,2)) + bsxfun(@times, a(:,:,:,1,3), b(:,:,:,3));
+    c(:,:,:,2) = bsxfun(@times, a(:,:,:,2,1), b(:,:,:,1)) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,2)) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,3));
+    c(:,:,:,3) = bsxfun(@times, a(:,:,:,3,1), b(:,:,:,1)) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,2)) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,3));
 end
 
 function c = pw3_savb(a, b)
@@ -437,14 +500,16 @@ function c = pw3_savb(a, b)
 % b - 3d  vector field
 % b - 3d  vector field
 % Returns pointwise a * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3], 'like', a);
     
     ind = symIndices(size(a, 4));
     
-    c(:,:,:,1) = a(:,:,:,ind(1,1)) .* b(:,:,:,1) + a(:,:,:,ind(1,2)) .* b(:,:,:,2) + a(:,:,:,ind(1,3)) .* b(:,:,:,3);
-    c(:,:,:,2) = a(:,:,:,ind(2,1)) .* b(:,:,:,1) + a(:,:,:,ind(2,2)) .* b(:,:,:,2) + a(:,:,:,ind(2,3)) .* b(:,:,:,3);
-    c(:,:,:,3) = a(:,:,:,ind(3,1)) .* b(:,:,:,1) + a(:,:,:,ind(3,2)) .* b(:,:,:,2) + a(:,:,:,ind(3,3)) .* b(:,:,:,3);
+    c(:,:,:,1) = bsxfun(@times, a(:,:,:,ind(1,1)), b(:,:,:,1)) + bsxfun(@times, a(:,:,:,ind(1,2)), b(:,:,:,2)) + bsxfun(@times, a(:,:,:,ind(1,3)), b(:,:,:,3));
+    c(:,:,:,2) = bsxfun(@times, a(:,:,:,ind(2,1)), b(:,:,:,1)) + bsxfun(@times, a(:,:,:,ind(2,2)), b(:,:,:,2)) + bsxfun(@times, a(:,:,:,ind(2,3)), b(:,:,:,3));
+    c(:,:,:,3) = bsxfun(@times, a(:,:,:,ind(3,1)), b(:,:,:,1)) + bsxfun(@times, a(:,:,:,ind(3,2)), b(:,:,:,2)) + bsxfun(@times, a(:,:,:,ind(3,3)), b(:,:,:,3));
 end
 
 function c = pw3_vamb(a, b)
@@ -452,12 +517,14 @@ function c = pw3_vamb(a, b)
 % b - 3x3 tensor field
 % b - 3d  vector field
 % Returns pointwise a.' * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3], 'like', a);
     
-    c(:,:,:,1) = a(:,:,:,1) .* b(:,:,:,1,1) + a(:,:,:,2) .* b(:,:,:,2,1) + a(:,:,:,3) .* b(:,:,:,3,1);
-    c(:,:,:,2) = a(:,:,:,1) .* b(:,:,:,1,2) + a(:,:,:,2) .* b(:,:,:,2,2) + a(:,:,:,3) .* b(:,:,:,3,2);
-    c(:,:,:,3) = a(:,:,:,1) .* b(:,:,:,1,3) + a(:,:,:,2) .* b(:,:,:,2,3) + a(:,:,:,3) .* b(:,:,:,3,3);
+    c(:,:,:,1) = bsxfun(@times, a(:,:,:,1), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,2), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,3), b(:,:,:,3,1));
+    c(:,:,:,2) = bsxfun(@times, a(:,:,:,1), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,2), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,3), b(:,:,:,3,2));
+    c(:,:,:,3) = bsxfun(@times, a(:,:,:,1), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,2), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,3), b(:,:,:,3,3));
 end
 
 function c = pw3_vasb(a, b)
@@ -465,14 +532,16 @@ function c = pw3_vasb(a, b)
 % b - 3x3 symmetric tensor field = 6d vector field
 % b - 3d  vector field
 % Returns pointwise a.' * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3], 'like', a);
     
     ind = symIndices(size(b, 4));
     
-    c(:,:,:,1) = a(:,:,:,1) .* b(:,:,:,ind(1,1)) + a(:,:,:,2) .* b(:,:,:,ind(2,1)) + a(:,:,:,3) .* b(:,:,:,ind(3,1));
-    c(:,:,:,2) = a(:,:,:,1) .* b(:,:,:,ind(1,2)) + a(:,:,:,2) .* b(:,:,:,ind(2,2)) + a(:,:,:,3) .* b(:,:,:,ind(3,2));
-    c(:,:,:,3) = a(:,:,:,1) .* b(:,:,:,ind(1,3)) + a(:,:,:,2) .* b(:,:,:,ind(2,3)) + a(:,:,:,3) .* b(:,:,:,ind(3,3));
+    c(:,:,:,1) = bsxfun(@times, a(:,:,:,1), b(:,:,:,ind(1,1))) + bsxfun(@times, a(:,:,:,2), b(:,:,:,ind(2,1))) + bsxfun(@times, a(:,:,:,3), b(:,:,:,ind(3,1)));
+    c(:,:,:,2) = bsxfun(@times, a(:,:,:,1), b(:,:,:,ind(1,2))) + bsxfun(@times, a(:,:,:,2), b(:,:,:,ind(2,2))) + bsxfun(@times, a(:,:,:,3), b(:,:,:,ind(3,2)));
+    c(:,:,:,3) = bsxfun(@times, a(:,:,:,1), b(:,:,:,ind(1,3))) + bsxfun(@times, a(:,:,:,2), b(:,:,:,ind(2,3))) + bsxfun(@times, a(:,:,:,3), b(:,:,:,ind(3,3)));
 end
 
 function c = pw3_vavb(a, b)
@@ -480,7 +549,7 @@ function c = pw3_vavb(a, b)
 % b - 3d vector field
 % b - 3d vector field
 % Returns pointwise a.' * b
-    c = a(:,:,:,1) .* b(:,:,:,1) + a(:,:,:,2) .* b(:,:,:,2) + a(:,:,:,3) .* b(:,:,:,3);
+    c = bsxfun(@times, a(:,:,:,1), b(:,:,:,1)) + bsxfun(@times, a(:,:,:,2), b(:,:,:,2)) + bsxfun(@times, a(:,:,:,3), b(:,:,:,3));
 end
 
 function c = pw3_tmamb(a, b)
@@ -488,27 +557,29 @@ function c = pw3_tmamb(a, b)
 % b - 3x3 tensor field
 % c - 3x3 tensor field
 % Returns pointwise a.' * b
-    dim = size(a);
-    c = zeros([dim(1:3) 3 3], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim 3 3], 'like', a);
     
-    c(:,:,:,1,1) = a(:,:,:,1,1) .* b(:,:,:,1,1) + a(:,:,:,2,1) .* b(:,:,:,2,1) + a(:,:,:,3,1) .* b(:,:,:,3,1);
-    c(:,:,:,1,2) = a(:,:,:,1,1) .* b(:,:,:,1,2) + a(:,:,:,2,1) .* b(:,:,:,2,2) + a(:,:,:,3,1) .* b(:,:,:,3,2);
-    c(:,:,:,1,3) = a(:,:,:,1,1) .* b(:,:,:,1,3) + a(:,:,:,2,1) .* b(:,:,:,2,3) + a(:,:,:,3,1) .* b(:,:,:,3,3);
+    c(:,:,:,1,1) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,2,1), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,3,1), b(:,:,:,3,1));
+    c(:,:,:,1,2) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,2,1), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,3,1), b(:,:,:,3,2));
+    c(:,:,:,1,3) = bsxfun(@times, a(:,:,:,1,1), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,2,1), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,3,1), b(:,:,:,3,3));
     
-    c(:,:,:,2,1) = a(:,:,:,1,2) .* b(:,:,:,1,1) + a(:,:,:,2,2) .* b(:,:,:,2,1) + a(:,:,:,3,2) .* b(:,:,:,3,1);
-    c(:,:,:,2,2) = a(:,:,:,1,2) .* b(:,:,:,1,2) + a(:,:,:,2,2) .* b(:,:,:,2,2) + a(:,:,:,3,2) .* b(:,:,:,3,2);
-    c(:,:,:,2,3) = a(:,:,:,1,2) .* b(:,:,:,1,3) + a(:,:,:,2,2) .* b(:,:,:,2,3) + a(:,:,:,3,2) .* b(:,:,:,3,3);
+    c(:,:,:,2,1) = bsxfun(@times, a(:,:,:,1,2), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,3,1));
+    c(:,:,:,2,2) = bsxfun(@times, a(:,:,:,1,2), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,3,2));
+    c(:,:,:,2,3) = bsxfun(@times, a(:,:,:,1,2), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,2,2), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,3,2), b(:,:,:,3,3));
     
-    c(:,:,:,3,1) = a(:,:,:,1,3) .* b(:,:,:,1,1) + a(:,:,:,2,3) .* b(:,:,:,2,1) + a(:,:,:,3,3) .* b(:,:,:,3,1);
-    c(:,:,:,3,2) = a(:,:,:,1,3) .* b(:,:,:,1,2) + a(:,:,:,2,3) .* b(:,:,:,2,2) + a(:,:,:,3,3) .* b(:,:,:,3,2);
-    c(:,:,:,3,3) = a(:,:,:,1,3) .* b(:,:,:,1,3) + a(:,:,:,2,3) .* b(:,:,:,2,3) + a(:,:,:,3,3) .* b(:,:,:,3,3);
+    c(:,:,:,3,1) = bsxfun(@times, a(:,:,:,1,3), b(:,:,:,1,1)) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,2,1)) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,3,1));
+    c(:,:,:,3,2) = bsxfun(@times, a(:,:,:,1,3), b(:,:,:,1,2)) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,2,2)) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,3,2));
+    c(:,:,:,3,3) = bsxfun(@times, a(:,:,:,1,3), b(:,:,:,1,3)) + bsxfun(@times, a(:,:,:,2,3), b(:,:,:,2,3)) + bsxfun(@times, a(:,:,:,3,3), b(:,:,:,3,3));
 end
 
 function c = pw3_tma(a)
 % a - 3x3 tensor field
 % c - 3x3 tensor field
 % Returns pointwise a.'
-    dim = size(a);
+    dim = [size(a) 1 1];
     c = zeros([dim(1:3) 3 3], 'like', a);
     
     c(:,:,:,1,1) = a(:,:,:,1,1);
@@ -528,7 +599,7 @@ function c = pw3_ima(a)
 % a - 3x3 tensor field
 % c - 3x3 tensor field
 % Returns pointwise inv(a)
-    dim = size(a);
+    dim = [size(a) 1 1];
     c = zeros([dim(1:3) 3 3], 'like', a);
     
     % - Cofactors
@@ -548,15 +619,15 @@ function c = pw3_ima(a)
     % - Determinant
     
     c = bsxfun(@rdivide, c, a(:,:,:,1,1) .* c(:,:,:,1,1) + ...
-                             a(:,:,:,1,2) .* c(:,:,:,2,1) + ...
-                             a(:,:,:,1,3) .* c(:,:,:,3,1) );
+                            a(:,:,:,1,2) .* c(:,:,:,2,1) + ...
+                            a(:,:,:,1,3) .* c(:,:,:,3,1) );
 end
 
 function c = pw3_isa(a)
 % a - 3x3 symmetric tensor field = 6d vector field
 % c - 3x3 symmetric tensor field = 6d vector field
 % Returns pointwise inv(a)
-    dim = size(a);
+    dim = [size(a) 1 1];
     c = zeros([dim(1:3) 6], 'like', a);
     
     ind = symIndices(size(a, 4));
@@ -602,13 +673,13 @@ end
 %% === pointwise ==========================================================
 
 function c = pointwise(a, varargin)
-% FORMAT c = spm_matcomp('pointwise', a, (b), (op), (sym))
+% FORMAT c = spm_matcomp('Pointwise', a, (b), (op), (sym))
 % a  - [nx nz nz A (B)] ND-array of vectors/matrices
 % b  - [nx nz nz C (D)] ND-array of vectors/matrices
 % op - Operation(s) to apply to an element of a before multiplying it 
 %      with an element of b:
 %      't' (transpose).
-% sym - If true, at least one of a and b is symmetric.
+% sym - If true, at least one of a and b is sparse symmetric.
 %
 % Performs matrix operations at each point of a tensor field.
 % If b is provided, at each point:
@@ -619,8 +690,10 @@ function c = pointwise(a, varargin)
 % Note that
 % - if one (or both) entry is a vector, the adequate transpose
 %   operation is usually automatically detected.
-% - a and b can be fields of sparse square matrices. In this case, they
-%   have the form of a 6 element vector, which is automatically detected.
+% - a and b can be fields of sparse symmetric matrices. In this case, they
+%   have the form of a vector field, and sym must be set to true.
+% - Implicit expansion of the lattice is performed when one of the input
+%   dimensions is singular.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
@@ -672,8 +745,17 @@ function c = pointwise(a, varargin)
             sym.b = false;
         end
     end
-    if binary && ~issame(dim.a(1:3), dim.b(1:3))
-        error('Input fields must have the same lattice')
+    % The corresponding dimensions of A and B must be equal to each other, 
+    % or equal to one.
+    if binary
+        dima = dim.a(1:3);
+        dimb = dim.b(1:3);
+        same = dima == dimb;
+        diff = min(dima(~same), dimb(~same));
+        if  any(diff ~= 1)
+            error(['The corresponding lattice dimensions of A and B ' ...
+                   'must be equal to each other, or equal to one.']);
+        end
     end
     ismat.a = sym.a || size(a, 5) > 1;
     ismat.b = sym.b || size(b, 5) > 1;
@@ -757,13 +839,15 @@ function c = pw_mamb(a, b)
         error('Matrix dimensions not consistant: %d and %d', size(a,5), size(b,4))
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) size(a,4) size(b,5)], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim size(a,4) size(b,5)], 'like', a);
     
     for i=1:size(a,4)
         for j=1:size(b,5)
             for k=1:size(a,5)
-                c(:,:,:,i,j) = c(:,:,:,i,j) + a(:,:,:,i,k) .* b(:,:,:,k,j);
+                c(:,:,:,i,j) = c(:,:,:,i,j) + bsxfun(@times, a(:,:,:,i,k), b(:,:,:,k,j));
             end
         end
     end
@@ -780,13 +864,15 @@ function c = pw_masb(a, b)
         error('Matrix dimensions not consistant: %d and %d', size(a,5), n)
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) size(a,4) n], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim size(a,4) n], 'like', a);
     
     for i=1:size(a,4)
         for j=1:n
             for k=1:n
-                c(:,:,:,i,j) = c(:,:,:,i,j) + a(:,:,:,i,k) .* b(:,:,:,ind(k,j));
+                c(:,:,:,i,j) = c(:,:,:,i,j) + bsxfun(@times, a(:,:,:,i,k), b(:,:,:,ind(k,j)));
             end
         end
     end
@@ -803,13 +889,15 @@ function c = pw_samb(a, b)
         error('Matrix dimensions not consistant: %d and %d', n, size(b,4))
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) n size(b,5)], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim n size(b,5)], 'like', a);
     
     for i=1:n
         for j=1:size(b,5)
             for k=1:n
-                c(:,:,:,i,j) = a(:,:,:,ind(i,k)) .* b(:,:,:,k,j);
+                c(:,:,:,i,j) = bsxfun(@times, a(:,:,:,ind(i,k)), b(:,:,:,k,j));
             end
         end
     end
@@ -828,13 +916,15 @@ function c = pw_sasb(a, b)
         error('Matrix dimensions not consistant: %d and %d', na, nb)
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) na na], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim na na], 'like', a);
     
     for i=1:na
         for j=1:na
             for k=1:na
-                c(:,:,:,i,j) = c(:,:,:,i,j) + a(:,:,:,inda(i,k)) .* b(:,:,:,indb(k,j));
+                c(:,:,:,i,j) = c(:,:,:,i,j) + bsxfun(@times, a(:,:,:,inda(i,k)), b(:,:,:,indb(k,j)));
             end
         end
     end
@@ -857,19 +947,21 @@ function c = pw_mavb(a, b)
         end
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) n], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim n], 'like', a);
     
     if ~transpose
         for i=1:size(a,4)
             for k=1:size(b,4)
-                c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,i,k) .* b(:,:,:,k);
+                c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,i,k), b(:,:,:,k));
             end
         end
     else
         for i=1:size(a,5)
             for k=1:size(b,4)
-                c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,k,i) .* b(:,:,:,k);
+                c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,k,i), b(:,:,:,k));
             end
         end
     end
@@ -886,12 +978,14 @@ function c = pw_savb(a, b)
         error('Matrix dimensions not consistant: %d and %d', n, size(b,4))
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) n], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim n], 'like', a);
     
     for i=1:n
         for k=1:n
-            c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,ind(i,k)) .* b(:,:,:,k);
+            c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,ind(i,k)), b(:,:,:,k));
         end
     end
 end
@@ -913,19 +1007,21 @@ function c = pw_vamb(a, b)
         end
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) n], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim n], 'like', a);
     
     if ~transpose
         for i=1:size(b,5)
             for k=1:size(a,4)
-                c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,k) .* b(:,:,:,k,i);
+                c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,k), b(:,:,:,k,i));
             end
         end
     else
         for i=1:size(b,4)
             for k=1:size(a,4)
-                c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,k) .* b(:,:,:,i,k);
+                c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,k), b(:,:,:,i,k));
             end
         end
     end
@@ -942,12 +1038,14 @@ function c = pw_vasb(a, b)
         error('Matrix dimensions not consistant: %d and %d', size(a,4), n)
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) n], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim n], 'like', a);
     
     for i=1:n
         for k=1:n
-            c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,k) .* b(:,:,:,ind(k,i));
+            c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,k), b(:,:,:,ind(k,i)));
         end
     end
 end
@@ -962,11 +1060,13 @@ function c = pw_vavb(a, b)
         error('Matrix dimensions not consistant: %d and %d', size(a,4), size(b,4))
     end
     
-    dim = [size(a) 1 1];
-    c = zeros(dim(1:3), 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros(dim, 'like', a);
     
     for k=1:size(a,4)
-        c = c + a(:,:,:,k) .* b(:,:,:,k);
+        c = c + bsxfun(@times, a(:,:,:,k), b(:,:,:,k));
     end
 end
 
@@ -980,13 +1080,15 @@ function c = pw_tmamb(a, b)
         error('Matrix dimensions not consistant: %d and %d', size(a,4), size(b,4))
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) size(a,5) size(b,5)], 'like', a);
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim size(a,5) size(b,5)], 'like', a);
     
     for i=1:size(a,5)
         for j=size(b,5)
             for k=1:size(a,4)
-                c(:,:,:,i,j) = c(:,:,:,i,j) + a(:,:,:,k,i) .* b(:,:,:,k,j);
+                c(:,:,:,i,j) = c(:,:,:,i,j) + bsxfun(@times, a(:,:,:,k,i), b(:,:,:,k,j));
             end
         end
     end
@@ -1009,19 +1111,21 @@ function c = pw_tmavb(a, b)
         end
     end
     
-    dim = [size(a) 1 1];
-    c = zeros([dim(1:3) n], 'like', numeric(a(1)));
+    dima = [size(a) 1 1];
+    dimb = [size(b) 1 1];
+    dim  = max(dima(1:3), dimb(1:3));
+    c = zeros([dim n], 'like', numeric(a(1)));
     
     if ~transpose
         for i=1:size(a,5)
             for k=1:size(b,4)
-                c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,k,i) .* b(:,:,:,k);
+                c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,k,i), b(:,:,:,k));
             end
         end
     else
         for i=1:size(a,4)
             for k=1:size(b,4)
-                c(:,:,:,i) = c(:,:,:,i) + a(:,:,:,i,k) .* b(:,:,:,k);
+                c(:,:,:,i) = c(:,:,:,i) + bsxfun(@times, a(:,:,:,i,k), b(:,:,:,k));
             end
         end
     end
