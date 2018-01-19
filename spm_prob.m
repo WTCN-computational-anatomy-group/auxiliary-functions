@@ -913,7 +913,7 @@ function kl = wishart_kl(varargin)
 
     % Check if we are in the reparameterised case
     if nargin == 5
-        kl = gamma_kl(varargin{1}/varargin{2}, varargin{2}, ...
+        kl = wishart_kl(varargin{1}/varargin{2}, varargin{2}, ...
                       varargin{3}/varargin{4}, varargin{4});
         return
     end
@@ -951,7 +951,7 @@ function [Lam1, n1] = wishart_up(varargin)
             iV = ss2 - 2*ss1*mu' + ss0*mu*mu';
         end
         n1   = n0+ss0;
-        if n0, Lam1 = (n0/Lam0 + iV)/n1;
+        if n0, Lam1 = (n0*inv(Lam0) + iV)/n1;
         else,  Lam1 = iV/n1; end
         % stable inverse
         Lam1 = spm_matcomp('Inv', Lam1);
@@ -962,7 +962,9 @@ function [Lam1, n1] = wishart_up(varargin)
         Lam0 = varargin{3};
         n0   = varargin{4};
         n1   = n + n0;
-        if n0, Lam1 = n1/(n0/Lam0 + n/Lam);
+        if n0, Lam1 = n1*spm_matcomp('Inv', ...
+                            n0 * spm_matcomp('Inv',Lam0) + ...
+                            n  * spm_matcomp('Inv',Lam));
         else,  Lam1 = Lam; end
     end
     
