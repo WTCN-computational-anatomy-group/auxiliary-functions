@@ -75,7 +75,7 @@ function Affine = atlas_crop(P,Affine,prefix,rem_neck)
 
     if isempty(Affine)
         tpm    = spm_load_priors8(Vtpm);        
-        Affine = spm_maff_new(P,8,(0+1)*16,tpm,[],'mni');
+        Affine = spm_maff_new(P,4,(0+1)*16,tpm,[],'mni');
     end
 
     % Voxel locations in TPM.nii
