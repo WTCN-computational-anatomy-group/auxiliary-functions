@@ -2,7 +2,8 @@ function varargout = spm_parfor(varargin)
 %__________________________________________________________________________
 % Collection of tools for parallel/distributed processing.
 %
-% FORMAT out = spm_parfor(('name'), input)
+% FORMAT manage_parpool(num_workers)
+% FORMAT nw = nbr_parfor_workers
 %
 % FORMAT help spm_parfor>function
 % Returns the help file of the selected function.
@@ -16,10 +17,48 @@ function varargout = spm_parfor(varargin)
     id = varargin{1};
     varargin = varargin(2:end);
     switch lower(id)
-        case 'foo'
-            [varargout{1:nargout}] = foo(varargin{:});
+        case 'manage_parpool'
+            [varargout{1:nargout}] = manage_parpool(varargin{:});
+        case 'nbr_parfor_workers'
+            [varargout{1:nargout}] = nbr_parfor_workers(varargin{:});            
         otherwise
             help spm_parfor
             error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
     end
 end
+%==========================================================================
+
+%==========================================================================
+function manage_parpool(num_workers)
+% Start/stop parallel pool
+% FORMAT manage_parpool(num_workers)
+% num_workers - Number of parfor workers
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+    nw = spm_parfor('nbr_parfor_workers');
+    if num_workers>nw
+        num_workers = nw;
+    end
+
+    poolobj = gcp('nocreate');
+    if ~isempty(poolobj) && num_workers==0
+        delete(poolobj);
+    elseif ~isempty(poolobj) && poolobj.NumWorkers~=num_workers
+        delete(poolobj);
+        parpool('local',num_workers);
+    elseif isempty(poolobj) && num_workers
+        parpool('local',num_workers);
+    end
+end
+%==========================================================================
+
+%==========================================================================
+function nw = nbr_parfor_workers
+% Get number of CPU cores
+% FORMAT nw = nbr_parfor_workers
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+    c  = parcluster('local');
+    nw = c.NumWorkers;
+end
+%==========================================================================
