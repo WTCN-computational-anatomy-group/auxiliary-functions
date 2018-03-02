@@ -10,6 +10,7 @@ function varargout = spm_impreproc(varargin)
 % FORMAT V = realign2mni(V)
 % FORMAT V = reg_and_reslice(V)
 % FORMAT subvol(V,bb,prefix)
+% FORMAT skullstrip(V)
 %
 % FORMAT help spm_impreproc>function
 % Returns the help file of the selected function.
@@ -37,6 +38,8 @@ function varargout = spm_impreproc(varargin)
             [varargout{1:nargout}] = reset_origin(varargin{:});              
         case 'rigid_align'
             [varargout{1:nargout}] = rigid_align(varargin{:});             
+        case 'skullstrip'
+            [varargout{1:nargout}] = skullstrip(varargin{:});                  
         case 'subvol'
             [varargout{1:nargout}] = subvol(varargin{:});                
         otherwise
@@ -400,6 +403,67 @@ function V = reg_and_reslice(V)
 
         V(n) = spm_vol(output_list{1}.rfiles{1});            
     end
+end
+%==========================================================================
+
+%==========================================================================
+function skullstrip(V)
+% Skull-strip subject images
+% FORMAT V = skullstrip(V)
+% V - SPM volume object that can contain N different modalities (e.g. T1- 
+% and T2-weighted MRIs.
+%
+% WARNING: This function overwrites the input data!
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+
+    obj          = struct;
+    obj.bb       = NaN(2,3);
+    obj.bb       = [-90 -126 -72; 90 90 108];
+    obj.vox      = 2;
+    obj.cleanup  = 1;
+    obj.mrf      = 2;
+    obj.affreg   = 'mni';
+    obj.reg      = [0 0.001 0.5 0.05 0.2]*0.1;
+    obj.fwhm     = 1;
+    obj.samp     = 4;
+    obj.biasreg  = 0.001*(1/5);
+    obj.biasfwhm = 60;
+
+    tpmname   = fullfile(spm('dir'),'tpm','TPM.nii');
+    obj.lkp   = 1:6;
+    obj.tpm   = spm_load_priors8(tpmname);
+    obj.image = V;
+
+    % Initial affine registration.
+    obj.Affine = spm_maff8(obj.image(1),6,obj.fwhm,obj.tpm,[],obj.affreg);
+
+    % Run the actual segmentation
+    res = spm_preproc8(obj);
+
+    % Final iteration, so write out the required data.
+    required        = false(max(obj.lkp),4);
+    required(1:3,1) = true; % GM, WM, CSF
+    spm_preproc_write8(res,required,false(1,2),false(1,2),obj.mrf,obj.cleanup,obj.bb,obj.vox);
+    
+    % Create mask
+    pth   = fileparts(obj.image(1).fname);
+    files = spm_select('FPList',pth,'^c.*\.nii$');
+    V0    = spm_vol(files);
+    K     = numel(V0);
+    msk   = zeros(V0(1).dim,'single');
+    for k=1:K
+        msk = msk + V0(k).private.dat(:,:,:);
+    end
+    msk = msk>0;
+
+    % Mask images
+    N = numel(obj.image);
+    for n=1:N
+        img       = single(obj.image(n).private.dat(:,:,:));        
+        img(~msk) = 0;      
+        obj.image(n).private.dat(:,:,:) = img;
+    end    
 end
 %==========================================================================
 
