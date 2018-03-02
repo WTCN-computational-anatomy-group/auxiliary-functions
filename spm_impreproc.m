@@ -454,6 +454,7 @@ function skullstrip(V)
     msk   = zeros(V0(1).dim,'single');
     for k=1:K
         msk = msk + V0(k).private.dat(:,:,:);
+        delete(V0(k).fname);
     end
     msk = msk>0;
 
