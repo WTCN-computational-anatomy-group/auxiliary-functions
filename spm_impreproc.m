@@ -32,8 +32,8 @@ function varargout = spm_impreproc(varargin)
             [varargout{1:nargout}] = nm_reorient(varargin{:});                       
         case 'realign2mni'
             [varargout{1:nargout}] = realign2mni(varargin{:});                   
-        case 'reg_and_reslice'
-            [varargout{1:nargout}] = reg_and_reslice(varargin{:});                 
+        case 'coreg_and_reslice'
+            [varargout{1:nargout}] = coreg_and_reslice(varargin{:});                 
         case 'reset_origin'
             [varargout{1:nargout}] = reset_origin(varargin{:});              
         case 'rigid_align'
@@ -351,11 +351,12 @@ end
 %==========================================================================
 
 %==========================================================================
-function V = reg_and_reslice(V)
+function V = coreg_and_reslice(V,do_reslice)
 % Co-register and reslice images
-% FORMAT V = reg_and_reslice(V)
+% FORMAT V = coreg_and_reslice(V)
 % V - SPM volume object that can contain N different modalities (e.g. T1- 
 % and T2-weighted MRIs.
+% reslice - reslices images to same size [true]
 %
 % Takes medical images of the same subject and co-registers them and also
 % re-slices the images to the same dimensions. The image with the largest
@@ -371,7 +372,8 @@ function V = reg_and_reslice(V)
         return;
     end
     
-    % Get image with largest volume and reslice using this image as reference
+    % Get image with largest volume (for reslicing using this image as
+    % reference)
     vol = zeros(N,3);
     for n=1:N
         vx       = sqrt(sum(V(n).mat(1:3,1:3).^2));
@@ -381,27 +383,43 @@ function V = reg_and_reslice(V)
     [~,ref_ix] = max(vol);
 
     % Set options
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.cost_fun = 'nmi';
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.sep      = [4 2];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.tol      = [0.02 0.02 0.02 0.001 0.001 0.001 0.01 0.01 0.01 0.001 0.001 0.001];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.fwhm     = [7 7];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.interp   = 1;
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.wrap     = [0 0 0];
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.mask     = 0;
-    matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.prefix   = 'r';
+    if do_reslice
+        matlabbatch{1}.spm.spatial.coreg.estwrite.ref               = {V(ref_ix).fname};
+        matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.cost_fun = 'nmi';
+        matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.sep      = [4 2];
+        matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.tol      = [0.02 0.02 0.02 0.001 0.001 0.001 0.01 0.01 0.01 0.001 0.001 0.001];
+        matlabbatch{1}.spm.spatial.coreg.estwrite.eoptions.fwhm     = [7 7];    
+        matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.interp   = 1;
+        matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.wrap     = [0 0 0];
+        matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.mask     = 0;
+        matlabbatch{1}.spm.spatial.coreg.estwrite.roptions.prefix   = 'r';        
+    else
+        matlabbatch{1}.spm.spatial.coreg.estimate.ref               = {V(ref_ix).fname};
+        matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.cost_fun = 'nmi';
+        matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.sep      = [4 2];
+        matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.tol      = [0.02 0.02 0.02 0.001 0.001 0.001 0.01 0.01 0.01 0.001 0.001 0.001];
+        matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.fwhm     = [7 7];
+    end        
 
-    matlabbatch{1}.spm.spatial.coreg.estwrite.ref = {V(ref_ix).fname};
-
-    % Register and reslice
+    % Co-register/reslice
     ixs       = 1:N;
     source_ix = ixs(ixs~=ref_ix);
     for n=source_ix
-        matlabbatch{1}.spm.spatial.coreg.estwrite.source = {V(n).fname};                        
-
+        if do_reslice
+            matlabbatch{1}.spm.spatial.coreg.estwrite.source = {V(n).fname};                        
+        else
+            matlabbatch{1}.spm.spatial.coreg.estimate.source = {V(n).fname};                        
+        end
+        
         output_list = spm_jobman('run',matlabbatch);
-        delete(V(n).fname);
-
-        V(n) = spm_vol(output_list{1}.rfiles{1});            
+        
+        if do_reslice
+            delete(V(n).fname);
+            V(n) = spm_vol(output_list{1}.rfiles{1});    
+        else
+            M = output_list{1}.M*V(n).mat;
+            spm_get_space(V(n).fname,M); V(n).mat
+        end
     end
 end
 %==========================================================================
@@ -458,11 +476,15 @@ function skullstrip(V)
     end
     msk = msk>0;
 
-    % Mask images
+    % Fill holes
+    msk = imfill(msk,'holes');
+    
+    % Mask image(s)
     N = numel(obj.image);
     for n=1:N
-        img       = single(obj.image(n).private.dat(:,:,:));        
-        img(~msk) = 0;      
+        img                             = single(obj.image(n).private.dat(:,:,:));        
+        img(img==0)                     = NaN;
+        img(~msk)                       = 0;      
         obj.image(n).private.dat(:,:,:) = img;
     end    
 end
