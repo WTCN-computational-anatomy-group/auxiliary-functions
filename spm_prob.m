@@ -986,8 +986,7 @@ function out = wishart_elogdet(V, n, mode)
         K   = size(V, 1);
         out = DiGamma(0.5*n, K) + K*log(2) + spm_matcomp('LogDet', V);
     else
-        K   = size(V, 1);
-        out = DiGamma(0.5*n, K) + K*log(n/2) + spm_matcomp('LogDet', V);
+        out = wishart_elogdet(V/n, n);
     end
 end
 
