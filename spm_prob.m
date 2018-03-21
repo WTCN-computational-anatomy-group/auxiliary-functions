@@ -924,7 +924,7 @@ function kl = wishart_kl(varargin)
     V0 = varargin{3};
     n0 = varargin{4};
     K  = size(V1, 1);
-    kl =   0.5*(spm_matcomp('LogDet', V0) - spm_matcomp('LogDet', V1)) ...
+    kl =   0.5*n0*(spm_matcomp('LogDet', V0) - spm_matcomp('LogDet', V1)) ...
          + 0.5*n1*(trace(V0\V1) - K) ...
          + 0.5*(n1 - n0)*DiGamma(0.5*n1, K) ...
          + LogGamma(0.5*n0, K) - LogGamma(0.5*n1, K);
@@ -986,8 +986,7 @@ function out = wishart_elogdet(V, n, mode)
         K   = size(V, 1);
         out = DiGamma(0.5*n, K) + K*log(2) + spm_matcomp('LogDet', V);
     else
-        K   = size(V, 1);
-        out = DiGamma(0.5*n, K) + K*log(n/2) + spm_matcomp('LogDet', V);
+        out = wishart_elogdet(V/n, n);
     end
 end
 
