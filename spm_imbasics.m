@@ -90,8 +90,10 @@ function smooth_img_in_mem(img,fwhm)
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
     if nargin<2, fwhm = 10; end
 
-    fwhm = fwhm*ones(1,3);
-
+    if numel(fwhm)==1
+        fwhm = fwhm*ones(1,3);
+    end
+    
     lim = ceil(2*fwhm);
     x   = -lim(1):lim(1); x = spm_smoothkern(fwhm(1),x); x = x/sum(x);
     y   = -lim(2):lim(2); y = spm_smoothkern(fwhm(2),y); y = y/sum(y);
