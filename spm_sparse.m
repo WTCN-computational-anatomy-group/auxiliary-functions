@@ -271,12 +271,12 @@ function J = jacobian(lat_dim, lat_vs, vec_dim, dir)
     
     if nargin < 4
         dir = zeros(1, length(lat_dim));
-    end
-    if nargin < 3
-        vec_dim = 1;
-    end
-    if nargin < 2
-        lat_vs = ones(1, length(lat_dim));
+        if nargin < 3
+            vec_dim = 1;
+            if nargin < 2
+                lat_vs = ones(1, length(lat_dim));
+            end
+        end
     end
         
     % Multidimensional gradient functor
@@ -326,12 +326,12 @@ function H = hessian(lat_dim, lat_vs, vec_dim, dir)
     
     if nargin < 4
         dir = zeros(1, length(lat_dim));
-    end
-    if nargin < 3
-        vec_dim = 1;
-    end
-    if nargin < 2
-        lat_vs = ones(1, length(lat_dim));
+        if nargin < 3
+            vec_dim = 1;
+            if nargin < 2
+                lat_vs = ones(1, length(lat_dim));
+            end
+        end
     end
     im_dim = length(lat_dim);
     
@@ -466,9 +466,9 @@ function A = divergence(lat_dim, lat_vs, dir)
 
     if nargin < 3
         dir = zeros(1, length(lat_dim));
-    end
-    if nargin < 2
-        lat_vs = ones(1, length(lat_dim));
+        if nargin < 2
+            lat_vs = ones(1, length(lat_dim));
+        end
     end
     
     % Multidimensional gradient functor (column shape)
@@ -497,6 +497,16 @@ function S = symjac(lat_dim, lat_vs, vec_dim, dir)
 % The sum of square symmetric parts at point v is: v'*(S'*S)*v
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+    
+    if nargin < 4
+        dir = zeros(1, length(lat_dim));
+        if nargin < 3
+            vec_dim = 1;
+            if nargin < 2
+                lat_vs = ones(size(lat_dim));
+            end
+        end
+    end
     
     im_dim = length(lat_dim);
     J = jacobian(lat_dim, lat_vs, im_dim, dir);
@@ -532,9 +542,9 @@ function G = simple_gradient(dim, dir, vs)
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     if nargin < 3
         vs = 1;
-    end
-    if nargin < 2
-        dir = 0;
+        if nargin < 2
+            dir = 0;
+        end
     end
     
     if dir > 0
@@ -566,9 +576,9 @@ function CG = multi_gradient(dim, dir, vs)
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     if nargin < 3
         vs = ones(1, length(lat_dim));
-    end
-    if nargin < 2
-        dir = zeros(1, length(lat_dim));
+        if nargin < 2
+            dir = zeros(1, length(lat_dim));
+        end
     end
     im_dim = length(dim);
     
