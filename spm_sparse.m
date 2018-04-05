@@ -126,7 +126,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Membrane energy
     if lambda_membrane > 0
         for i=1:numel(dirs)
-            J = moperators('jacobian', lat_dim, lat_vs, im_dim, dirs{i});
+            J = spm_sparse('jacobian', lat_dim, lat_vs, im_dim, dirs{i});
             J = J' * J;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
@@ -140,7 +140,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Bending energy
     if lambda_bending > 0
         for i=1:numel(dirs)
-            H = moperators('hessian', lat_dim, lat_vs, im_dim, dirs{i});
+            H = spm_sparse('hessian', lat_dim, lat_vs, im_dim, dirs{i});
             H = H' * H;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
@@ -154,7 +154,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Linear-elastic (symmetric part of the jacobian)
     if mu_elastic > 0
         for i=1:numel(dirs)
-            S = moperators('symjac', lat_dim, lat_vs, im_dim, dirs{i});
+            S = spm_sparse('symjac', lat_dim, lat_vs, im_dim, dirs{i});
             S = S' * S;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
@@ -171,7 +171,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Linear-elastic (divergence)
     if lambda_elastic > 0
         for i=1:numel(dirs)
-            D = moperators('divergence', lat_dim, lat_vs, dirs{i});
+            D = spm_sparse('divergence', lat_dim, lat_vs, dirs{i});
             D = D' * D;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
