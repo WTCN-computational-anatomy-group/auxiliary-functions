@@ -492,25 +492,23 @@ function pdf = gamma_pdf(x, varargin)
         if ischar(varargin{3})
             varargin{3} = 1;
         end
-        pdf = gamma_pdf(x, 0.5*varargin{3}*varargin{2}, ...
-                           0.5*varargin{3}*varargin{2}/varargin{1});
-        return
+        a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
+        b   = bsxfun(@rdivide, a, varargin{1});
     elseif nargin > 4 
         if startsWith(varargin{4}, 'n', 'IgnoreCase', true)
-            pdf = gamma_pdf(x, 0.5*varargin{3}*varargin{2}, ...
-                               0.5*varargin{3}*varargin{2}/varargin{1});
-            return
+            a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
+            b   = bsxfun(@rdivide, a, varargin{1});
         elseif startsWith(varargin{4}, 'g', 'IgnoreCase', true)
-            pdf = gamma_pdf(x, varargin{3}*varargin{2}, ...
-                               varargin{3}*varargin{2}/varargin{1});
-            return
+            a   = bsxfun(@times, varargin{3}, varargin{2});
+            b   = bsxfun(@rdivide, a, varargin{1});
         end
+    else
+        a = varargin{1};
+        b = varargin{2};
     end
     
     % Usual pdf
-    alpha = varargin{1};
-    beta  = varargin{2};
-    pdf   = beta^alpha * x^(alpha-1) .* exp(-beta*x) / builtin('gamma', alpha);
+    pdf = gampdf(x, a, 1./b);
     
 end
 
@@ -526,25 +524,26 @@ function pdf = gamma_logpdf(x, varargin)
         if ischar(varargin{3})
             varargin{3} = 1;
         end
-        pdf = gamma_logpdf(x, 0.5*varargin{3}*varargin{2}, ...
-                              0.5*varargin{3}*varargin{2}/varargin{1});
-        return
+        a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
+        b   = bsxfun(@rdivide, a, varargin{1});
     elseif nargin > 4 
         if startsWith(varargin{4}, 'n', 'IgnoreCase', true)
-            pdf = gamma_logpdf(x, 0.5*varargin{3}*varargin{2}, ...
-                                  0.5*varargin{3}*varargin{2}/varargin{1});
-            return
+            a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
+            b   = bsxfun(@rdivide, a, varargin{1});
         elseif startsWith(varargin{4}, 'g', 'IgnoreCase', true)
-            pdf = gamma_logpdf(x, varargin{3}*varargin{2}, ...
-                                  varargin{3}*varargin{2}/varargin{1});
-            return
+            a   = bsxfun(@times, varargin{3}, varargin{2});
+            b   = bsxfun(@rdivide, a, varargin{1});
         end
+    else
+        a = varargin{1};
+        b = varargin{2};
     end
     
-    % Usual pdf
-    alpha = varargin{1};
-    beta  = varargin{2};
-    pdf   = alpha*log(beta) + (alpha-1)*log(x) - beta*x - gammaln(alpha);
+    % Usual log-pdf
+    pdf = bsxfun(@plus, bsxfun(@times, a, log(b)), ...
+                        bsxfun(@times, a-1, log(x)));
+    pdf = bsxfun(@minus, pdf, bsxfun(@times, b, x));
+    pdf = bsxfun(@minus, pdf, gammaln(a));
     
 end
 
@@ -560,36 +559,37 @@ function kl = gamma_kl(varargin)
         if ischar(varargin{5})
             varargin{5} = 1;
         end
-        kl = gamma_kl(0.5*varargin{5}*varargin{2}, ...
-                      0.5*varargin{5}*varargin{2}/varargin{1}, ...
-                      0.5*varargin{5}*varargin{4}, ...
-                      0.5*varargin{5}*varargin{4}/varargin{3});
-        return
+        a1  = 0.5*bsxfun(@times, varargin{5}, varargin{2});
+        b1  = bsxfun(@rdivide, a, varargin{1});
+        a0  = 0.5*bsxfun(@times, varargin{5}, varargin{4});
+        b0  = bsxfun(@rdivide, a, varargin{3});
     elseif nargin > 5
         if startsWith(varargin{6}, 'n', 'IgnoreCase', true)
-            kl = gamma_kl(0.5*varargin{5}*varargin{2}, ...
-                          0.5*varargin{5}*varargin{2}/varargin{1}, ...
-                          0.5*varargin{5}*varargin{4}, ...
-                          0.5*varargin{5}*varargin{4}/varargin{3});
-            return
+            a1  = 0.5*bsxfun(@times, varargin{5}, varargin{2});
+            b1  = bsxfun(@rdivide, a, varargin{1});
+            a0  = 0.5*bsxfun(@times, varargin{5}, varargin{4});
+            b0  = bsxfun(@rdivide, a, varargin{3});
         elseif startsWith(varargin{6}, 'g', 'IgnoreCase', true)
-            kl = gamma_kl(varargin{5}*varargin{2}, ...
-                          varargin{5}*varargin{2}/varargin{1}, ...
-                          varargin{5}*varargin{4}, ...
-                          varargin{5}*varargin{4}/varargin{3});
-            return
+            a1  = bsxfun(@times, varargin{5}, varargin{2});
+            b1  = bsxfun(@rdivide, a, varargin{1});
+            a0  = bsxfun(@times, varargin{5}, varargin{4});
+            b0  = bsxfun(@rdivide, a, varargin{3});
         end
+    else
+        a1 = varargin{1};
+        b1 = varargin{2};
+        a0 = varargin{3};
+        b0 = varargin{4};  
     end
     
     % Usual KL
-    alpha1 = varargin{1};
-    beta1  = varargin{2};
-    alpha0 = varargin{3};
-    beta0  = varargin{4};
-    kl     = - alpha0 * log(beta0/beta1)         ...
-             + alpha1 * (beta0/beta1 - 1)        ...
-             + gammaln(alpha0) - gammaln(alpha1) ...
-             + (alpha1- alpha0) * psi(alpha1);
+    % KL = - a0*log(b0/b1) + a1*(b0/b1 - 1) + (a1-a0)*psi(a1)
+    %      + ln G(a0) - ln G(a1)
+    kl = bsxfun(@times, bsxfun(@minus, a1, a0), psi(a1));
+    kl = bsxfun(@minus, kl, bsxfun(@times, a0, log(bsxfun(@rdivide, b0, b1))));
+    kl = bsxfun(@minus, kl, bsxfun(@times, a1, bsxfun(@rdivide, b0, b1)-1));
+    kl = bsxfun(@plus,  kl, gammaln(a0)) ;
+    kl = bsxfun(@minus, kl, gammaln(a1)) ;
     
 end
 
@@ -677,12 +677,17 @@ end
 % -------------------------------------------------------------------------
 
 function out = gamma_e(varargin)
+% FORMAT e = gamma_e(a, b)
+% FORMAT e = gamma_e(lam, n, (K), ('normal'))
+% FORMAT e = gamma_e(b,   n, a,    'gamma')
+
     if ischar(varargin{end}) && ...
        startsWith(varargin{end}, 'g', 'IgnoreCase', true)
         % ----------
         % GAMMA CONJ
         % ----------
             out = varargin{2};
+            
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
@@ -690,89 +695,124 @@ function out = gamma_e(varargin)
         % NORMAL CONJ
         % -----------
             out = varargin{2};
+            
     else
         % -----
         % GAMMA
         % -----
-            out = varargin{1}/varargin{2};
+            out = bsxfun(@rdivide, varargin{1}, varargin{2});
     end
 end
+
+% -------------------------------------------------------------------------
 
 function out = gamma_v(varargin)
+% FORMAT v = gamma_v(a, b)
+% FORMAT v = gamma_v(lam, n, (K), ('normal'))
+% FORMAT v = gamma_v(b,   n, a,    'gamma')
+
     if ischar(varargin{end}) && ...
        startsWith(varargin{end}, 'g', 'IgnoreCase', true)
         % ----------
         % GAMMA CONJ
         % ----------
-            out = varargin{2}*varargin{3}*(varargin{1}^2);
+        a = bsxfun(@times, varargin{3}, varargin{2});
+        b = bsxfun(@rdivide, a, varargin{1});
+                             
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
         % -----------
         % NORMAL CONJ
         % -----------
-            if ischar(varargin{3})
-                varargin{3} = 1;
-            end
-            out = 0.5*varargin{2}*varargin{3}*(varargin{1}^2);
+        if ischar(varargin{3})
+            varargin{3} = 1;
+        end
+        a = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
+        b = bsxfun(@rdivide, a, varargin{1});
+                                 
     else
         % -----
         % GAMMA
         % -----
-            out = varargin{1}/(varargin{2}^2);
+        a = varargin{1};
+        b = varargin{2};
+        
     end
+    out = bsxfun(@rdivide, a, b.^2);
 end
+
+% -------------------------------------------------------------------------
 
 function out = gamma_elog(varargin)
+% FORMAT el = gamma_elog(a, b)
+% FORMAT el = gamma_elog(lam, n, (K), ('normal'))
+% FORMAT el = gamma_elog(b,   n, a,    'gamma')
+
     if ischar(varargin{end}) && ...
        startsWith(varargin{end}, 'g', 'IgnoreCase', true)
         % ----------
         % GAMMA CONJ
         % ----------
-            out = log(varargin{1}) + psi(varargin{2}) - log(varargin{2});
+        a = bsxfun(@times, varargin{3}, varargin{2});
+        b = bsxfun(@rdivide, a, varargin{1});
+            
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
         % -----------
         % NORMAL CONJ
         % -----------
-            if ischar(varargin{3})
-                varargin{3} = 1;
-            end
-            out = log(varargin{1}) ...
-                  + psi(0.5*varargin{2}*varargin{3}) ...
-                  - log(0.5*varargin{2}*varargin{3});
+        if ischar(varargin{3})
+            varargin{3} = 1;
+        end
+        a = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
+        b = bsxfun(@rdivide, a, varargin{1});
+              
     else
         % -----
         % GAMMA
         % -----
-            out = psi(varargin{1}) - log(varargin{2});
+        a = varargin{1};
+        b = varargin{2};
     end
+    
+    out = bsxfun(@minus, psi(a), log(b));
 end
 
+% -------------------------------------------------------------------------
+
 function out = gamma_vlog(varargin)
+% FORMAT vl = gamma_vlog(a, b)
+% FORMAT vl = gamma_vlog(lam, n, (K), ('normal'))
+% FORMAT vl = gamma_vlog(b,   n, a,    'gamma')
+
     if ischar(varargin{end}) && ...
        startsWith(varargin{end}, 'g', 'IgnoreCase', true)
         % ----------
         % GAMMA CONJ
         % ----------
-            out = psi(1, varargin{2}*varargin{3});
+        a = bsxfun(@times, varargin{3}, varargin{2});
+        
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
         % -----------
         % NORMAL CONJ
         % -----------
-            if ischar(varargin{3})
-                varargin{3} = 1;
-            end
-            out = psi(1, 0.5*varargin{2}*varargin{3});
+        if ischar(varargin{3})
+            varargin{3} = 1;
+        end
+        a = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
+        
     else
         % -----
         % GAMMA
         % -----
-            out = psi(1,varargin{1});
+        a = varargin{1};
     end
+    
+    out = psi(1,a);
 end
 
 %%
@@ -992,6 +1032,8 @@ function out = wishart_e(V, n, mode)
     end
 end
 
+% -------------------------------------------------------------------------
+
 function out = wishart_elogdet(V, n, mode)
     if nargin < 3 || mode(1) ~= 'n'
         K   = size(V, 1);
@@ -1000,6 +1042,8 @@ function out = wishart_elogdet(V, n, mode)
         out = wishart_elogdet(V/n, n);
     end
 end
+
+% -------------------------------------------------------------------------
 
 function out = wishart_vlogdet(V, n, ~)
     K = size(V, 1);
@@ -1259,6 +1303,7 @@ function pdf = beta_pdf(x, varargin)
     b   = varargin{2};
     pdf = betapdf(x, a, b);
 end
+
 % -------------------------------------------------------------------------
 
 function pdf = beta_logpdf(x, varargin)
@@ -1303,9 +1348,7 @@ function pdf = beta_logpdf(x, varargin)
     b   = varargin{2};
     pdf = bsxfun(@plus,  bsxfun(@times, (a-1), log(x)), ...
                          bsxfun(@times, (b-1), log(1-x)));
-    pdf = bsxfun(@plus,  pdf, gammaln(bsxfun(@plus, a, b)));
-    pdf = bsxfun(@minus, pdf, gammaln(a));
-    pdf = bsxfun(@minus, pdf, gammaln(b));
+    pdf = bsxfun(@minus, pdf, betaln(a, b));
 end
 
 % -------------------------------------------------------------------------
