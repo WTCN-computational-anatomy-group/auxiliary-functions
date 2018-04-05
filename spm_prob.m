@@ -1,6 +1,17 @@
 function varargout = spm_prob(varargin)
 %__________________________________________________________________________
-% Collection of tools for probability distributions (PDF, KL-div, ...):
+% Collection of tools for probability distributions (PDF, KL-div, ...).
+%
+% FORMAT out = spm_prob('Normal',  ...)
+% FORMAT out = spm_prob('Gamma',   ...)
+% FORMAT out = spm_prob('Wishart', ...)
+% FORMAT out = spm_prob('Beta',    ...)
+%
+% FORMAT help spm_prob>function
+% Returns the help file of the selected function.
+%
+% Equivalent keys
+% ---------------
 %   [n/normal/gaussian]
 %   [g/gamma]
 %   [ig/inverse-gamma]
@@ -8,14 +19,12 @@ function varargout = spm_prob(varargin)
 %   [iw/inverse-wishart]
 %   [ng/normal-gamma]
 %   [nw/normal-wishart]
-%
-% FORMAT out = spm_prob('Normal',  ...)
-% FORMAT out = spm_prob('Gamma',   ...)
-% FORMAT out = spm_prob('Wishart', ...)
-%
-% FORMAT help spm_prob>function
-% Returns the help file of the selected function.
-%
+%   [ber/bernoulli]
+%   [bin/binomial]
+%   [c/categorical]
+%   [m/multinomial]
+%   [beta]
+%   [d/dirichlet]
 %--------------------------------------------------------------------------
 % MISC
 % ----
@@ -25,7 +34,7 @@ function varargout = spm_prob(varargin)
 % FORMAT dg = spm_prob('DiGamma', a, p)
 %   > Multivariate digamma function of order p
 %__________________________________________________________________________
-% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
 %--------------------------------------------------------------------------
 % TODO
@@ -80,6 +89,8 @@ function varargout = spm_prob(varargin)
             [varargout{1:nargout}] = gamma(varargin{:});
         case {'wishart', 'w'}
             [varargout{1:nargout}] = wishart(varargin{:});
+        case {'beta'}
+            [varargout{1:nargout}] = beta(varargin{:});
         case {'loggamma'}
             [varargout{1:nargout}] = LogGamma(varargin{:});
         case {'digamma'}
@@ -172,7 +183,7 @@ function varargout = normal(varargin)
 % FORMAT [mu1, n1] = spm_prob('Normal', 'update', mu, n, mu0, n0)
 %   >> Posterior parameters of the Normal distribution.
 %__________________________________________________________________________
-% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     if nargin == 0
         help spm_prob>normal
         error('Not enough argument. Type ''help spm_prob>Normal'' for help.');
@@ -437,7 +448,7 @@ function varargout = gamma(varargin)
 % FORMAT [beta1, n1] = spm_prob('Gamma', 'up', s0, s1,  beta0, n0, alpha, 'gamma')
 %   >> Posterior parameters of the Gamma distribution.
 %__________________________________________________________________________
-% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     if nargin == 0
         help spm_prob>gamma
         error('Not enough argument. Type ''help spm_prob>Gamma'' for help.');
@@ -830,7 +841,7 @@ function varargout = wishart(varargin)
 % FORMAT [lam1, n1] = spm_prob('Wishart', 'up', s0, s1, s2, Lam0, n0, (mu=0))
 %   >> Posterior parameters of the Wishart distribution.
 %__________________________________________________________________________
-% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     if nargin == 0
         help spm_prob>wishart
         error('Not enough argument. Type ''help spm_prob>Wishart'' for help.');
@@ -996,4 +1007,590 @@ function out = wishart_vlogdet(V, n, ~)
     for i=1:K
         out = out + psi(1, 0.5*(n+1-i));
     end
+end
+
+%%
+% =========================================================================
+%   BETA
+% =========================================================================
+
+function varargout = beta(varargin)
+%__________________________________________________________________________
+% Characteristic functions of the Beta distribution:
+%
+%   [pdf]       Probability density function
+%   [ll/logpdf] Log-probability density function
+%   [kl]        Kullback-Leibler divergence
+%   [up/update] Conjugate (or Bayesian) update
+%   [E]         Expected value (E[x])
+%   [Elog]      Expected log value (E[ln x])
+%   [V]         Variance (V[x])
+%   [Vlog]      Variance of the log value (V[ln x])
+%
+%--------------------------------------------------------------------------
+% Relationship to other distributions
+% -----------------------------------
+%
+% The Beta distribution is a conjugate prior for the proportion parameter 
+% of the Bernoulli, Binomial, negative Binomial and Geometric 
+% distributions. 
+%
+% The beta prameter is a special case of the Dirichlet distribution when
+% the number of classes is K = 2, i.e., the underlying trial is binary.
+%
+%--------------------------------------------------------------------------
+% General distribution
+% --------------------
+%
+% The Beta distribution is parameterised by two strictly positive shape 
+% parameters, a and b, and is defined over [0,1]. Parameters a and b can be
+% seen as concentration parameters, i.e., they reflect both class
+% proportions and their variance.
+% The expected value of the distribution is E[x] = a/(a+b)
+% The variance of the distribution is       V[x] = ab/[(a+b)^2*(a+b+1)]
+%
+% FORMAT pdf = spm_prob('Beta', 'pdf',    x, a, b)
+% FORMAT ll  = spm_prob('Beta', 'logpdf', x, a, b)
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Beta', 'E',    a, b)
+% FORMAT el = spm_prob('Beta', 'Elog', a, b)
+% FORMAT v  = spm_prob('Beta', 'V',    a, b)
+% FORMAT vl = spm_prob('Beta', 'Vlog', a, b)
+%   >> Mean and variance
+%
+% FORMAT kl  = spm_prob('Beta', 'kl', a1, b1, a0, b0)
+%   >> Kullback-Leibler divergence from B0 to B1 = KL(B1||B0).
+%
+%--------------------------------------------------------------------------
+% Bernoulli probability conjugate
+% -------------------------------
+%
+% To make the distribution easier to manipulate when used as a conjugate
+% prior for a Bernoulli distribution, we reparameterise it by setting:
+% - a = np
+% - b = n(1-p)
+% The expected value of the distribution becomes E[x] = p
+% The variance of the distribution becomes       V[x] = p(1-p)/(n+1)
+% Then, the Beta distribution is parameterised by a mean probability  
+% parameter (p) and a degrees of freedom (n).
+%
+% FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, 'ber')
+% FORMAT ll  = spm_prob('Beta', 'logpdf', x, p, n, 'ber')
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Beta', 'E',    p, n, 'ber')
+% FORMAT el = spm_prob('Beta', 'Elog', p, n, 'ber')
+% FORMAT v  = spm_prob('Beta', 'V',    p, n, 'ber')
+% FORMAT vl = spm_prob('Beta', 'Vlog', p, n, 'ber')
+%   >> Mean and variance.
+%
+% FORMAT kl  = spm_prob('Beta', 'kl', p1, n1, p0, n0, 'ber')
+%   >> Kullback-Leibler divergence from B0 to B1 = KL(B1||B0).
+%
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', p,  n,  p0, n0)
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', s0, s1, p0, n0, 'ber')
+%   >> Posterior parameters of the Beta distribution.
+%
+%--------------------------------------------------------------------------
+% Binomial probability conjugate
+% ------------------------------
+%
+% To make the distribution easier to manipulate when used as a conjugate
+% prior for a Binomial distribution, we reparameterise it by setting:
+% - a = knp
+% - b = kn(1-p)
+% The expected value of the distribution becomes E[x] = p
+% The variance of the distribution becomes       V[x] = p(1-p)/(kn+1)
+% Then, the Beta distribution is parameterised by a mean probability  
+% parameter (p), a degrees of freedom (n) and a number of trials (k).
+%
+% FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, k, 'bin')
+% FORMAT ll  = spm_prob('Beta', 'logpdf', x, p, n, k, 'bin')
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Beta', 'E',    p, n, k, 'bin')
+% FORMAT el = spm_prob('Beta', 'Elog', p, n, k, 'bin')
+% FORMAT v  = spm_prob('Beta', 'V',    p, n, k, 'bin')
+% FORMAT vl = spm_prob('Beta', 'Vlog', p, n, k, 'bin')
+%   >> Mean and variance.
+%
+% FORMAT kl  = spm_prob('Beta', 'kl', p1, n1, p0, n0, k, 'bin')
+%   >> Kullback-Leibler divergence from B0 to B1 = KL(B1||B0).
+%
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', p,  n,  p0, n0)
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', s0, s1, p0, n0, k, 'bin')
+%   >> Posterior parameters of the Beta distribution.
+%
+%--------------------------------------------------------------------------
+% Negative-Binomial probability conjugate
+% ---------------------------------------
+%
+% To make the distribution easier to manipulate when used as a conjugate
+% prior for a negative Binomial distribution, we reparameterise it by 
+% setting:
+% - a = rnp/(1-p)
+% - b = rn
+% The expected value of the distribution becomes E[x] = p
+% The variance of the distribution becomes       V[x] = p(1-p)^2/(rn+1-p)
+% Then, the Beta distribution is parameterised by a mean probability  
+% parameter (p), a degrees of freedom (n) and a number of failures (r).
+%
+% FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, r, 'nbin')
+% FORMAT ll  = spm_prob('Beta', 'logpdf', x, p, n, r, 'nbin')
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Beta', 'E',    p, n, r, 'nbin')
+% FORMAT el = spm_prob('Beta', 'Elog', p, n, r, 'nbin')
+% FORMAT v  = spm_prob('Beta', 'V',    p, n, r, 'nbin')
+% FORMAT vl = spm_prob('Beta', 'Vlog', p, n, r, 'nbin')
+%   >> Mean and variance.
+%
+% FORMAT kl  = spm_prob('Beta', 'kl', p1, n1, p0, n0, r, 'nbin')
+%   >> Kullback-Leibler divergence from B0 to B1 = KL(B1||B0).
+%
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', p,  n,  p0, n0)
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', s0, s1, p0, n0, r, 'nbin')
+%   >> Posterior parameters of the Beta distribution.
+%
+%--------------------------------------------------------------------------
+% Geometric probability conjugate
+% -------------------------------
+%
+% To make the distribution easier to manipulate when used as a conjugate
+% prior for a Geometric distribution, we reparameterise it by 
+% setting:
+% - a = n
+% - b = n(1-p)/p
+% The expected value of the distribution becomes E[x] = p
+% The variance of the distribution becomes       V[x] = (1-p)/(n+p)
+% Then, the Beta distribution is parameterised by a mean probability  
+% parameter (p) and a degrees of freedom (n).
+%
+% FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, 'geom')
+% FORMAT ll  = spm_prob('Beta', 'logpdf', x, p, n, 'geom')
+%   >> (Log) Probability density function.
+%
+% FORMAT e  = spm_prob('Beta', 'E',    p, n, 'geom')
+% FORMAT el = spm_prob('Beta', 'Elog', p, n, 'geom')
+% FORMAT v  = spm_prob('Beta', 'V',    p, n, 'geom')
+% FORMAT vl = spm_prob('Beta', 'Vlog', p, n, 'geom')
+%   >> Mean and variance.
+%
+% FORMAT kl  = spm_prob('Beta', 'kl', p1, n1, p0, n0, 'geom')
+%   >> Kullback-Leibler divergence from B0 to B1 = KL(B1||B0).
+%
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', p,  n,  p0, n0)
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', s0, s1, p0, n0, 'geom')
+% FORMAT [p1, n1] = spm_prob('Beta', 'up', s0, s1, p0, n0, 'fgeom')
+%   >> Posterior parameters of the Beta distribution.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+    if nargin == 0
+        help spm_prob>beta
+        error('Not enough argument. Type ''help spm_prob>Beta'' for help.');
+    end
+    id = varargin{1};
+    varargin = varargin(2:end);
+    switch lower(id)
+        case 'pdf'
+            [varargout{1:nargout}] = beta_pdf(varargin{:});
+        case {'logpdf', 'll'}
+            [varargout{1:nargout}] = beta_logpdf(varargin{:});
+        case 'kl'
+            [varargout{1:nargout}] = beta_kl(varargin{:});
+        case {'up', 'update'}
+            [varargout{1:nargout}] = beta_up(varargin{:});
+        case 'e'
+            [varargout{1:nargout}] = beta_e(varargin{:});
+        case 'elogdet'
+            [varargout{1:nargout}] = beta_elog(varargin{:});
+        case 'vloget'
+            [varargout{1:nargout}] = beta_vlog(varargin{:});
+        case 'help'
+            help spm_prob>wishart
+        otherwise
+            help spm_prob>wishart
+            error('Unknown function %s. Type ''help spm_prob>Wishart'' for help.', id)
+    end
+end
+
+% -------------------------------------------------------------------------
+
+function pdf = beta_pdf(x, varargin)
+% FORMAT pdf = beta_pdf(x, a, b)
+% FORMAT pdf = beta_pdf(x, p, n, 'ber')
+% FORMAT pdf = beta_pdf(x, p, n, k, 'bin')
+% FORMAT pdf = beta_pdf(x, p, n, r, 'nbin')
+% FORMAT pdf = beta_pdf(x, p, n, 'geom')
+
+    % Check if we are in the reparameterised case
+    if nargin > 3
+        switch lower(varargin{end})
+            case 'ber'
+                p = varargin{1};
+                n = varargin{2};
+                a = bsxfun(@times, n, p);
+                b = bsxfun(@times, n, 1-p);
+            case 'bin'
+                p = varargin{1};
+                n = varargin{2};
+                k = varargin{3};
+                a = bsxfun(@times, k, bsxfun(@times, n, p));
+                b = bsxfun(@times, k, bsxfun(@times, n, 1-p));
+            case 'nbin'
+                p = varargin{1};
+                n = varargin{2};
+                r = varargin{3};
+                b = bsxfun(@times, r, n);
+                a = bsxfun(@rdivide, bsxfun(@times, p, b), 1-p);
+            case 'geom'
+                p = varargin{1};
+                n = varargin{2};
+                a = n;
+                b = bsxfun(@rdivide, bsxfun(@times, n, 1-p), p);
+        end
+        pdf = beta_pdf(x, a, b);
+        return
+    end
+    
+    % Usual pdf
+    a   = varargin{1};
+    b   = varargin{2};
+    pdf = betapdf(x, a, b);
+end
+% -------------------------------------------------------------------------
+
+function pdf = beta_logpdf(x, varargin)
+% FORMAT pdf = beta_logpdf(x, a, b)
+% FORMAT pdf = beta_logpdf(x, p, n, 'ber')
+% FORMAT pdf = beta_logpdf(x, p, n, k, 'bin')
+% FORMAT pdf = beta_logpdf(x, p, n, r, 'nbin')
+% FORMAT pdf = beta_logpdf(x, p, n, 'geom')
+
+    % Check if we are in the reparameterised case
+    if nargin > 3
+        switch lower(varargin{end})
+            case 'ber'
+                p = varargin{1};
+                n = varargin{2};
+                a = bsxfun(@times, n, p);
+                b = bsxfun(@times, n, 1-p);
+            case 'bin'
+                p = varargin{1};
+                n = varargin{2};
+                k = varargin{3};
+                a = bsxfun(@times, k, bsxfun(@times, n, p));
+                b = bsxfun(@times, k, bsxfun(@times, n, 1-p));
+            case 'nbin'
+                p = varargin{1};
+                n = varargin{2};
+                r = varargin{3};
+                b = bsxfun(@times, r, n);
+                a = bsxfun(@rdivide, bsxfun(@times, p, b), 1-p);
+            case 'geom'
+                p = varargin{1};
+                n = varargin{2};
+                a = n;
+                b = bsxfun(@rdivide, bsxfun(@times, n, 1-p), p);
+        end
+        pdf = beta_logpdf(x, a, b);
+        return
+    end
+    
+    % Usual log-pdf
+    a   = varargin{1};
+    b   = varargin{2};
+    pdf = bsxfun(@plus,  bsxfun(@times, (a-1), log(x)), ...
+                         bsxfun(@times, (b-1), log(1-x)));
+    pdf = bsxfun(@plus,  pdf, gammaln(bsxfun(@plus, a, b)));
+    pdf = bsxfun(@minus, pdf, gammaln(a));
+    pdf = bsxfun(@minus, pdf, gammaln(b));
+end
+
+% -------------------------------------------------------------------------
+
+function e = beta_e(varargin)
+% FORMAT e = beta_e(a, b)
+% FORMAT e = beta_e(p, n, 'ber')
+% FORMAT e = beta_e(p, n, k, 'bin')
+% FORMAT e = beta_e(p, n, r, 'nbin')
+% FORMAT e = beta_e(p, n, 'geom')
+
+    % Check if we are in the reparameterised case
+    if nargin > 2
+        p = varargin{1};
+        e = p;
+        return
+    end
+    
+    % Usual expected value
+    % E[x] = a/(a+b)
+    a = varargin{1};
+    b = varargin{2};
+    e = bsxfun(@rdivide, a, bsxfun(@plus, a, b));
+end
+
+% -------------------------------------------------------------------------
+
+function el = beta_elog(varargin)
+% FORMAT el = beta_elog(a, b)
+% FORMAT el = beta_elog(p, n, 'ber')
+% FORMAT el = beta_elog(p, n, k, 'bin')
+% FORMAT el = beta_elog(p, n, r, 'nbin')
+% FORMAT el = beta_elog(p, n, 'geom')
+
+    % Check if we are in the reparameterised case
+    if nargin > 2
+        switch lower(varargin{end})
+            case 'ber'
+                p = varargin{1};
+                n = varargin{2};
+                a = bsxfun(@times, n, p);
+                b = bsxfun(@times, n, 1-p);
+            case 'bin'
+                p = varargin{1};
+                n = varargin{2};
+                k = varargin{3};
+                a = bsxfun(@times, k, bsxfun(@times, n, p));
+                b = bsxfun(@times, k, bsxfun(@times, n, 1-p));
+            case 'nbin'
+                p = varargin{1};
+                n = varargin{2};
+                r = varargin{3};
+                b = bsxfun(@times, r, n);
+                a = bsxfun(@rdivide, bsxfun(@times, p, b), 1-p);
+            case 'geom'
+                p = varargin{1};
+                n = varargin{2};
+                a = n;
+                b = bsxfun(@rdivide, bsxfun(@times, n, 1-p), p);
+        end
+        el = beta_elog(a, b);
+        return
+    end
+    
+    % Usual expected value
+    % E[ln x] = psi(a) - psi(a+b)
+    a  = varargin{1};
+    b  = varargin{2};
+    el = bsxfun(@minus, psi(a), psi(bsxfun(@plus, a, b)));
+end
+
+% -------------------------------------------------------------------------
+
+function v = beta_v(varargin)
+% FORMAT v = beta_v(a, b)
+% FORMAT v = beta_v(p, n, 'ber')
+% FORMAT v = beta_v(p, n, k, 'bin')
+% FORMAT v = beta_v(p, n, r, 'nbin')
+% FORMAT v = beta_v(p, n, 'geom')
+
+    % Check if we are in the reparameterised case
+    if nargin > 2
+        switch lower(varargin{end})
+            case 'ber'
+                p = varargin{1};
+                n = varargin{2};
+                a = bsxfun(@times, n, p);
+                b = bsxfun(@times, n, 1-p);
+            case 'bin'
+                p = varargin{1};
+                n = varargin{2};
+                k = varargin{3};
+                a = bsxfun(@times, k, bsxfun(@times, n, p));
+                b = bsxfun(@times, k, bsxfun(@times, n, 1-p));
+            case 'nbin'
+                p = varargin{1};
+                n = varargin{2};
+                r = varargin{3};
+                b = bsxfun(@times, r, n);
+                a = bsxfun(@rdivide, bsxfun(@times, p, b), 1-p);
+            case 'geom'
+                p = varargin{1};
+                n = varargin{2};
+                a = n;
+                b = bsxfun(@rdivide, bsxfun(@times, n, 1-p), p);
+        end
+        v = beta_v(a, b);
+        return
+    end
+    
+    % Usual variance
+    % V[x] = ab/[(a+b)^2*(a+b+1)]
+    a  = varargin{1};
+    b  = varargin{2};
+    v = bsxfun(@plus, a, b);
+    v = bsxfun(@times, v.^2, v+1);
+    v = bsxfun(@rdivide, bsxfun(@times, a, b), v);
+end
+
+% -------------------------------------------------------------------------
+
+function vl = beta_vlog(varargin)
+% FORMAT vl = beta_vlog(a, b)
+% FORMAT vl = beta_vlog(p, n, 'ber')
+% FORMAT vl = beta_vlog(p, n, k, 'bin')
+% FORMAT vl = beta_vlog(p, n, r, 'nbin')
+% FORMAT vl = beta_vlog(p, n, 'geom')
+
+    % Check if we are in the reparameterised case
+    if nargin > 2
+        switch lower(varargin{end})
+            case 'ber'
+                p = varargin{1};
+                n = varargin{2};
+                a = bsxfun(@times, n, p);
+                b = bsxfun(@times, n, 1-p);
+            case 'bin'
+                p = varargin{1};
+                n = varargin{2};
+                k = varargin{3};
+                a = bsxfun(@times, k, bsxfun(@times, n, p));
+                b = bsxfun(@times, k, bsxfun(@times, n, 1-p));
+            case 'nbin'
+                p = varargin{1};
+                n = varargin{2};
+                r = varargin{3};
+                b = bsxfun(@times, r, n);
+                a = bsxfun(@rdivide, bsxfun(@times, p, b), 1-p);
+            case 'geom'
+                p = varargin{1};
+                n = varargin{2};
+                a = n;
+                b = bsxfun(@rdivide, bsxfun(@times, n, 1-p), p);
+        end
+        vl = beta_vlog(a, b);
+        return
+    end
+    
+    % Usual variance
+    % V[ln x] = psi_1(a) - psi_1(a+b)
+    a  = varargin{1};
+    b  = varargin{2};
+    vl = bsxfun(@minus, psi(1,a), psi(1,bsxfun(@plus, a, b)));
+end
+
+% -------------------------------------------------------------------------
+
+function kl = beta_kl(varargin)
+% FORMAT vl = beta_kl(a1, b1, a0, b0)
+% FORMAT vl = beta_kl(p1, n1, p0, n0, 'ber')
+% FORMAT vl = beta_kl(p1, n1, p0, n0, k, 'bin')
+% FORMAT vl = beta_kl(p1, n1, p0, n0, r, 'nbin')
+% FORMAT vl = beta_kl(p1, n1, 'geom')
+
+    % Check if we are in the reparameterised case
+    if nargin > 4
+        switch lower(varargin{end})
+            case 'ber'
+                p1 = varargin{1};
+                n1 = varargin{2};
+                p0 = varargin{3};
+                n0 = varargin{4};
+                a1 = bsxfun(@times, n1, p1);
+                b1 = bsxfun(@times, n1, 1-p1);
+                a0 = bsxfun(@times, n0, p0);
+                b0 = bsxfun(@times, n0, 1-p0);
+            case 'bin'
+                p1 = varargin{1};
+                n1 = varargin{2};
+                p0 = varargin{3};
+                n0 = varargin{4};
+                k  = varargin{5};
+                a1 = bsxfun(@times, k, bsxfun(@times, n1, p1));
+                b1 = bsxfun(@times, k, bsxfun(@times, n1, 1-p1));
+                a0 = bsxfun(@times, k, bsxfun(@times, n0, p0));
+                b0 = bsxfun(@times, k, bsxfun(@times, n0, 1-p0));
+            case 'nbin'
+                p1 = varargin{1};
+                n1 = varargin{2};
+                p0 = varargin{3};
+                n0 = varargin{4};
+                r  = varargin{5};
+                b1 = bsxfun(@times, r, n1);
+                a1 = bsxfun(@rdivide, bsxfun(@times, p1, b1), 1-p1);
+                b0 = bsxfun(@times, r, n0);
+                a0 = bsxfun(@rdivide, bsxfun(@times, p0, b0), 1-p0);
+            case 'geom'
+                p1 = varargin{1};
+                n1 = varargin{2};
+                p0 = varargin{3};
+                n0 = varargin{4};
+                a1 = n1;
+                b1 = bsxfun(@rdivide, bsxfun(@times, n1, 1-p1), p1);
+                a0 = n0;
+                b0 = bsxfun(@rdivide, bsxfun(@times, n0, 1-p0), p0);
+        end
+        kl = beta_kl(a1, b1, a0, b0);
+        return
+    end
+    
+    % Usual KL-divergence
+    % KL(a1,b1||a0,b0) = ln B(a0,b0) - ln B(a1,b1) 
+    %                    + (a1-a0)psi(a1) + (b1-b0)psi(b1)
+    %                    + (a0-a1+b0-b1)psi(a1+b1)
+    a1 = varargin{1};
+    b1 = varargin{2};
+    a0 = varargin{3};
+    b0 = varargin{4};
+    kl = bsxfun(@times, ...
+        bsxfun(@plus, bsxfun(@minus, a0, a1), bsxfun(@minus, b0, b1)), ...
+        psi(bsxfun(@plus, a1, b1)));
+    kl = bsxfun(@plus,  kl, bsxfun(@times, bsxfun(@minus, a1, a0), psi(a1)));
+    kl = bsxfun(@plus,  kl, bsxfun(@times, bsxfun(@minus, b1, b0), psi(b1)));
+    kl = bsxfun(@plus,  kl, betaln(a0,b0));
+    kl = bsxfun(@minus, kl, betaln(a1,b1));
+end
+
+% -------------------------------------------------------------------------
+
+function [p1,n1] = beta_up(varargin)
+% FORMAT [p1,n1] = beta_up(p, n, p0, n0)
+%
+% FORMAT [p1,n1] = beta_up(s0, s1, p0, n0,    'suffstat', 'ber')   p=s1/s0
+% FORMAT [p1,n1] = beta_up(s0, s1, p0, n0, k, 'suffstat', 'bin')   p=s1/(k*s0)
+% FORMAT [p1,n1] = beta_up(s0, s1, p0, n0, r, 'suffstat', 'nbin')  p=s1/(r*s0+s1)
+% FORMAT [p1,n1] = beta_up(s0, s1, p0, n0,    'suffstat', 'geom')  p=s0/s1
+% FORMAT [p1,n1] = beta_up(s0, s1, p0, n0,    'suffstat', 'fgeom') p=s0/(s1+s0)
+
+    if ischar(varargin{end})
+        switch lower(varargin{end})
+            case 'ber'
+                s0 = varargin{1};
+                s1 = varargin{2};
+                n = s0;
+                p = s1/s0;
+            case 'bin'
+                s0 = varargin{1};
+                s1 = varargin{2};
+                k  = varargin{5};
+                n = s0;
+                p = s1/(k*s0);
+            case 'nbin'
+                s0 = varargin{1};
+                s1 = varargin{2};
+                r  = varargin{5};
+                n = s0;
+                p = s1/(r*s0+s1);
+            case 'geom'
+                s0 = varargin{1};
+                s1 = varargin{2};
+                n = s0;
+                p = s0/s1;
+            case 'fgeom'
+                s0 = varargin{1};
+                s1 = varargin{2};
+                n = s0;
+                p = s0/(s1+s0);
+        end
+    else
+        p = varargin{1};
+        n = varargin{2};
+    end
+    p0 = varargin{3};
+    n0 = varargin{4};
+    n1 = n0+n;
+    p1 = (n0*p0+n*p)/n1;
+
 end
