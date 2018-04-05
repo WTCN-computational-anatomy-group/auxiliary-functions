@@ -2,7 +2,7 @@ function varargout = spm_impreproc(varargin)
 %__________________________________________________________________________
 % Collection of tools for image pre-processing.
 %
-% FORMAT Affine = atlas_crop(P,Affine,prefix,rem_neck)
+% FORMAT [Affine,bb] = atlas_crop(P,Affine,prefix,rem_neck)
 % FORMAT nm_reorient(Vin,vx,type)
 % FORMAT reset_origin(P)
 % FORMAT R = rigid_align(P)
@@ -41,12 +41,13 @@ end
 %==========================================================================
 
 %==========================================================================
-function Affine = atlas_crop(P,prefix,rem_neck)
+function [Affine,bb] = atlas_crop(P,prefix,rem_neck)
 % Removes air outside of head
-% FORMAT Affine = atlas_crop(P,Affine,prefix,rem_neck)
+% FORMAT [Affine,bb] = atlas_crop(P,Affine,prefix,rem_neck)
 % P        - Path to NIfTI file
 % prefix   - File prefix (if empty -> overwrites) ['']
 % rem_neck - Remove neck/spine [false]
+% bb - Computed bounding box
 %
 % This function rigidly registers the SPM atlas to an image and then
 % removes image data outside of the head.
@@ -107,15 +108,16 @@ A1 = T*Atpm1; A2 = T*Atpm2;
 P1 = T*Ptpm1; P2 = T*Ptpm2;
 
 % Bounding-box
+bb = zeros(2,3);
 for i=1:3
-    X     = [L1(i) R1(i) U1(i) D1(i) A1(i) P1(i)...
-             L2(i) R2(i) U2(i) D2(i) A2(i) P2(i)];
-    mx(i) = max(X);
-    mn(i) = min(X);
+    X       = [L1(i) R1(i) U1(i) D1(i) A1(i) P1(i)...
+               L2(i) R2(i) U2(i) D2(i) A2(i) P2(i)];
+    bb(1,i) = max(X);
+    bb(2,i) = min(X);
 end
 
 % Do cropping
-spm_impreproc('subvol',Vin,[mn(1) mx(1);mn(2) mx(2);mn(3) mx(3)]',prefix);      
+spm_impreproc('subvol',Vin,bb,prefix);      
 %==========================================================================
 
 %==========================================================================
