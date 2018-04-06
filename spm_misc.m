@@ -1,6 +1,6 @@
-function varargout = spm_parfor(varargin)
+function varargout = spm_misc(varargin)
 %__________________________________________________________________________
-% Collection of tools for parallel/distributed processing.
+% Collection of miscellaneous functions.
 %
 % FORMAT manage_parpool(num_workers)
 % FORMAT nw = nbr_parfor_workers
