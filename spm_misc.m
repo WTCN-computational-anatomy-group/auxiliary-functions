@@ -35,7 +35,7 @@ function manage_parpool(num_workers)
 % num_workers - Number of parfor workers
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-    nw = spm_parfor('nbr_parfor_workers');
+    nw = spm_misc('nbr_parfor_workers');
     if num_workers>nw
         num_workers = nw;
     end
