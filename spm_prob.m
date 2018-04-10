@@ -125,7 +125,7 @@ function dg = DiGamma(a, p)
     end
     dg = 0;
     for i=1:p
-        dg = dg + psi(a + (1-p)/2);
+        dg = dg + psi(a + (1 - i)/2);
     end
 end
 
@@ -848,10 +848,11 @@ function varargout = wishart(varargin)
 % FORMAT ll  = spm_prob('Wishart', 'logpdf', X, V, n)
 %   >> (Log) Probability density function.
 %
-% FORMAT e  = spm_prob('Wishart', 'E',       V, n)
-% FORMAT el = spm_prob('Wishart', 'Elogdet', V, n)
-% FORMAT v  = spm_prob('Wishart', 'V',       V, n)
-% FORMAT vl = spm_prob('Wishart', 'Vlogdet', V, n)
+% FORMAT e    = spm_prob('Wishart', 'E',       V, n)
+% FORMAT el   = spm_prob('Wishart', 'Elogdet', V, n)
+% FORMAT v    = spm_prob('Wishart', 'V',       V, n)
+% FORMAT vl   = spm_prob('Wishart', 'Vlogdet', V, n)
+% FORMAT logZ = spm_prob('Wishart', 'logZ',    V, n)
 %   >> Mean and variance
 %
 % FORMAT kl  = spm_prob('Wishart', 'kl', V1, n1, V0, n0)
@@ -903,6 +904,8 @@ function varargout = wishart(varargin)
             [varargout{1:nargout}] = wishart_elogdet(varargin{:});
         case 'vloget'
             [varargout{1:nargout}] = wishart_vlogdet(varargin{:});
+        case 'logz'
+            [varargout{1:nargout}] = wishart_logZ(varargin{:});            
         case 'help'
             help spm_prob>wishart
         otherwise
@@ -1051,6 +1054,22 @@ function out = wishart_vlogdet(V, n, ~)
     for i=1:K
         out = out + psi(1, 0.5*(n+1-i));
     end
+end
+
+% -------------------------------------------------------------------------
+
+function out = wishart_logZ(V,n)
+    M     = size(V,1);
+    if M >= n+1
+       %warning('SPM:Wishart','Can not normalise a Wishart distribution (M=%d, nu=%f)', M,nu);
+        out = 0;
+        return;
+    end
+    lGamM = M*(M-1)/4*log(pi);
+    for m=1:M
+        lGamM = lGamM + gammaln((n + 1 - m)/2);
+    end
+    out = 0.5*n*(spm_matcomp('LogDet',V) + M*log(2)) + lGamM;
 end
 
 %%
