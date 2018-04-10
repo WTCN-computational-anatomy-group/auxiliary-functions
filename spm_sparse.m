@@ -1,3 +1,5 @@
+% TODO: sliding boundary conditions
+
 function varargout = spm_sparse(id, varargin)
 %__________________________________________________________________________
 % Collection of useful sparse matrices.
@@ -6,11 +8,11 @@ function varargout = spm_sparse(id, varargin)
 % Smooth regularisation matrices.
 % > L*v(:) is equivalent to spm_diffeo('vel2mom', v, ...)
 %
-% FORMAT L = spm_sparse('precision', 'diffeo', lat_dim, lat_vs)
-% FORMAT K = spm_sparse('kernel',    'diffeo', lat_dim, lat_vs)
+% FORMAT L = spm_sparse('precision', 'diffeo', lat_dim, lat_vs, bnd)
+% FORMAT K = spm_sparse('kernel',    'diffeo', lat_dim, lat_vs, bnd)
 %
-% FORMAT L = spm_sparse('precision', 'field',  lat_dim, lat_vs)
-% FORMAT K = spm_sparse('kernel',    'field',  lat_dim, lat_vs)
+% FORMAT L = spm_sparse('precision', 'field',  lat_dim, lat_vs, bnd)
+% FORMAT K = spm_sparse('kernel',    'field',  lat_dim, lat_vs, bnd)
 %
 %--------------------------------------------------------------------------
 % Differential operators in matrix form.
@@ -18,12 +20,12 @@ function varargout = spm_sparse(id, varargin)
 %   and J be the jacobian operator, then J * v returns a vectorized  
 %   version of the Jacobian matrix of v.
 %
-% FORMAT J = spm_sparse('jacobian',       lat_dim, lat_vs, vec_dim)
-% FORMAT H = spm_sparse('hessian',        lat_dim, lat_vs, vec_dim)
-% FORMAT L = spm_sparse('laplacian',      lat_dim, lat_vs)
+% FORMAT J = spm_sparse('jacobian',       lat_dim, lat_vs, vec_dim, bnd)
+% FORMAT H = spm_sparse('hessian',        lat_dim, lat_vs, vec_dim, bnd)
+% FORMAT L = spm_sparse('laplacian',      lat_dim, lat_vs, bnd)
 % FORMAT D = spm_sparse('euclidian_dist', lat_dim, lat_vs)
-% FORMAT A = spm_sparse('divergence',     lat_dim, lat_vs)
-% FORMAT S = spm_sparse('symjac',         lat_dim, lat_vs, vec_dim)
+% FORMAT A = spm_sparse('divergence',     lat_dim, lat_vs, bnd)
+% FORMAT S = spm_sparse('symjac',         lat_dim, lat_vs, vec_dim, bnd)
 % 
 %--------------------------------------------------------------------------
 % FORMAT help spm_sparse>function
@@ -54,8 +56,8 @@ end
 
 %% Precision matrices
 
-function L = precision(mode, lat_dim, lat_vs, param)
-% FORMAT L = spm_sparse('precision', mode, lat_dim, lat_vs, param)
+function L = precision(mode, lat_dim, lat_vs, param, bnd)
+% FORMAT L = spm_sparse('precision', mode, lat_dim, lat_vs, param, (bnd))
 % mode     - 'diffeo'or 'field'
 %            > If 'diffeo':  input must be a deformation/velocity field.
 % lat_dim  - Dimensions of the field lattice ([nx ny ...])
@@ -65,6 +67,10 @@ function L = precision(mode, lat_dim, lat_vs, param)
 % param[3] - Lambda parameter of the bending energy (mm^2).
 % param[4] - [diffeo only] Mu parameter of the linear-elastic energy.
 % param[5] - [diffeo only] Lambda parameter of the linear-elastic energy.
+% bnd      - Boundary conditions:
+%               * 0/'c'/'circulant'  (image wraps around) [default]
+%               * 1/'n'/'neumann'    (mirror / boundary)
+%               * 2/'d'/'dirichlet'  (zero outside FOV)
 %
 % Computes the inverse of the covariance matrix of the smooth prior 
 % in the LDDMM framwork (i.e., the posdef, self-adjoint, differential 
@@ -79,11 +85,14 @@ function L = precision(mode, lat_dim, lat_vs, param)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     im_dim = length(lat_dim);
-    if nargin < 4
-        param = [0.0001 0.001 0.2 0.05 0.2];
-    end
-    if nargin < 3
-        lat_vs = ones(1, im_dim);
+    if nargin < 5
+        bnd = 0;
+        if nargin < 4
+            param = [0.0001 0.001 0.2 0.05 0.2];
+            if nargin < 3
+                lat_vs = ones(1, im_dim);
+            end
+        end
     end
     param = [param 0 0 0];
     param = param(1:5);
@@ -126,7 +135,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Membrane energy
     if lambda_membrane > 0
         for i=1:numel(dirs)
-            J = spm_sparse('jacobian', lat_dim, lat_vs, im_dim, dirs{i});
+            J = spm_sparse('jacobian', lat_dim, lat_vs, im_dim, dirs{i}, bnd);
             J = J' * J;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
@@ -140,7 +149,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Bending energy
     if lambda_bending > 0
         for i=1:numel(dirs)
-            H = spm_sparse('hessian', lat_dim, lat_vs, im_dim, dirs{i});
+            H = spm_sparse('hessian', lat_dim, lat_vs, im_dim, dirs{i}, bnd);
             H = H' * H;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
@@ -154,7 +163,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Linear-elastic (symmetric part of the jacobian)
     if mu_elastic > 0
         for i=1:numel(dirs)
-            S = spm_sparse('symjac', lat_dim, lat_vs, im_dim, dirs{i});
+            S = spm_sparse('symjac', lat_dim, lat_vs, im_dim, dirs{i}, bnd);
             S = S' * S;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
@@ -171,7 +180,7 @@ function L = precision(mode, lat_dim, lat_vs, param)
     % Linear-elastic (divergence)
     if lambda_elastic > 0
         for i=1:numel(dirs)
-            D = spm_sparse('divergence', lat_dim, lat_vs, dirs{i});
+            D = spm_sparse('divergence', lat_dim, lat_vs, dirs{i}, bnd);
             D = D' * D;
             if strcmpi(mode, 'diffeo')
                 for j=1:im_dim
@@ -202,9 +211,9 @@ function CD = combdir(im_dim)
     end
 end
 
-function K = kernel(mode, L, lat_dim, lat_vs)
+function K = kernel(mode, L, lat_dim, lat_vs, bnd)
 % FORMAT K = spm_sparse('kernel', mode, L, lat_dim)
-% FORMAT K = spm_sparse('kernel', mode, param, lat_dim, lat_vs)
+% FORMAT K = spm_sparse('kernel', mode, param, lat_dim, lat_vs, bnd)
 % mode      - 'diffeo' or 'field'
 % L         - Regularization matrix (i.e. inverse of the prior covariance)
 % param     - It is also possible to provide the penalty parameters instead
@@ -213,16 +222,24 @@ function K = kernel(mode, L, lat_dim, lat_vs)
 %             explicitely stored in L and is needed to extract the 
 %             convolution operators from L.
 % (lat_vs)  - Voxel size of the lattice (default: 1).
+% (bnd)     - Boundary conditions:
+%                * 0/'c'/'circulant'  (image wraps around) [default]
+%                * 1/'n'/'neumann'    (mirror / boundary)
+%                * 2/'d'/'dirichlet'  (zero outside FOV)
 % K         - Direct convolution operators, equivalent to L.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    if nargin < 4
-        lat_vs = ones(size(lat_dim));
+
+    if nargin < 5
+        bnd = 0;
+        if nargin < 4
+            lat_vs = ones(size(lat_dim));
+        end
     end
     if size(L,1) == 1
         % Params were provided, not the matrix
         param = L;
-        L = precision(mode, lat_dim, lat_vs, param);
+        L = precision(mode, lat_dim, lat_vs, param, bnd);
     end
     im_dim = length(lat_dim);
     
@@ -238,8 +255,8 @@ end
 
 %% Matricial operators
 
-function J = jacobian(lat_dim, lat_vs, vec_dim, dir)
-% FORMAT J = spm_sparse('jacobian', lat_dim, lat_vs, vec_dim, dir)
+function J = jacobian(lat_dim, lat_vs, vec_dim, dir, bnd)
+% FORMAT J = spm_sparse('jacobian', lat_dim, lat_vs, vec_dim, dir, bnd)
 % lat_dim   - Dimensions of the lattice ([nx ny ...]).
 % (lat_vs)  - Voxel size of the lattice (default: 1).
 % (vec_dim) - Dimension of the vector space (default: 1).
@@ -247,6 +264,10 @@ function J = jacobian(lat_dim, lat_vs, vec_dim, dir)
 %             * -1: Left-hand approximation
 %             *  1: Right-hand approximation
 %             *  0: Mean approximation (default)
+% (bnd)     - Boundary conditions:
+%             * 0/'c'/'circulant'  (image wraps around) [default]
+%             * 1/'n'/'neumann'    (mirror / boundary)
+%             * 2/'d'/'dirichlet'  (zero outside FOV)
 % J         - Jacobian matrix operator s.t. Jac(v) = J * v
 %
 % Return a matrix that allows estimating the Jacobian of a vector
@@ -269,18 +290,21 @@ function J = jacobian(lat_dim, lat_vs, vec_dim, dir)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     
-    if nargin < 4
-        dir = zeros(1, length(lat_dim));
-        if nargin < 3
-            vec_dim = 1;
-            if nargin < 2
-                lat_vs = ones(1, length(lat_dim));
+    if nargin < 5
+        bnd = 0;
+        if nargin < 4
+            dir = zeros(1, length(lat_dim));
+            if nargin < 3
+                vec_dim = 1;
+                if nargin < 2
+                    lat_vs = ones(1, length(lat_dim));
+                end
             end
         end
     end
         
     % Multidimensional gradient functor
-    CG = multi_gradient(lat_dim, dir, lat_vs);
+    CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
     
     % Concatenate gradient functors
     % > CG * f allows to compute the gradient at f, where f is a scalar 
@@ -293,8 +317,8 @@ function J = jacobian(lat_dim, lat_vs, vec_dim, dir)
     J = kron(speye(vec_dim), CG);
 end
 
-function H = hessian(lat_dim, lat_vs, vec_dim, dir)
-% FORMAT H = spm_sparse('hessian', lat_dim, lat_vs, vec_dim)
+function H = hessian(lat_dim, lat_vs, vec_dim, dir, bnd)
+% FORMAT H = spm_sparse('hessian', lat_dim, lat_vs, vec_dim, dir, bnd)
 % lat_dim   - Dimensions of the lattice ([nx ny ...]).
 % (lat_vs)  - Voxel size of the lattice (default: 1).
 % (vec_dim) - Dimension of the vector space (default: 1).
@@ -302,6 +326,10 @@ function H = hessian(lat_dim, lat_vs, vec_dim, dir)
 %             * -1: Left-hand approximation
 %             *  1: Right-hand approximation
 %             *  0: Mean approximation (default)
+% (bnd)     - Boundary conditions:
+%             * 0/'c'/'circulant'  (image wraps around) [default]
+%             * 1/'n'/'neumann'    (mirror / boundary)
+%             * 2/'d'/'dirichlet'  (zero outside FOV)
 % H         - Hessian matrix operator s.t. Hess(v) = H * v
 %
 % Returns a matrix that allows estimating the Hessian of a vector 
@@ -324,19 +352,22 @@ function H = hessian(lat_dim, lat_vs, vec_dim, dir)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     
-    if nargin < 4
-        dir = zeros(1, length(lat_dim));
-        if nargin < 3
-            vec_dim = 1;
-            if nargin < 2
-                lat_vs = ones(1, length(lat_dim));
+    if nargin < 5
+        bnd = 0;
+        if nargin < 4
+            dir = zeros(1, length(lat_dim));
+            if nargin < 3
+                vec_dim = 1;
+                if nargin < 2
+                    lat_vs = ones(1, length(lat_dim));
+                end
             end
         end
     end
     im_dim = length(lat_dim);
     
     % Multidimensional gradient functor
-    CG = multi_gradient(lat_dim, dir, lat_vs);
+    CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
     
     % Multidimensional hessian functor
     % > CGG{index(i,j)} * f allows to compute the second derivative along 
@@ -364,14 +395,18 @@ function H = hessian(lat_dim, lat_vs, vec_dim, dir)
     H = kron(speye(vec_dim), CGG);
 end
 
-function L = laplacian(lat_dim, lat_vs, dir)
-% FORMAT L = spm_sparse('laplacian', lat_dim, lat_vs)
+function L = laplacian(lat_dim, lat_vs, dir, bnd)
+% FORMAT L = spm_sparse('laplacian', lat_dim, lat_vs, dir, bnd)
 % lat_dim   - Dimensions of the lattice ([nx ny ...]).
 % (lat_vs)  - Voxel size of the lattice (default: 1).
 % (dir)     - Approximation used in each direction ([dx dy ...]):
 %             * -1: Left-hand approximation
 %             *  1: Right-hand approximation
 %             *  0: Mean approximation (default)
+% (bnd)     - Boundary conditions:
+%             * 0/'c'/'circulant'  (image wraps around) [default]
+%             * 1/'n'/'neumann'    (mirror / boundary)
+%             * 2/'d'/'dirichlet'  (zero outside FOV)
 % L         - Laplacian matrix operator s.t. Lap(v) = L * f
 %
 % Returns a matrix that allows estimating the laplacian of a scalar field
@@ -386,16 +421,19 @@ function L = laplacian(lat_dim, lat_vs, dir)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
-    if nargin < 3
-        dir = zeros(1, length(lat_dim));
-    end
-    if nargin < 2
-        lat_vs = ones(1, length(lat_dim));
+    if nargin < 4
+        bnd = 0;
+        if nargin < 3
+            dir = zeros(1, length(lat_dim));
+            if nargin < 2
+                lat_vs = ones(1, length(lat_dim));
+            end
+        end
     end
     im_dim = length(lat_dim);
 
     % Multidimensional gradient functor
-    CG = multi_gradient(lat_dim, dir, lat_vs);
+    CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
     
     % Multidimensional diagonal of hessian functor
     % > CGG{i} * f allows to compute the unmixed second derivative along 
@@ -444,14 +482,18 @@ function D = euclidian_dist(lat_dim, lat_vs)
     D = blkdiag(D{:});
 end
 
-function A = divergence(lat_dim, lat_vs, dir)
-% FORMAT A = spm_sparse('divergence', lat_dim, lat_vs, dir)
+function A = divergence(lat_dim, lat_vs, dir, bnd)
+% FORMAT A = spm_sparse('divergence', lat_dim, lat_vs, dir, bnd)
 % lat_dim   - Dimensions of the lattice ([nx ny ...]).
 % (lat_vs)  - Voxel size of the lattice (default: 1).
 % (dir)     - Approximation used in each direction ([dx dy ...]):
 %             * -1: Left-hand approximation
 %             *  1: Right-hand approximation
 %             *  0: Mean approximation (default)
+% (bnd)     - Boundary conditions:
+%             * 0/'c'/'circulant'  (image wraps around) [default]
+%             * 1/'n'/'neumann'    (mirror / boundary)
+%             * 2/'d'/'dirichlet'  (zero outside FOV)
 % A         - Divergence matrix operator s.t. Div(v) = A * v
 %
 % Returns a matrix that allows estimating the divergence of a vector 
@@ -464,15 +506,18 @@ function A = divergence(lat_dim, lat_vs, dir)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
-    if nargin < 3
-        dir = zeros(1, length(lat_dim));
-        if nargin < 2
-            lat_vs = ones(1, length(lat_dim));
+    if nargin < 4
+        bnd = 0;
+        if nargin < 3
+            dir = zeros(1, length(lat_dim));
+            if nargin < 2
+                lat_vs = ones(1, length(lat_dim));
+            end
         end
     end
     
     % Multidimensional gradient functor (column shape)
-    CG = multi_gradient(lat_dim, dir, lat_vs);
+    CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
     
     % Divergence functor (row shape)
     % > A * v allows to compute the divergence at v, where v is a vector 
@@ -480,11 +525,19 @@ function A = divergence(lat_dim, lat_vs, dir)
     A = cell2mat(CG');
 end
 
-function S = symjac(lat_dim, lat_vs, vec_dim, dir)
-% FORMAT S = spm_sparse('symjac', lat_dim, lat_vs, vec_dim)
+function S = symjac(lat_dim, lat_vs, vec_dim, dir, bnd)
+% FORMAT S = spm_sparse('symjac', lat_dim, lat_vs, vec_dim, dir, bnd)
 % lat_dim   - Dimensions of the lattice ([nx ny ...]).
 % (lat_vs)  - Voxel size of the lattice (default: 1).
 % (vec_dim) - Dimension of the vector space (default: 1).
+% (dir)     - Approximation used in each direction ([dx dy ...]):
+%             * -1: Left-hand approximation
+%             *  1: Right-hand approximation
+%             *  0: Mean approximation (default)
+% (bnd)     - Boundary conditions:
+%             * 0/'c'/'circulant'  (image wraps around) [default]
+%             * 1/'n'/'neumann'    (mirror / boundary)
+%             * 2/'d'/'dirichlet'  (zero outside FOV)
 % S         - Jacobian matrix operator s.t. SymJac(v) = S * v
 %
 % Returns a matrix that allows estimating the symmetric part of the
@@ -498,18 +551,21 @@ function S = symjac(lat_dim, lat_vs, vec_dim, dir)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
     
-    if nargin < 4
-        dir = zeros(1, length(lat_dim));
-        if nargin < 3
-            vec_dim = 1;
-            if nargin < 2
-                lat_vs = ones(size(lat_dim));
+    if nargin < 5
+        bnd = 0;
+        if nargin < 4
+            dir = zeros(1, length(lat_dim));
+            if nargin < 3
+                vec_dim = 1;
+                if nargin < 2
+                    lat_vs = ones(size(lat_dim));
+                end
             end
         end
     end
     
     im_dim = length(lat_dim);
-    J = jacobian(lat_dim, lat_vs, im_dim, dir);
+    J = jacobian(lat_dim, lat_vs, im_dim, dir, bnd);
     
     % Compute a matrix that links a the element of a Jacobian (x_i, f_j) 
     % with itself and its symmetric component (x_j, f_i).
@@ -534,33 +590,64 @@ end
 
 %% HELPERS
 
-function G = simple_gradient(dim, dir, vs)
+function G = simple_gradient(dim, dir, vs, bnd)
 % Simple gradient functor
 % > G * f allows to compute the gradient along the first direction at 
 %   f, where f is a scalar field.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    if nargin < 3
-        vs = 1;
-        if nargin < 2
-            dir = 0;
+    if nargin < 4
+        bnd = 0;
+        if nargin < 3
+            vs = 1;
+            if nargin < 2
+                dir = 0;
+            end
         end
     end
     
     if dir > 0
         % Right-hand approximation
         G = spdiags(repmat([-1, 1], dim, 1), [0, 1], dim, dim);
-        G(end, 1) = 1; % Ciculating boundaries
+        switch lower(bnd)
+            case {0, 'c', 'circ', 'circulant'}
+                G(end, 1) = 1;
+            case {1, 'n', 'neumann'}
+                G(end,end) = 0;
+            case {2, 'd', 'dirichlet'}
+                % nothing to do
+        end
     elseif dir < 0
         % Left-hand approximation
         G = spdiags(repmat([-1, 1], dim, 1), [-1, 0], dim, dim);
-        G(1, end) = -1; % Ciculating boundaries
+        switch lower(bnd)
+            case {0, 'c', 'circ', 'circulant'}
+                G(1, end) = -1;
+            case {1, 'n', 'neumann'}
+                G(1,1) = 0;
+            case {2, 'd', 'dirichlet'}
+                % nothing to do
+        end
     else
         % Mean
         Gp = spdiags(repmat([-1, 1], dim, 1), [0, 1], dim, dim);
-        Gp(end, 1) = 1; % Ciculating boundaries
+        switch lower(bnd)
+            case {0, 'c', 'circ', 'circulant'}
+                Gp(end, 1) = 1;
+            case {1, 'n', 'neumann'}
+                Gp(end,end) = 0;
+            case {2, 'd', 'dirichlet'}
+                % nothing to do
+        end
         Gm = spdiags(repmat([-1, 1], dim, 1), [-1, 0], dim, dim);
-        Gm(1, end) = -1; % Ciculating boundaries
+        switch lower(bnd)
+            case {0, 'c', 'circ', 'circulant'}
+                Gm(1, end) = -1;
+            case {1, 'n', 'neumann'}
+                Gm(1,1) = 0;
+            case {2, 'd', 'dirichlet'}
+                % nothing to do
+        end
         G = 0.5 * (Gp + Gm);
     end
     if vs ~= 1
@@ -568,24 +655,36 @@ function G = simple_gradient(dim, dir, vs)
     end
 end
 
-function CG = multi_gradient(dim, dir, vs)
+function CG = multi_gradient(dim, dir, vs, bnd)
 % Multidimensional gradient functor
     % > CG{i} * f allows to compute the gradient along direction i at f,  
     %   where f is a scalar field.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    if nargin < 3
-        vs = ones(1, length(lat_dim));
-        if nargin < 2
-            dir = zeros(1, length(lat_dim));
+    if nargin < 4
+        bnd = zeros(1, length(lat_dim));
+        if nargin < 3
+            vs = ones(1, length(lat_dim));
+            if nargin < 2
+                dir = zeros(1, length(lat_dim));
+            end
         end
     end
     im_dim = length(dim);
+    if numel(bnd) == 1
+        bnd = repmat(bnd, [1 im_dim]);
+    end
+    if numel(vs) == 1
+        vs = repmat(vs, [1 im_dim]);
+    end
+    if numel(dir) == 1
+        dir = repmat(dir, [1 im_dim]);
+    end
     
     % Create gradient operators for each dimension
     G = cell(im_dim, 1);
     for i=1:im_dim
-        G{i} = simple_gradient(dim(i), dir(i), vs(i));
+        G{i} = simple_gradient(dim(i), dir(i), vs(i), bnd(i));
     end
     
     % Extend matrix
