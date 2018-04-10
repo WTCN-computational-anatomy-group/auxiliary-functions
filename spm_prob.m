@@ -560,20 +560,20 @@ function kl = gamma_kl(varargin)
             varargin{5} = 1;
         end
         a1  = 0.5*bsxfun(@times, varargin{5}, varargin{2});
-        b1  = bsxfun(@rdivide, a, varargin{1});
+        b1  = bsxfun(@rdivide, a1, varargin{1});
         a0  = 0.5*bsxfun(@times, varargin{5}, varargin{4});
-        b0  = bsxfun(@rdivide, a, varargin{3});
+        b0  = bsxfun(@rdivide, a0, varargin{3});
     elseif nargin > 5
         if startsWith(varargin{6}, 'n', 'IgnoreCase', true)
             a1  = 0.5*bsxfun(@times, varargin{5}, varargin{2});
-            b1  = bsxfun(@rdivide, a, varargin{1});
+            b1  = bsxfun(@rdivide, a1, varargin{1});
             a0  = 0.5*bsxfun(@times, varargin{5}, varargin{4});
-            b0  = bsxfun(@rdivide, a, varargin{3});
+            b0  = bsxfun(@rdivide, a0, varargin{3});
         elseif startsWith(varargin{6}, 'g', 'IgnoreCase', true)
             a1  = bsxfun(@times, varargin{5}, varargin{2});
-            b1  = bsxfun(@rdivide, a, varargin{1});
+            b1  = bsxfun(@rdivide, a1, varargin{1});
             a0  = bsxfun(@times, varargin{5}, varargin{4});
-            b0  = bsxfun(@rdivide, a, varargin{3});
+            b0  = bsxfun(@rdivide, a0, varargin{3});
         end
     else
         a1 = varargin{1};
