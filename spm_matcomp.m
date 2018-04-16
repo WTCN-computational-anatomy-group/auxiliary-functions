@@ -4,12 +4,16 @@ function varargout = spm_matcomp(varargin)
 %
 % FORMAT out = spm_matcomp('name', input)
 %
-% FORMAT  ld = spm_matcomp('LogDet', A)
-% FORMAT   A = spm_matcomp('LoadDiag', A)
-% FORMAT  iA = spm_matcomp('Inv', A)
-% FORMAT   c = spm_matcomp('Pointwise3', a, (b), (op))
-% FORMAT   c = spm_matcomp('Pointwise', a, (b), (op), (sym))
-% FORMAT ind = spm_matcomp('SymIndices', k)
+% FORMAT      A = spm_matcomp('LoadDiag', A)
+% FORMAT     ld = spm_matcomp('LogDet', A)
+% FORMAT      s = spm_matcomp('logsumexp',b,dm)
+% FORMAT     iA = spm_matcomp('Inv', A)
+% FORMAT      c = spm_matcomp('Pointwise3', a, (b), (op))
+% FORMAT      c = spm_matcomp('Pointwise', a, (b), (op), (sym))
+% FORMAT [Q,ll] = spm_matcomp('softmax',Q,scl)
+% FORMAT    ind = spm_matcomp('SymIndices', k)
+% FORMAT    ind = spm_matcomp('SymIndices', k)
+% FORMAT      M = spm_matcomp('threshold_eig',M)
 %
 % FORMAT help spm_matcomp>function
 % Returns the help file of the selected function.
@@ -34,6 +38,12 @@ function varargout = spm_matcomp(varargin)
             [varargout{1:nargout}] = loaddiag(varargin{:});
         case {'inv', 'inverse'}
             [varargout{1:nargout}] = inv(varargin{:});
+        case 'threshold_eig'
+            [varargout{1:nargout}] = threshold_eig(varargin{:});            
+        case 'logsumexp'
+            [varargout{1:nargout}] = logsumexp(varargin{:});                   
+        case 'softmax'
+            [varargout{1:nargout}] = softmax(varargin{:});                    
         otherwise
             help spm_matcomp
             error('Unknown function %s. Type ''help spm_matcomp'' for help.', id)
@@ -1145,3 +1155,71 @@ function c = pw_tma(a)
         end
     end
 end
+
+%==========================================================================
+function M = threshold_eig(M)
+% Stabilise matrix by thresholding eigenvalues
+% FORMAT M = threshold_eig(M)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+[V,D1] = eig(M);
+tol    = max(diag(D1))*eps('single');
+D1     = diag(max(diag(D1),tol));
+M      = real(V*D1*V');
+end
+%==========================================================================
+
+%==========================================================================
+function s = logsumexp(b,dm)
+% Compute log-sum-exp trick: 
+% https://en.wikipedia.org/wiki/LogSumExp#log-sum-exp_trick_for_log-domain_calculations
+% FORMAT s = logsumexp(b,dm)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+B       = max(b,[],dm);
+dms     = ones(1,ndims(b));
+dms(dm) = size(b,dm);
+b       = b - repmat(B,dms);
+s       = B + log(nansum(exp(b),dm));
+end
+%==========================================================================
+
+%==========================================================================
+function [Q,ll] = softmax(Q,scl)
+% Compute soft-max
+% FORMAT [Q,ll] = softmax(Q,scl)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+if nargin<2, scl = 1; end
+
+dm      = size(Q);
+ndm     = numel(dm);
+dm(:)   = 1;
+dm(end) = numel(scl);
+
+if scl~=1
+    scl = reshape(scl,dm);
+    Q   = bsxfun(@plus,Q,log(scl)); % rescale log-probabilities
+end
+
+mxQ = max(Q,[],ndm);
+Q   = exp(bsxfun(@minus,Q,mxQ));
+sQ  = nansum(Q,ndm);
+
+if nargout>1
+    ll = nansum(log(sQ) + mxQ);
+end
+
+Q = bsxfun(@rdivide,Q,sQ);
+end
+%==========================================================================
+
+% function a = softmax(a, scale)
+%     if nargin < 2
+%         scale = 1;
+%     end
+%     a = bsxfun(@plus, a, log(scale));     % rescale probabilities
+%     a = bsxfun(@minus, a, max(a, [], 4)); % safe softmax -> avoid overflow
+%     a = exp(a);                           % exponentiate
+%     a = bsxfun(@rdivide, a, sum(a, 4));   % normalise
+% end
