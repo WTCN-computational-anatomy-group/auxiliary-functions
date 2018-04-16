@@ -31,8 +31,8 @@ function varargout = spm_prob(varargin)
 %
 % FORMAT lg = spm_prob('LogGamma', a, p)
 %   > Log of multivariate gamma function of order p
-% FORMAT dg = spm_prob('DiGamma', a, p)
-%   > Multivariate digamma function of order p
+% FORMAT dg = spm_prob('DiGamma', a, p, (k))
+%   > Multivariate di/tri/.../gamma function of order p
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -119,13 +119,22 @@ end
 
 % -------------------------------------------------------------------------
 
-function dg = DiGamma(a, p)
-    if nargin < 2
-        p = 1;
+function dg = DiGamma(a, p, k)
+% FORMAT dg = spm_prob('DiGamma', a, (p), (k))
+% a - Value to evaluate: must be real and nonnegative
+% p - Dimension order [1]
+% k - Derivative order 0: digamma, 1: trigamma, etc. [0]
+%
+% Multivariate di/tri/.../gamma function of order p
+    if nargin < 3
+        k = 0;
+        if nargin < 2
+            p = 1;
+        end
     end
     dg = 0;
     for i=1:p
-        dg = dg + psi(a + (1-p)/2);
+        dg = dg + psi(k, a + (1-i)/2);
     end
 end
 
