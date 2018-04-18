@@ -185,12 +185,13 @@ end
 %==========================================================================
 
 %==========================================================================
-function [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,verbose)
+function [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,tol,verbose)
 % Fit a VB-GMM to image histogram
 % FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,verbose)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
-if nargin<4, verbose = true; end
+if nargin<4, tol     = 1e-6; end
+if nargin<5, verbose = true; end
     
 % Define priors
 a0 = ones(1,K)/K;
@@ -280,7 +281,7 @@ for iter=1:niter
         fprintf('%i\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\n',iter,lb,d,ElnPX,ElnPz,ElnPpi,ElnPmuLam,ElnQZ,ElnQpi,ElnQmuLam);        
     end
         
-    if d<1e-6
+    if d<tol
         % Expected mixing coefficients
         mg = exp(lnpi);
         
