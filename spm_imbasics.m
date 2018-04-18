@@ -6,7 +6,7 @@ function varargout = spm_imbasics(varargin)
 % FORMAT [Dx,Dy,Dz] = grad(X,vx)
 % FORMAT smooth_img_in_mem(img,fwhm) 
 % FORMAT [mg,mn,vr] = fit_gmm2hist(c,x,K,verbose)
-% FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,verbose)
+% FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,verbose)
 %
 % FORMAT help spm_imbasics>function
 % Returns the help file of the selected function.
@@ -185,13 +185,14 @@ end
 %==========================================================================
 
 %==========================================================================
-function [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,tol,verbose)
+function [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,verbose)
 % Fit a VB-GMM to image histogram
-% FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,verbose)
+% FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,verbose)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
-if nargin<4, tol     = 1e-6; end
-if nargin<5, verbose = true; end
+if nargin<4, stop_early = true; end
+if nargin<5, tol        = 1e-6; end
+if nargin<6, verbose    = false; end
     
 % Define priors
 a0 = ones(1,K)/K;
@@ -212,7 +213,8 @@ x = reshape(x,[I 1]);
 c = reshape(c,[I 1]);
 
 % Start algorithm
-niter = 10000;
+%--------------------------------------------------------------------------
+niter = 1000;
 lb    = -Inf;
 for iter=1:niter
     olb = lb;
@@ -281,14 +283,13 @@ for iter=1:niter
         fprintf('%i\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\n',iter,lb,d,ElnPX,ElnPz,ElnPpi,ElnPmuLam,ElnQZ,ElnQpi,ElnQmuLam);        
     end
         
-    if d<tol
-        % Expected mixing coefficients
-        mg = exp(lnpi);
-        
+    if d<tol && stop_early   
         % Finished
         break
     end
 end
+
+mg = exp(lnpi); % Expected mixing coefficients
 %==========================================================================
 
 %==========================================================================
