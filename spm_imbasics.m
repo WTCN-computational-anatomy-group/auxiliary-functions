@@ -185,21 +185,22 @@ end
 %==========================================================================
 
 %==========================================================================
-function [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,verbose)
+function [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,ard,verbose)
 % Fit a VB-GMM to image histogram
-% FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,verbose)
+% FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,ard,verbose)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
 if nargin<4, stop_early = true; end
-if nargin<5, tol        = 1e-6; end
-if nargin<6, verbose    = false; end
+if nargin<5, tol        = 1e-8; end
+if nargin<6, ard        = false; end
+if nargin<7, verbose    = false; end
     
 % Define priors
 a0 = ones(1,K)/K;
-m0 = linspace(min(x),max(x),K)./K;
+m0 = linspace(min(x),max(x),K)/K;
 b0 = ones(1,K);
 n0 = ones(1,K);
-W0 = 1./((ones(1,K)*(max(x) - min(x))./(K)).^2);
+W0 = 1./(ones(1,K)*(max(x) - min(x))./(K)).^2;
 
 % Define posteriors
 a = a0;
@@ -207,6 +208,10 @@ m = m0;
 b = b0;
 n = n0;
 W = W0;
+
+mg = 1/K*ones(K,1);
+
+tiny = eps('single');
 
 I = numel(x);
 x = reshape(x,[I 1]);
@@ -219,13 +224,30 @@ lb    = -Inf;
 for iter=1:niter
     olb = lb;
     
+    if any(mg<tiny) && ard
+        % Prune via ARD
+        %------------------------------------------------------------------        
+        [~,ix] = find(mg<tiny);
+        
+        K      = K - numel(ix);
+        mg(ix) = [];
+        m(ix)  = [];
+        b(ix)  = [];
+        n(ix)  = [];
+        W(ix)  = [];
+        m0(ix) = [];
+        b0(ix) = [];
+        n0(ix) = [];
+        W0(ix) = [];
+    end
+    
     % Compute responsibilities
     %----------------------------------------------------------------------
     lnR = zeros(I,K);    
     for k=1:K
-       Elnpi  = psi(a(k)) - psi(sum(a));
+       Elnpi  = log(mg(k));%psi(a(k)) - psi(sum(a));
        ElnLam = psi(0.5*n(k)) + log(2) + log(W(k));
-       ElnPx  = 0.5*ElnLam - 0.5*log(2*pi) - 0.5*(1/b(k) + n(k)*W(k)*(x - m(k)).*(x - m(k)));                   
+       ElnPx  = 0.5*ElnLam - 0.5*log(2*pi) - 0.5*(1/b(k) + n(k)*W(k)*(x - m(k)).^2);                   
               
        lnR(:,k) = Elnpi + ElnPx;
     end
@@ -243,7 +265,7 @@ for iter=1:niter
     for k=1:K
        s0(k) = sum(R(:,k).*c);
        s1(k) = 1/s0(k)*sum(R(:,k).*c.*x);
-       S2(k) = 1/s0(k)*sum(R(:,k).*c.*(x - s1(k)).*(x - s1(k)));
+       S2(k) = 1/s0(k)*sum(R(:,k).*c.*(x - s1(k)).^2);
     end
     
     % Update posteriors
@@ -254,42 +276,47 @@ for iter=1:niter
        n(k) = n0(k) + s0(k);
        m(k) = 1/b(k)*(b0(k)*m0(k) + s0(k)*s1(k));
        
-       invW = 1/W0(k) + s0(k)*S2(k) + (b0(k)*s0(k))/(b0(k) + s0(k))*(s1(k) - m0(k))*(s1(k) - m0(k));
+       invW = 1/W0(k) + s0(k)*S2(k) + (b0(k)*s0(k))/(b0(k) + s0(k))*(s1(k) - m0(k))^2;
        W(k) = 1/invW;
     end    
     
+    % Update mixing weights
+    %----------------------------------------------------------------------
+    mg = s0/sum(s0) + eps*eps;
+    
     % Compute lower bound
     %----------------------------------------------------------------------
-    lnpi  = bsxfun(@minus,psi(a),psi(sum(a)));
-    lnLam = psi(n/2) + log(2) + log(W);
+    lnpi  = log(mg);%bsxfun(@minus,psi(a),psi(sum(a)));
+    lnLam = psi(0.5*n) + log(2) + log(W);
     
-    lnB = @(n,W) -0.5*n.*log(W) - (0.5*log(2)*n + gammaln(0.5*n));
+    lnB = @(n,W) -0.5*n.*log(W) - (0.5*n*log(2) + gammaln(0.5*n));
     lnC = @(a) gammaln(sum(a)) - (sum(gammaln(a)));
     H   = -lnB(n,W) - 0.5*n.*lnLam + 0.5*n;
     
     ElnPX     = 0.5*sum(s0.*(lnLam - 1./b - n.*S2.*W - n.*W.*(s1 - m).^2 - log(2*pi)));
     ElnPz     = sum(sum(bsxfun(@times,bsxfun(@times,R,lnpi),c)));
-    ElnPpi    = lnC(a0) + sum((a0 - 1).*lnpi);
+    ElnPpi    = 0;%lnC(a0) + sum((a0 - 1).*lnpi);
     ElnPmuLam = 0.5*sum(log(0.5*b0./pi) + lnLam - b0./b - b0.*n.*W.*(m - m0).^2) ...
                 + sum(lnB(n0,W0)) + sum(0.5*n0.*lnLam) - 0.5*sum(n.*(1./W0).*W);
     ElnQZ     = sum(sum(bsxfun(@times,R.*lnR,c)));
-    ElnQpi    = sum((a - 1).*lnpi) + lnC(a);
+    ElnQpi    = 0;%sum((a - 1).*lnpi) + lnC(a);
     ElnQmuLam = sum(0.5*lnLam + 0.5*log(b./(2*pi)) - 0.5 - H);
     
-    lb = ElnPX + ElnPz + ElnPpi + ElnPmuLam - ElnQZ - ElnQpi - ElnQmuLam;    
+    lb = ElnPX + ElnPz + ElnPpi + ElnPmuLam - ElnQZ - ElnQpi - ElnQmuLam;
     
     d = abs((olb*(1 + 10*eps) - lb)/lb);   
     if verbose
-        fprintf('%i\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\n',iter,lb,d,ElnPX,ElnPz,ElnPpi,ElnPmuLam,ElnQZ,ElnQpi,ElnQmuLam);        
+        fprintf('%i\t%i\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\t%6.6f\n',iter,K,lb,d,ElnPX,ElnPz,ElnPpi,ElnPmuLam,ElnQZ,ElnQpi,ElnQmuLam);        
     end
-        
+            
     if d<tol && stop_early   
         % Finished
         break
     end
 end
 
-mg = exp(lnpi); % Expected mixing coefficients
+% mg = exp(lnpi); % Expected mixing coefficients
+return
 %==========================================================================
 
 %==========================================================================
