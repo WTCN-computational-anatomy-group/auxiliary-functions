@@ -8,6 +8,8 @@ function varargout = spm_misc(varargin)
 % FORMAT manage_parpool(num_workers)
 % FORMAT nw = nbr_parfor_workers
 % FORMAT vx = vxsize(M)
+% FORMAT msk = msk_modality(f,modality)
+% FORMAT browse_subjects(pth,modality)
 %
 % FORMAT help spm_parfor>function
 % Returns the help file of the selected function.
@@ -32,6 +34,10 @@ switch lower(id)
         [varargout{1:nargout}] = nbr_parfor_workers(varargin{:});            
     case 'vxsize'
         [varargout{1:nargout}] = vxsize(varargin{:});              
+    case 'msk_modality'
+        [varargout{1:nargout}] = msk_modality(varargin{:});          
+    case 'browse_subjects'
+        [varargout{1:nargout}] = browse_subjects(varargin{:});             
     otherwise
         help spm_parfor
         error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
@@ -246,6 +252,51 @@ if ~any(dims(:,3)>1)
 end
 M_avg = M_avg * [eye(3) mn-1; 0 0 0 1];
 M_avg(4,:)=[0 0 0 1];
+%==========================================================================
+
+%==========================================================================
+function msk = msk_modality(f,modality)
+% Get a mask for masking voxels in different imaging modalities
+% FORMAT msk = msk_modality(f,modality)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+if strcmp(modality,'MRI'),    
+    msk = isfinite(f) & (f~=0);
+elseif strcmp(modality,'CT'), 
+    msk = isfinite(f) & (f~=min(f(:))) & (f~=0);       
+    msk = imfill(msk,'holes'); % Because there might be 0 values voxels within the brain that gets masked out above
+end
+%==========================================================================
+
+%==========================================================================
+function browse_subjects(pth,modality)
+% Displays a populations of images
+% FORMAT browse_subjects(pth,modality)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+folder    = dir(pth);
+folder    = folder(3:end);
+dirflag   = [folder.isdir];
+subfolder = folder(dirflag);
+S         = numel(subfolder);
+
+fname = {};
+cnt   = 1;
+for s=1:S
+    dir_scans = fullfile(pth,subfolder(s).name,'scans',modality);        
+
+    scans = dir(fullfile(dir_scans,'*.nii'));
+    if isempty(scans)
+        scans = dir(fullfile(dir_scans,'*.img'));
+    end
+
+    if ~isempty(scans)
+        fname{cnt} = fullfile(dir_scans,scans(1).name);       
+        cnt        = cnt + 1;
+    end
+end 
+
+spm_check_registration(char(fname));
 %==========================================================================
 
 %==========================================================================
