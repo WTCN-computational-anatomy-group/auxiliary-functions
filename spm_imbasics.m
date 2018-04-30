@@ -198,9 +198,11 @@ if nargin<7, verbose    = false; end
 % Define priors
 a0 = ones(1,K)/K;
 m0 = linspace(min(x),max(x),K)/K;
-b0 = ones(1,K);
-n0 = ones(1,K);
-W0 = 1./(ones(1,K)*(max(x) - min(x))./(K)).^2;
+b0 = 1e-4*ones(1,K);
+n0 = 1e-4*ones(1,K);
+
+vr = (ones(1,K)*(max(x) - min(x))./(K)).^2;
+W0 = 1./(n0.*vr);
 
 % Define posteriors
 a = a0;
@@ -249,12 +251,12 @@ for iter=1:niter
        ElnLam = psi(0.5*n(k)) + log(2) + log(W(k));
        ElnPx  = 0.5*ElnLam - 0.5*log(2*pi) - 0.5*(1/b(k) + n(k)*W(k)*(x - m(k)).^2);                   
               
-       lnR(:,k) = Elnpi + ElnPx;
-    end
+       lnR1(:,k) = Elnpi + ElnPx;
+    end    
     
     % Log-sum-exp to get responsibilities
-    lnsmR = spm_matcomp('logsumexp',lnR,2);
-    lnR   = bsxfun(@minus,lnR,lnsmR);
+    lnsmR = spm_matcomp('logsumexp',lnR1,2);
+    lnR   = bsxfun(@minus,lnR1,lnsmR);
     R     = exp(lnR); 
     
     % Compute moments
@@ -315,6 +317,14 @@ for iter=1:niter
     end
 end
 
+if verbose        
+    figure(4001);
+    md = mean(diff(x));        
+    sp = exp(lnR1);
+    plot(x(:),(c/sum(c))/md,'b-',x(:),sp,'r-');
+    drawnow;        
+end
+    
 % mg = exp(lnpi); % Expected mixing coefficients
 return
 %==========================================================================
