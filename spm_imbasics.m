@@ -49,7 +49,7 @@ if nargin<4, vx = ones(3,1); end
 if size(Dx,3) == 1
     Du = [-Dx(:,1), -diff(Dx(:,1:end-1),1,2), Dx(:,end-1)];
     Dv = [-Dy(1,:); -diff(Dy(1:end-1,:),1,1); Dy(end-1,:)];
-    div = Du./vx(2) + Dv./vx(1)% FORMAT [mg,mn,vr] = fit_gmm2hist(c,x,K,verbose);
+    div = Du./vx(2) + Dv./vx(1);
 else
     Du = cat(2, -Dx(:,1,:), -diff(Dx(:,1:end-1,:),1,2), Dx(:,end-1,:)); 
     Dv = cat(1, -Dy(1,:,:), -diff(Dy(1:end-1,:,:),1,1), Dy(end-1,:,:));
