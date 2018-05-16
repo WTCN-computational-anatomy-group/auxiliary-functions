@@ -53,7 +53,8 @@ S  = min(S0,S);
 for s=1:S % Loop over subjects in population
     
     % Read subject-specific meta data
-    meta_data = spm_jsonread(fullfile(dir_population,json_files(s).name));       
+    pth_json  = fullfile(dir_population,json_files(s).name);
+    meta_data = spm_jsonread(pth_json);       
     
     % Check and init meta_data
     meta_data = check_meta_data(meta_data);   
@@ -65,8 +66,8 @@ for s=1:S % Loop over subjects in population
         % Subject not in dictionary -> add subject to dictionary
         dict(name)           = S1 + dict.Count + 1;          
         dat(dict(name)).name = name;
-    end            
-        
+    end                    
+    
     if ~isempty(meta_data.modality)
         % Get imaging data
         %------------------------------------------------------------------
@@ -79,11 +80,13 @@ for s=1:S % Loop over subjects in population
             dat(dict(name)).modality.name = modality;
             if isempty(channel)
                 % Single-channel data
-                dat(dict(name)).modality.nii = Nii;
+                dat(dict(name)).modality.nii      = Nii;
+                dat(dict(name)).modality.json.pth = pth_json;
             else
                 % Multi-channel data
-                dat(dict(name)).modality.channel.name = channel;
-                dat(dict(name)).modality.channel.nii  = Nii;
+                dat(dict(name)).modality.channel.name      = channel;
+                dat(dict(name)).modality.channel.nii       = Nii;
+                dat(dict(name)).modality.channel.json.pth  = pth_json;
             end
         else
             % Modality field already exists for subject -> append to appropriate
@@ -95,7 +98,8 @@ for s=1:S % Loop over subjects in population
                     % Modality found -> append                               
                     if isempty(channel)
                         N = numel(dat(dict(name)).modality(m).nii);
-                        dat(dict(name)).modality(m).nii(N + 1) = Nii;
+                        dat(dict(name)).modality(m).nii(N + 1)      = Nii;
+                        dat(dict(name)).modality(m).json(N + 1).pth = pth_json;
                     else
                         C       = numel(dat(dict(name)).modality(m).channel);
                         has_chn = false;
@@ -103,7 +107,8 @@ for s=1:S % Loop over subjects in population
                             if strcmp(channel,dat(dict(name)).modality(m).channel(c).name)
                                 % Channel found -> append
                                 N = numel(dat(dict(name)).modality(m).channel(c).nii);
-                                dat(dict(name)).modality(m).channel(c).nii(N + 1) = Nii;
+                                dat(dict(name)).modality(m).channel(c).nii(N + 1)      = Nii;
+                                dat(dict(name)).modality(m).channel(c).json(N + 1).pth = pth_json;
                             end
 
                             has_chn = true;
@@ -112,8 +117,9 @@ for s=1:S % Loop over subjects in population
 
                         if ~has_chn
                             % Channel not found -> add channel
-                            dat(dict(name)).modality(m).channel(C + 1).name = channel;
-                            dat(dict(name)).modality(m).channel(C + 1).nii  = Nii;
+                            dat(dict(name)).modality(m).channel(C + 1).name      = channel;
+                            dat(dict(name)).modality(m).channel(C + 1).nii       = Nii;
+                            dat(dict(name)).modality(m).channel(C + 1).json.pth  = pth_json;
                         end
                     end
 
@@ -126,11 +132,13 @@ for s=1:S % Loop over subjects in population
                 % Modality not found -> add modality
                 if isempty(channel)
                     % Single-channel data
-                    dat(dict(name)).modality(M + 1).nii = Nii;
+                    dat(dict(name)).modality(M + 1).nii      = Nii;
+                    dat(dict(name)).modality(M + 1).json.pth = pth_json;
                 else
                     % Multi-channel data
-                    dat(dict(name)).modality(M + 1).channel.name = channel;
-                    dat(dict(name)).modality(M + 1).channel.nii  = Nii;
+                    dat(dict(name)).modality(M + 1).channel.name      = channel;
+                    dat(dict(name)).modality(M + 1).channel.nii       = Nii;
+                    dat(dict(name)).modality(M + 1).channel.json.pth  = pth_json;
                 end
             end
         end
