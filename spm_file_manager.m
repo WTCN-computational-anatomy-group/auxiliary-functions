@@ -151,8 +151,10 @@ for s=1:S % Loop over subjects in population
         end
         
         dat(dict(name)).(fn{i}) = meta_data.(field_name);
-    end    
+    end            
 end
+
+fprintf('Loaded %i subjects into dat from %s.\n',S,dir_population);
 %==========================================================================
 
 %==========================================================================
