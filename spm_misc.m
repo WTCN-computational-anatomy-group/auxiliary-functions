@@ -10,6 +10,8 @@ function varargout = spm_misc(varargin)
 % FORMAT vx = vxsize(M)
 % FORMAT msk = msk_modality(f,modality)
 % FORMAT browse_subjects(pth,modality)
+% FORMAT mom = mom_John2Bishop(mom)
+% FORMAT mom = mom_Bishop2John(mom)
 %
 % FORMAT help spm_parfor>function
 % Returns the help file of the selected function.
@@ -37,7 +39,11 @@ switch lower(id)
     case 'msk_modality'
         [varargout{1:nargout}] = msk_modality(varargin{:});          
     case 'browse_subjects'
-        [varargout{1:nargout}] = browse_subjects(varargin{:});             
+        [varargout{1:nargout}] = browse_subjects(varargin{:});     
+    case 'mom_john2bishop'
+        [varargout{1:nargout}] = mom_John2Bishop(varargin{:});           
+    case 'mom_bishop2john'
+        [varargout{1:nargout}] = mom_Bishop2John(varargin{:});              
     otherwise
         help spm_parfor
         error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
@@ -266,6 +272,7 @@ elseif strcmp(modality,'CT'),
     msk = isfinite(f) & (f~=min(f(:))) & (f~=0);       
     msk = imfill(msk,'holes'); % Because there might be 0 values voxels within the brain that gets masked out above
 end
+% msk = true(size(f));
 %==========================================================================
 
 %==========================================================================
@@ -297,6 +304,44 @@ for s=1:S
 end 
 
 spm_check_registration(char(fname));
+%==========================================================================
+
+%==========================================================================
+function mom = mom_John2Bishop(mom)
+% Converts JA's representation of moments to Bishops'
+% FORMAT mom = mom_John2Bishop(mom)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+K = numel(mom(1).s0);
+for i=1:numel(mom) 
+    s1 = zeros(size(mom(i).s1));
+    S2 = zeros(size(mom(i).S2));
+    for k=1:K
+        s1(:,k)   = mom(i).s1(:,k)/mom(i).s0(k);
+        S2(:,:,k) = mom(i).S2(:,:,k)/mom(i).s0(k) - (mom(i).s1(:,k)/mom(i).s0(k))*(mom(i).s1(:,k)/mom(i).s0(k))';
+    end
+    mom(i).s1 = s1;
+    mom(i).S2 = S2;
+end
+%==========================================================================
+
+%==========================================================================
+function mom = mom_Bishop2John(mom)
+% Converts Bishops' representation of moments to JA's
+% FORMAT mom = mom_Bishop2John(mom)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+K = numel(mom(1).s0);
+for i=1:numel(mom) 
+    s1 = zeros(size(mom(i).s1));
+    S2 = zeros(size(mom(i).S2));
+    for k=1:K
+        s1(:,k)   = mom(i).s0(k)*mom(i).s1(:,k);
+        S2(:,:,k) = mom(i).s0(k)*mom(i).S2(:,:,k) + mom(i).s0(k)*(s1(:,k) /mom(i).s0(k))*(s1(:,k) /mom(i).s0(k))';
+    end
+    mom(i).s1 = s1;
+    mom(i).S2 = S2;
+end
 %==========================================================================
 
 %==========================================================================
