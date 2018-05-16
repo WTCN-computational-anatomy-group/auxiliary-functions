@@ -53,7 +53,8 @@ S  = min(S0,S);
 for s=1:S % Loop over subjects in population
     
     % Read subject-specific meta data
-    meta_data = spm_jsonread(fullfile(dir_population,json_files(s).name));       
+    pth_json  = fullfile(dir_population,json_files(s).name);
+    meta_data = spm_jsonread(pth_json);       
     
     % Check and init meta_data
     meta_data = check_meta_data(meta_data);   
@@ -67,6 +68,8 @@ for s=1:S % Loop over subjects in population
         dat(dict(name)).name = name;
     end            
         
+    dat(dict(name)).pth_json = pth_json;
+    
     if ~isempty(meta_data.modality)
         % Get imaging data
         %------------------------------------------------------------------
