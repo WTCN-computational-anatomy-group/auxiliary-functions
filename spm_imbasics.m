@@ -199,7 +199,7 @@ if nargin<7, verbose    = false; end
 a0 = ones(1,K)/K;
 m0 = linspace(min(x),max(x),K)/K;
 b0 = 1e-4*ones(1,K);
-n0 = 1e-4*ones(1,K);
+n0 = ones(1,K);
 
 vr = (ones(1,K)*(max(x) - min(x))./(K)).^2;
 W0 = 1./(n0.*vr);
