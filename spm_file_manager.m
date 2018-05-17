@@ -2,6 +2,9 @@ function varargout = spm_file_manager(varargin)
 %__________________________________________________________________________
 % Collection of functions for reading and organising data.
 %
+% FORMAT dat = init_dat(dir_population,S,dat)
+% FORMAT modify_json_field(pth_json,field,val)
+%
 % FORMAT help spm_file_manager>function
 % Returns the help file of the selected function.
 %__________________________________________________________________________
@@ -15,6 +18,8 @@ varargin = varargin(2:end);
 switch lower(id) 
     case 'init_dat'
         [varargout{1:nargout}] = init_dat(varargin{:});             
+    case 'modify_json_field'
+        [varargout{1:nargout}] = modify_json_field(varargin{:});             
     otherwise
         help spm_file_manager
         error('Unknown function %s. Type ''help spm_file_manager'' for help.', id)
@@ -22,9 +27,9 @@ end
 %==========================================================================
 
 %==========================================================================
-function dat = init_dat(dir_population,S,dat)
+function dat = init_dat(dir_population,dat)
 % Reads population and meta data into a dat struct.
-% FORMAT dat = init_dat(dir_population,S,dat)
+% FORMAT dat = init_dat(dir_population,dat)
 %
 % dir_population - Path to a directory containing JSON files. Each JSON
 % file holds subject-specific meta data.
@@ -34,12 +39,11 @@ function dat = init_dat(dir_population,S,dat)
 % existing subjects. [dat=struct]
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-if nargin<2, S    = Inf; end
-if nargin<3, 
+if nargin<2, 
     dat = struct; 
-    S1  = 0;
+    J1  = 0;
 else
-    S1  = numel(dat);
+    J1  = numel(dat);
 end
 
 % Create a dictionary which will map subject names to dat indeces
@@ -47,79 +51,83 @@ dict = containers.Map;
 
 % Get all JSON files in population directory
 json_files = dir(fullfile(dir_population,'*.json'));
+J          = numel(json_files);
 
-S0 = numel(json_files);
-S  = min(S0,S);
-for s=1:S % Loop over subjects in population
+for s=1:J % Loop over JSON files
     
     % Read subject-specific meta data
-    pth_json  = fullfile(dir_population,json_files(s).name);
-    meta_data = spm_jsonread(pth_json);       
+    pth_json = fullfile(dir_population,json_files(s).name);
+    metadata = spm_jsonread(pth_json);       
     
     % Check and init meta_data
-    meta_data = check_meta_data(meta_data);   
+    metadata = check_metadata(metadata);   
     
-    % Get subject name
-    name = meta_data.name;
+    % Get poulation and subject name
+    name       = metadata.name;
+    population = metadata.population;
     
-    if ~dict.isKey(name)
+    % Create dictionary key
+    key = [population '_' name];
+    
+    if ~dict.isKey(key)
         % Subject not in dictionary -> add subject to dictionary
-        dict(name)           = S1 + dict.Count + 1;          
-        dat(dict(name)).name = name;
+        dict(key)                 = J1 + dict.Count + 1;          
+        dat(dict(key)).name       = name;
+        dat(dict(key)).population = population;
     end                    
     
-    if ~isempty(meta_data.modality)
+    if ~isempty(metadata.modality)
         % Get imaging data
         %------------------------------------------------------------------
-        modality    = meta_data.modality;
-        Nii         = nifti(meta_data.pth);
-        channel     = meta_data.channel;
+        modality    = metadata.modality;
+        Nii         = nifti(metadata.pth);
+        channel     = metadata.channel;
 
-        if ~isfield(dat(dict(name)),'modality') || isempty(dat(dict(name)).modality)
+        if ~isfield(dat(dict(key)),'modality') || isempty(dat(dict(key)).modality)
             % No image data exists -> create image data fields
-            dat(dict(name)).modality.name = modality;
+            dat(dict(key)).modality.name = modality;
             if isempty(channel)
                 % Single-channel data
-                dat(dict(name)).modality.nii      = Nii;
-                dat(dict(name)).modality.json.pth = pth_json;
+                dat(dict(key)).modality.nii      = Nii;
+                dat(dict(key)).modality.json.pth = pth_json;
             else
                 % Multi-channel data
-                dat(dict(name)).modality.channel.name      = channel;
-                dat(dict(name)).modality.channel.nii       = Nii;
-                dat(dict(name)).modality.channel.json.pth  = pth_json;
+                dat(dict(key)).modality.channel.name      = channel;
+                dat(dict(key)).modality.channel.nii       = Nii;
+                dat(dict(key)).modality.channel.json.pth  = pth_json;
             end
         else
             % Modality field already exists for subject -> append to appropriate
             % modality and channel
-            M       = numel(dat(dict(name)).modality); % Number of modalities
+            M       = numel(dat(dict(key)).modality); % Number of modalities
             has_mod = false;
             for m=1:M
-                if strcmp(modality,dat(dict(name)).modality(m).name)
+                if strcmp(modality,dat(dict(key)).modality(m).name)
                     % Modality found -> append                               
                     if isempty(channel)
-                        N = numel(dat(dict(name)).modality(m).nii);
-                        dat(dict(name)).modality(m).nii(N + 1)      = Nii;
-                        dat(dict(name)).modality(m).json(N + 1).pth = pth_json;
+                        N = numel(dat(dict(key)).modality(m).nii);
+                        dat(dict(key)).modality(m).nii(N + 1)      = Nii;
+                        dat(dict(key)).modality(m).json(N + 1).pth = pth_json;
                     else
-                        C       = numel(dat(dict(name)).modality(m).channel);
+                        C       = numel(dat(dict(key)).modality(m).channel);
                         has_chn = false;
                         for c=1:C % Loop over channels
-                            if strcmp(channel,dat(dict(name)).modality(m).channel(c).name)
+                            if strcmp(channel,dat(dict(key)).modality(m).channel(c).name)
                                 % Channel found -> append
-                                N = numel(dat(dict(name)).modality(m).channel(c).nii);
-                                dat(dict(name)).modality(m).channel(c).nii(N + 1)      = Nii;
-                                dat(dict(name)).modality(m).channel(c).json(N + 1).pth = pth_json;
-                            end
-
-                            has_chn = true;
-                            break
+                                N = numel(dat(dict(key)).modality(m).channel(c).nii);
+                                dat(dict(key)).modality(m).channel(c).nii(N + 1)      = Nii;
+                                dat(dict(key)).modality(m).channel(c).json(N + 1).pth = pth_json;
+                                
+                                has_chn = true;
+                                break
+                            end                           
                         end
 
                         if ~has_chn
                             % Channel not found -> add channel
-                            dat(dict(name)).modality(m).channel(C + 1).name      = channel;
-                            dat(dict(name)).modality(m).channel(C + 1).nii       = Nii;
-                            dat(dict(name)).modality(m).channel(C + 1).json.pth  = pth_json;
+                            dat(dict(key)).modality(m).channel(C + 1).name      = channel;
+                            dat(dict(key)).modality(m).channel(C + 1).nii       = Nii;
+                            dat(dict(key)).modality(m).channel(C + 1).json.pth  = pth_json;
                         end
                     end
 
@@ -132,13 +140,13 @@ for s=1:S % Loop over subjects in population
                 % Modality not found -> add modality
                 if isempty(channel)
                     % Single-channel data
-                    dat(dict(name)).modality(M + 1).nii      = Nii;
-                    dat(dict(name)).modality(M + 1).json.pth = pth_json;
+                    dat(dict(key)).modality(M + 1).nii      = Nii;
+                    dat(dict(key)).modality(M + 1).json.pth = pth_json;
                 else
                     % Multi-channel data
-                    dat(dict(name)).modality(M + 1).channel.name      = channel;
-                    dat(dict(name)).modality(M + 1).channel.nii       = Nii;
-                    dat(dict(name)).modality(M + 1).channel.json.pth  = pth_json;
+                    dat(dict(key)).modality(M + 1).channel.name      = channel;
+                    dat(dict(key)).modality(M + 1).channel.nii       = Nii;
+                    dat(dict(key)).modality(M + 1).channel.json.pth  = pth_json;
                 end
             end
         end
@@ -146,7 +154,7 @@ for s=1:S % Loop over subjects in population
     
     % Append other meta data fields (if there are any)
     %----------------------------------------------------------------------
-    fn = fieldnames(meta_data);
+    fn = fieldnames(metadata);
     for i=1:numel(fn)
         field_name = fn{i};
         
@@ -158,11 +166,30 @@ for s=1:S % Loop over subjects in population
             continue
         end
         
-        dat(dict(name)).(fn{i}) = meta_data.(field_name);
+        dat(dict(key)).(fn{i}) = metadata.(field_name);
     end            
+    
+    % Make sure fields are ordered alphabetically
+    dat(dict(key)) = orderfields(dat(dict(key)));
 end
 
-fprintf('Loaded %i subjects into dat from %s.\n',S,dir_population);
+fprintf('Loaded %i subjects into dat from %s.\n',dict.Count,dir_population);
+%==========================================================================
+
+%==========================================================================
+function modify_json_field(pth_json,field,val)
+% Reads population and meta data into a dat struct.
+% FORMAT modify_json_field(pth_json,field,val)
+%
+% pth_json - Path to JSON file.
+% field - Field to change.
+% val - Value to change to.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+a         = spm_jsonread(pth_json);
+a.(field) = val;
+a         = orderfields(a);
+spm_jsonwrite(pth_json,a);
 %==========================================================================
 
 %==========================================================================
@@ -170,17 +197,20 @@ fprintf('Loaded %i subjects into dat from %s.\n',S,dir_population);
 %==========================================================================
 
 %==========================================================================
-function meta_data = check_meta_data(meta_data)
-if ~isfield(meta_data,'name')
+function metadata = check_metadata(metadata)
+if ~isfield(metadata,'name')
     error('~isfield(meta_data,''name'')')        
 end
-if ~isfield(meta_data,'modality')
-    meta_data.modality = '';   
+if ~isfield(metadata,'population')
+    error('~isfield(meta_data,''population'')')        
 end
-if ~isfield(meta_data,'channel')
-    meta_data.channel = '';   
+if ~isfield(metadata,'modality')
+    metadata.modality = '';   
 end
-if ~isempty(meta_data.channel) && isempty(meta_data.channel)
+if ~isfield(metadata,'channel')
+    metadata.channel = '';   
+end
+if ~isempty(metadata.channel) && isempty(metadata.channel)
     error('~isempty(meta_data.channel) && isempty(meta_data.channel)')
 end
 %==========================================================================
