@@ -44,7 +44,7 @@ function dat = init_dat(dir_population,dat)
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 if nargin<2, 
     dat = struct; 
-    J1  = 0;Path to JSON file.
+    J1  = 0; % Path to JSON file.
 else
     J1  = numel(dat);
 end
