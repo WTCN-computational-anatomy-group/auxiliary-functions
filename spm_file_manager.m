@@ -4,6 +4,7 @@ function varargout = spm_file_manager(varargin)
 %
 % FORMAT dat = init_dat(dir_population,S,dat)
 % FORMAT modify_json_field(pth_json,field,val)
+% FORMAT modify_pth_in_population(dir_population,field,npth)
 %
 % FORMAT help spm_file_manager>function
 % Returns the help file of the selected function.
@@ -20,6 +21,8 @@ switch lower(id)
         [varargout{1:nargout}] = init_dat(varargin{:});             
     case 'modify_json_field'
         [varargout{1:nargout}] = modify_json_field(varargin{:});             
+    case 'modify_pth_in_population'
+        [varargout{1:nargout}] = modify_pth_in_population(varargin{:});                 
     otherwise
         help spm_file_manager
         error('Unknown function %s. Type ''help spm_file_manager'' for help.', id)
@@ -41,7 +44,7 @@ function dat = init_dat(dir_population,dat)
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 if nargin<2, 
     dat = struct; 
-    J1  = 0;
+    J1  = 0;Path to JSON file.
 else
     J1  = numel(dat);
 end
@@ -190,6 +193,37 @@ a         = spm_jsonread(pth_json);
 a.(field) = val;
 a         = orderfields(a);
 spm_jsonwrite(pth_json,a);
+%==========================================================================
+
+%==========================================================================
+function modify_pth_in_population(dir_population,field,npth)
+% Reads population and meta data into a dat struct.
+% FORMAT modify_pth_in_population(dir_population,field,npth)
+%
+% dir_population - Path to a directory containing JSON files. Each JSON
+% file holds subject-specific meta data.
+% field - Field to change.
+% npth - New path
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+json_files = dir(fullfile(dir_population,'*.json'));
+J          = numel(json_files);
+
+for s=1:J % Loop over JSON files
+    pth_json = fullfile(dir_population,json_files(s).name);
+        
+    a           = spm_jsonread(pth_json);
+    opth        = a.(field);
+    ix1         = opth(1);
+    [~,nam,ext] = fileparts(opth);
+    if ~strcmp(ix1,filesep)
+        ix1 = '';
+    end
+    nval        = fullfile([ix1 npth],[nam ext]);
+    a.(field)   = nval;
+    a           = orderfields(a);
+    spm_jsonwrite(pth_json,a);
+end
 %==========================================================================
 
 %==========================================================================
