@@ -58,7 +58,7 @@ J          = numel(json_files);
 
 % For displaying number of files read
 base10 = floor(log10(J)) + 1;
-s      = sprintf(['spm_file_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read'],0,J);
+s      = sprintf(['spm_file_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
 fprintf(1, ['%-' num2str(2*base10 + 50) 's'], s);
     
 tic;
@@ -67,7 +67,7 @@ for j=1:J % Loop over JSON files
     if ~mod(j,10)
         % Display number of files read
         fprintf(1, repmat('\b',1,2*base10 + 50));
-        s = sprintf(['spm_file_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read'],j,J);
+        s = sprintf(['spm_file_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
         fprintf(1, ['%-' num2str(2*base10 + 50) 's'], s);
     end
     
@@ -191,11 +191,11 @@ end
 
 % Display number of files read
 fprintf(1, repmat('\b',1,2*base10 + 50));
-s = sprintf(['spm_file_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read'],j,J);
+s = sprintf(['spm_file_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
 fprintf(1, ['%-' num2str(2*base10 + 50) 's'], s);
 fprintf('\n');
 
-fprintf('Loaded %i subjects from %s in %0.1f seconds.\n',dict.Count,dir_population,toc);
+fprintf('spm_file_manager(''init_dat'') | Loaded %i subjects from %s in %0.1f seconds.\n',dict.Count,dir_population,toc);
 %==========================================================================
 
 %==========================================================================
