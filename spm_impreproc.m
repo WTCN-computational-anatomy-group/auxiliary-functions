@@ -375,7 +375,7 @@ matlabbatch{1}.spm.spatial.coreg.write.ref             = {V(ref_ix).fname};
 matlabbatch{1}.spm.spatial.coreg.write.roptions.interp = 1;
 matlabbatch{1}.spm.spatial.coreg.write.roptions.wrap   = [0 0 0];
 matlabbatch{1}.spm.spatial.coreg.write.roptions.mask   = 0;
-matlabbatch{1}.spm.spatial.coreg.write.roptions.prefix = 'r';        
+matlabbatch{1}.spm.spatial.coreg.write.roptions.prefix = 'res_';        
 
 % Re-slice
 ixs       = 1:N;
