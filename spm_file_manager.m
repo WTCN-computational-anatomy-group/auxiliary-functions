@@ -93,7 +93,7 @@ for j=1:J % Loop over JSON files
     end                    
     
     if ~isempty(metadata.modality)
-        % Get imaging data
+        % Process imaging data
         %------------------------------------------------------------------
         modality    = metadata.modality;
         Nii         = nifti(metadata.pth);
@@ -165,6 +165,23 @@ for j=1:J % Loop over JSON files
                     dat{dict(key)}.modality{M + 1}.channel{1}.json.pth  = pth_json;
                 end
             end
+        end
+    end
+    
+    if ~isempty(metadata.rater)
+        % Process label data
+        %------------------------------------------------------------------
+        rater = metadata.rater;
+        Nii   = nifti(metadata.pth);
+        
+        if ~isfield(dat{dict(key)},'label')
+            dat{dict(key)}.label{1}.name     = rater;
+            dat{dict(key)}.label{1}.nii      = Nii;
+            dat{dict(key)}.label{1}.json.pth = pth_json;
+        else
+            dat{dict(key)}.label{end + 1}.name     = rater;
+            dat{dict(key)}.label{end + 1}.nii      = Nii;
+            dat{dict(key)}.label{end + 1}.json.pth = pth_json;
         end
     end
     
@@ -262,6 +279,9 @@ if ~isfield(metadata,'modality')
 end
 if ~isfield(metadata,'channel')
     metadata.channel = '';   
+end
+if ~isfield(metadata,'rater')
+    metadata.rater = '';   
 end
 if ~isempty(metadata.channel) && isempty(metadata.channel)
     error('~isempty(meta_data.channel) && isempty(meta_data.channel)')
