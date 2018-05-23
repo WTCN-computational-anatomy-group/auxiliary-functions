@@ -269,6 +269,18 @@ end
 %==========================================================================
 
 %==========================================================================
+function exclude = exclude_fn(fn)
+exclude    = false;
+fn_exclude = {'pth','modality','name','channel','type','tissue','class','rater'};
+for i=1:numel(fn_exclude)
+    if strcmp(fn,fn_exclude{i})
+        exclude = true;
+        break
+    end
+end
+%==========================================================================
+
+%==========================================================================
 function metadata = check_metadata(metadata)
 if ~isfield(metadata,'name')
     error('~isfield(meta_data,''name'')')        
