@@ -179,12 +179,14 @@ for j=1:J % Loop over JSON files
             dat{dict(key)}.label{1}.nii      = Nii;
             dat{dict(key)}.label{1}.json.pth = pth_json;
         else
-            dat{dict(key)}.label{end + 1}.name     = rater;
-            dat{dict(key)}.label{end + 1}.nii      = Nii;
-            dat{dict(key)}.label{end + 1}.json.pth = pth_json;
+            R = numel(dat{dict(key)}.label); % Number of raters
+            
+            dat{dict(key)}.label{R + 1}.name     = rater;
+            dat{dict(key)}.label{R + 1}.nii      = Nii;
+            dat{dict(key)}.label{R + 1}.json.pth = pth_json;
         end
     end
-    
+        
     % Append other meta data fields (if there are any)
     %----------------------------------------------------------------------
     fn = fieldnames(metadata);
