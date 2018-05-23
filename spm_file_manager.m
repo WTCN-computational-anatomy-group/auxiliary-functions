@@ -186,6 +186,50 @@ for j=1:J % Loop over JSON files
             dat{dict(key)}.label{R + 1}.json.pth = pth_json;
         end
     end
+    
+    if ~isempty(metadata.class)
+        % Process segmentations
+        %------------------------------------------------------------------
+        class  = metadata.class;        
+        k      = class(1);
+        K_a    = class(2);        
+        Nii    = nifti(metadata.pth);
+        type   = metadata.type;        
+        tissue = metadata.tissue;        
+        
+        if ~isfield(dat{dict(key)},'segmentation')
+            dat{dict(key)}.segmentation{1}.class = cell(1,K_a);
+            dat{dict(key)}.segmentation{1}.json  = cell(1,K_a);
+            
+            dat{dict(key)}.segmentation{1}.name            = type;            
+            dat{dict(key)}.segmentation{1}.class{k}.nii    = Nii;
+            dat{dict(key)}.segmentation{1}.class{k}.tissue = tissue;
+            dat{dict(key)}.segmentation{1}.json{k}.pth     = pth_json;
+        else
+            T        = numel(dat{dict(key)}.segmentation);
+            has_type = false;
+            for t=1:T % Loop over segmentation type (e.g. 'c','wc')
+                if strcmp(dat{dict(key)}.segmentation{t}.name,type)
+                    dat{dict(key)}.segmentation{t}.class{k}.nii    = Nii;
+                    dat{dict(key)}.segmentation{t}.class{k}.tissue = tissue;
+                    dat{dict(key)}.segmentation{t}.json{k}.pth     = pth_json;
+                    
+                    has_type = true;
+                    break
+                end
+            end
+            
+            if ~has_type
+                dat{dict(key)}.segmentation{T + 1}.class = cell(1,K_a);
+                dat{dict(key)}.segmentation{T + 1}.json  = cell(1,K_a);
+            
+                dat{dict(key)}.segmentation{T + 1}.name            = type;            
+                dat{dict(key)}.segmentation{T + 1}.class{k}.nii    = Nii;
+                dat{dict(key)}.segmentation{T + 1}.class{k}.tissue = tissue;
+                dat{dict(key)}.segmentation{T + 1}.json{k}.pth     = pth_json;
+            end
+        end
+    end
         
     % Append other meta data fields (if there are any)
     %----------------------------------------------------------------------
@@ -193,11 +237,7 @@ for j=1:J % Loop over JSON files
     for i=1:numel(fn)
         field_name = fn{i};
         
-        if strcmp(field_name,'pth')    || ...
-           strcmp(field_name,'modality') || ...
-           strcmp(field_name,'name')     || ...
-           strcmp(field_name,'channel')
-           
+        if exclude_fn(field_name)           
             continue
         end
         
@@ -283,10 +323,10 @@ end
 %==========================================================================
 function metadata = check_metadata(metadata)
 if ~isfield(metadata,'name')
-    error('~isfield(meta_data,''name'')')        
+    error('~isfield(metadata,''name'')')        
 end
 if ~isfield(metadata,'population')
-    error('~isfield(meta_data,''population'')')        
+    error('~isfield(metadata,''population'')')        
 end
 if ~isfield(metadata,'modality')
     metadata.modality = '';   
@@ -297,7 +337,17 @@ end
 if ~isfield(metadata,'rater')
     metadata.rater = '';   
 end
+if ~isfield(metadata,'class')
+    metadata.class = '';   
+else
+    if ~isfield(metadata,'type')
+        error('~isfield(metadata,''type'')')        
+    end
+    if ~isfield(metadata,'tissue')
+        metadata.tissue = '';       
+    end
+end
 if ~isempty(metadata.channel) && isempty(metadata.channel)
-    error('~isempty(meta_data.channel) && isempty(meta_data.channel)')
+    error('~isempty(metadata.channel) && isempty(metadata.channel)')
 end
 %==========================================================================
