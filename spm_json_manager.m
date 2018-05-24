@@ -1,4 +1,4 @@
-function varargout = spm_file_manager(varargin)
+function varargout = spm_json_manager(varargin)
 %__________________________________________________________________________
 % Collection of functions for reading and organising data.
 %
@@ -6,13 +6,13 @@ function varargout = spm_file_manager(varargin)
 % FORMAT modify_json_field(pth_json,field,val)
 % FORMAT modify_pth_in_population(dir_population,field,npth)
 %
-% FORMAT help spm_file_manager>function
+% FORMAT help spm_json_manager>function
 % Returns the help file of the selected function.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 if nargin == 0
-    help spm_file_manager
-    error('Not enough argument. Type ''help spm_file_manager'' for help.');
+    help spm_json_manager
+    error('Not enough argument. Type ''help spm_json_manager'' for help.');
 end
 id = varargin{1};
 varargin = varargin(2:end);
@@ -24,8 +24,8 @@ switch lower(id)
     case 'modify_pth_in_population'
         [varargout{1:nargout}] = modify_pth_in_population(varargin{:});                 
     otherwise
-        help spm_file_manager
-        error('Unknown function %s. Type ''help spm_file_manager'' for help.', id)
+        help spm_json_manager
+        error('Unknown function %s. Type ''help spm_json_manager'' for help.', id)
 end
 %==========================================================================
 
