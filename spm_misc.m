@@ -269,9 +269,9 @@ function msk = msk_modality(f,modality)
 if strcmp(modality,'MRI'),    
     msk = isfinite(f) & (f~=0);
 elseif strcmp(modality,'CT'), 
-    msk = isfinite(f) & (f~=min(f(:))) & (f~=0);       
-    msk = imfill(msk,'holes'); % Because there might be 0 values voxels within the brain that gets masked out above
-    msk = msk & isfinite(f);
+    msk = isfinite(f) & (f~=0) & (f>=-1000) & (f<=3000);       
+%     msk = imfill(msk,'holes'); % Because there might be 0 values voxels within the brain that gets masked out above
+%     msk = msk & isfinite(f);
 end
 % msk = true(size(f));
 %==========================================================================
