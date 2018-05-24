@@ -78,7 +78,7 @@ function [dat,dict] = init_dat(input,dat)
 % + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
 % 'rater':      Rater name (for manual segmentation)
 % + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
-% 'tissue':     Tissue name (for automated segmentations) ('GM'/'WM'/...)
+% 'tissue':     Tissue name (for automated segmentation_map) ('GM'/'WM'/...)
 % + 'type':     Segmentation type ('c'/'wc'/'rc'/...)
 % + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
 %
@@ -95,16 +95,16 @@ function [dat,dict] = init_dat(input,dat)
 % However, in reality, fields only appear if the corresponding data was
 % found in the JSON files.
 %
-% dat{s}.modalities                         [map modality names to indices]
+% dat{s}.modality_map                         [map modality names to indices]
 % dat{s}.modality{m}.name                                  [modality names]
 % dat{s}.modality{m}.nii                      [nifti - single channel case]
-% dat{s}.modality{m}.channels                [map channel names to indices]
+% dat{s}.modality{m}.channel_map                [map channel names to indices]
 % dat{s}.modality{m}.channel{c}.name                        [channel names]
 % dat{s}.modality{m}.channel{c}.nii         [nifti - multiple channel case]
-% dat{s}.raters                                [map rater names to indices]
+% dat{s}.rater_map                                [map rater names to indices]
 % dat{s}.label{r}.name                                        [rater names]
 % dat{s}.label{r}.nii                                               [nifti]
-% dat{s}.segmentations                  [map segmentation types to indices]
+% dat{s}.segmentation_map                  [map segmentation types to indices]
 % dat{s}.segmentation{t}.name                           [segmentation type]
 % dat{s}.segmentation{t}.class{k}.name                        [tissue name]
 % dat{s}.segmentation{t}.class{k}.nii                               [nifti]
@@ -196,6 +196,7 @@ for j=1:J
             
             modality = metadata.modality;
             channel  = metadata.channel;
+            hospital = metadata.hospital;
             
             % -------------------------------------------------------------
             % Get path to image and read
@@ -208,17 +209,20 @@ for j=1:J
             % Create modality
             if ~isfield(dat{s},'modality')
                 % No image data exists -> create image data fields
-                dat{s}.modalities           = containers.Map;
+                dat{s}.modality_map           = containers.Map;
                 dat{s}.modality             = {};
             end
-            if ~dat{s}.modalities.isKey(modality)
+            if ~dat{s}.modality_map.isKey(modality)
                 m                           = numel(dat{s}.modality) + 1;
                 dat{s}.modality{m}.name     = modality;
-                dat{s}.modalities(modality) = m;
+                dat{s}.modality_map(modality) = m;
+                if ~isempty(hospital)
+                    dat{s}.modality{m}.hospital = hospital;
+                end
             end
             % -------------------------------------------------------------
             % Add modality (single channel)  
-            m = dat{s}.modalities(modality);
+            m = dat{s}.modality_map(modality);
             if isempty(channel)
                 if isfield(dat{s}.modality{m}, 'nii')
                     N = numel(dat{s}.modality{m}.nii);
@@ -233,16 +237,16 @@ for j=1:J
                 % Create channel
                 if ~isfield(dat{s}.modality{m}, 'channel')
                     dat{s}.modality{m}.channel  = {};
-                    dat{s}.modality{m}.channels = containers.Map;
+                    dat{s}.modality{m}.channel_map = containers.Map;
                 end
-                if ~dat{s}.modality{m}.channels.isKey(channel)
+                if ~dat{s}.modality{m}.channel_map.isKey(channel)
                     c                                    = numel(dat{s}.modality{m}.channel) + 1;
                     dat{s}.modality{m}.channel{c}.name   = channel;
-                    dat{s}.modality{m}.channels(channel) = c;
+                    dat{s}.modality{m}.channel_map(channel) = c;
                 end
                 % ---------------------------------------------------------
                 % Add channel
-                c = dat{s}.modality{m}.channels(channel);
+                c = dat{s}.modality{m}.channel_map(channel);
                 if isfield(dat{s}.modality{m}.channel{c}, 'nii')
                     N = numel(dat{s}.modality{m}.channel{c}.nii);
                 else
@@ -260,7 +264,7 @@ for j=1:J
         if ~isempty(metadata.rater)
             
             rater     = metadata.rater;
-            protocole = metadata.protocole;
+            protocol = metadata.protocol;
             
             % -------------------------------------------------------------
             % Get path to image and read
@@ -273,17 +277,17 @@ for j=1:J
             % Create label
             if ~isfield(dat{s},'label')
                 % No image data exists -> create image data fields
-                dat{s}.raters   = containers.Map;
+                dat{s}.rater_map   = containers.Map;
                 dat{s}.label    = {};
             end
-            if ~dat{s}.raters.isKey(rater)
-                r                    = numel(dat{s}.label) + 1;
-                dat{s}.label{r}.name = rater;
-                dat{s}.raters(rater) = r;
+            if ~dat{s}.rater_map.isKey(rater)
+                r                       = numel(dat{s}.label) + 1;
+                dat{s}.label{r}.name    = rater;
+                dat{s}.rater_map(rater) = r;
             end
             % -------------------------------------------------------------
             % Add label
-            r = dat{s}.raters(rater);
+            r = dat{s}.rater_map(rater);
             if isfield(dat{s}.label{r}, 'nii')
                 N = numel(dat{s}.label{r}.nii);
             else
@@ -292,7 +296,7 @@ for j=1:J
             end
             dat{s}.label{r}.nii(N+1)      = Nii;
             dat{s}.label{r}.json(N+1).pth = pth_json;
-            dat{s}.label{r}.protocole     = protocole;
+            dat{s}.label{r}.protocol     = protocol;
         end
 
         
@@ -315,25 +319,25 @@ for j=1:J
             % Create segmentation
             if ~isfield(dat{s},'segmentation')
                 % No image data exists -> create image data fields
-                dat{s}.segmentations = containers.Map;
+                dat{s}.segmentation_map = containers.Map;
                 dat{s}.segmentation  = {};
             end
-            if ~dat{s}.segmentations.isKey(type)
-                t                           = numel(dat{s}.segmentations) + 1;
-                dat{s}.segmentation{t}.name = type;
-                dat{s}.segmentation(type)   = t;
+            if ~dat{s}.segmentation_map.isKey(type)
+                t                             = numel(dat{s}.segmentation) + 1;
+                dat{s}.segmentation{t}.name   = type;
+                dat{s}.segmentation_map(type) = t;
             end
             % -------------------------------------------------------------
             % Create class
-            t = dat{s}.segmentation(type);
+            t = dat{s}.segmentation_map(type);
             if ~isfield(dat{s}.segmentation{t}, 'class')
                 dat{s}.segmentation{t}.class   = {};
-                dat{s}.segmentation{t}.classes = containers.Map;
+                dat{s}.segmentation{t}.class_map = containers.Map;
             end
-            if ~dat{s}.segmentation{t}.classes.isKey(tissue)
+            if ~dat{s}.segmentation{t}.class_map.isKey(tissue)
                 c                                      = numel(dat{s}.segmentation{t}.class) + 1;
                 dat{s}.segmentation{t}.class{c}.name   = tissue;
-                dat{s}.segmentation{t}.classes(tissue) = c;
+                dat{s}.segmentation{t}.class_map(tissue) = c;
             end
             % -------------------------------------------------------------
             % Add class
@@ -352,7 +356,7 @@ for j=1:J
         % Append other meta data fields (if there are any)
         % -----------------------------------------------------------------
         fn = fieldnames(metadata);
-        protected_fields = {'pth','modality','name','rater','channel','tissue'};
+        protected_fields = {'pth','modality','name','rater','channel','tissue','protocol','hospital','type'};
         for k=1:numel(fn)
             field_name = fn{k};
 
@@ -379,12 +383,16 @@ fprintf('\n');
 reswhos = whos('dat');
 siz = reswhos.bytes;
 unit = 'B';
-if siz > 1e6
-    siz = ceil(siz/1e6);
+if siz > 1024
+    siz = ceil(siz/1024);
+    unit = 'KB';
+end
+if siz > 1024
+    siz = ceil(siz/1024);
     unit = 'MB';
 end
-if siz > 1e6
-    siz = ceil(siz/1e6);
+if siz > 1024
+    siz = ceil(siz/1024);
     unit = 'GB';
 end
 
@@ -408,7 +416,7 @@ function model = init_model(input, varargin)
 %         The input can also be a list (= cell) of paths.
 %
 % It is also possible to provide an already initialised 'dat' structure
-% from which some information can be extracted (modalities, hospitals, ...)
+% from which some information can be extracted (modality_map, hospital_map, ...)
 %
 % FORMAT model = spm_file_manager('init_model', ..., dat)
 % dat - An already initialised dat structure from which we can get info.
@@ -436,10 +444,10 @@ elseif numel(varargin) > 1
 end
 
 % -------------------------------------------------------------------------
-% Dictionary for modalities / hospitals
+% Dictionary for modality_map / hospital_map
 % -------------------------------------------------------------------------
-if ~isfield(model, 'modalities'), model.modalities = containers.Map; end
-if ~isfield(model, 'hospitals'),  model.hospitals  = containers.Map; end
+if ~isfield(model, 'modality_map'), model.modality_map = containers.Map; end
+if ~isfield(model, 'hospital_map'),  model.hospital_map  = containers.Map; end
 
 % -------------------------------------------------------------------------
 % Parse JSON files
@@ -530,25 +538,25 @@ for j=1:J
                 if ~isfield(metadata, 'gmm')
                     error('GMM json files must have a ''gmm'' field.');
                 end
-                if ~isfield(metadata, 'channels')
-                    error('GMM json files must have a ''channels'' field.');
+                if ~isfield(metadata, 'channel_map')
+                    error('GMM json files must have a ''channel_map'' field.');
                 end
                 if ~isfield(model, 'modality'), model.modality = {}; end
-                if ~model.modalities.isKey(metadata.modality)
+                if ~model.modality_map.isKey(metadata.modality)
                     model.modality{end+1}.name          = metadata.modality;
-                    model.modalities(metadata.modality) = numel(model.modality);
-                    model.modality{end}.channels        = metadata.channels;
+                    model.modality_map(metadata.modality) = numel(model.modality);
+                    model.modality{end}.channel_map        = metadata.channel_map;
                 end
-                m = model.modalities(metadata.modality);
+                m = model.modality_map(metadata.modality);
                 if isfield(metadata, 'hospital')
                     if ~isfield(model.modality{m}, 'hospital')
                         model.modality{m}.hospital = {};
                     end
-                    if ~model.hospitals.isKey(metadata.hospital)
+                    if ~model.hospital_map.isKey(metadata.hospital)
                         model.modality{m}.hospital{end+1}.name = metadata.hospital;
-                        model.hospitals(metadata.hospital)     = numel(model.modality{m}.hospital);
+                        model.hospital_map(metadata.hospital)     = numel(model.modality{m}.hospital);
                     end
-                    h = model.hospitals(metadata.hospital);
+                    h = model.hospital_map(metadata.hospital);
                     model.modality{m}.hospital{h}.gmm = metadata.gmm;
                 else
                     model.modality{m}.gmm = metadata.gmm;
@@ -561,10 +569,10 @@ end
 % Extract info from dat structure
 % -------------------------------------------------------------------------
 
-% By looking to the dat structure, we can detect how many modalities (and
-% thus GMM) exist, as well as how many channels per GMM. It is important to
+% By looking to the dat structure, we can detect how many modality_map (and
+% thus GMM) exist, as well as how many channel_map per GMM. It is important to
 % look at the entire dat structure, because some individuals may have
-% missing modalities or missing channels.
+% missing modality_map or missing channel_map.
 % A dictionary is used to map channel names with indices in the GMM.
 
 model.dim = 0;
@@ -575,19 +583,19 @@ if ~isempty(dat)
                 if ~isfield(model, 'modality'), model.modality = {}; end
                 % Create modality to store future GMM
                 name = dat{s}.modality{m}.name;
-                if ~model.modalities.isKey(name)
+                if ~model.modality_map.isKey(name)
                     model.modality{end+1}.name   = name;
-                    model.modalities(name)       = numel(model.modality);
-                    model.modality{end}.channels = containers.Map;
+                    model.modality_map(name)       = numel(model.modality);
+                    model.modality{end}.channel_map = containers.Map;
                     model.modality{end}.gmm      =  {};
                 end
-                mm = model.modalities(name);
+                mm = model.modality_map(name);
                 % Register channel names to map with channel number in GMM.
                 if isfield(dat{s}.modality{m}, 'channel')
                     for c=1:numel(dat{s}.modality{m}.channel)
                         name = dat{s}.modality{m}.channel{c}.name;
-                        if ~model.modality{mm}.channels.isKey(name)
-                            model.modality{mm}.channels(name) = model.modality{mm}.channels.Count + 1;
+                        if ~model.modality{mm}.channel_map.isKey(name)
+                            model.modality{mm}.channel_map(name) = model.modality{mm}.channel_map.Count + 1;
                         end
                         dim = 3 - (size(dat{s}.modality{m}.channel{c}.nii, 3) == 1);
                         if model.dim && model.dim ~= dim
@@ -597,7 +605,7 @@ if ~isempty(dat)
                         end
                     end
                 else
-                    model.modality{mm}.channels(name) = 1;
+                    model.modality{mm}.channel_map(name) = 1;
                     dim = 3 - (size(dat{s}.modality{m}.nii, 3) == 1);
                     if model.dim && model.dim ~= dim
                         error('Input data with different dimensions (2D/3D)');
@@ -609,20 +617,20 @@ if ~isempty(dat)
         end
         if isfield(dat{s}, 'label')
             for r=1:numel(dat{s}.label)
-                if ~isfield(model, 'raters'),     model.raters     = containers.Map; end
-                if ~isfield(model, 'protocoles'), model.protocoles = containers.Map; end
+                if ~isfield(model, 'rater_map'),     model.rater_map     = containers.Map; end
+                if ~isfield(model, 'protocol_map'), model.protocol_map = containers.Map; end
                 if ~isfield(model, 'rater'),      model.rater      = {}; end
-                if ~isfield(model, 'protocole'),  model.protocole  = {}; end
+                if ~isfield(model, 'protocol'),  model.protocol  = {}; end
                 % Create rater (to store ???)
                 name      = dat{s}.label{r}.name;
-                protocole = dat{s}.label{r}.protocole;
-                if ~model.raters.isKey(name)
+                protocol = dat{s}.label{r}.protocol;
+                if ~model.rater_map.isKey(name)
                     model.rater{end+1}.name = name;
-                    model.raters(name)      = numel(model.rater);
+                    model.rater_map(name)      = numel(model.rater);
                 end
-                if ~model.protocoles.isKey(protocole)
-                    model.protocole{end+1}.name = protocole;
-                    model.protocoles(protocole) = numel(model.protocole);
+                if ~model.protocol_map.isKey(protocol)
+                    model.protocol{end+1}.name = protocol;
+                    model.protocol_map(protocol) = numel(model.protocol);
                 end
             end
         end
@@ -768,10 +776,12 @@ if ~is_absolute(pop_dir)
     pop_dir = fullfile(pwd, pop_dir);
 end
 if isdir(pop_dir)
-    files = dir(fullfile(pop_dir, pattern));
-    dirs  = dir(pop_dir);
-    is_dir = [dirs.isdir];
-    dirs = dirs(is_dir);
+    files           = dir(fullfile(pop_dir, pattern));
+    [files.folder]  = deal(pop_dir);
+    dirs            = dir(pop_dir);
+    [dirs.folder]   = deal(pop_dir);
+    is_dir          = [dirs.isdir];
+    dirs            = dirs(is_dir);
     for i=1:numel(dirs)
         if ~any(strcmpi(dirs(i).name, {'.','..'}))
             files = [files ; rdir(fullfile(dirs(i).folder, dirs(i).name), pattern)];
@@ -905,13 +915,18 @@ end
 if ~isfield(metadata,'rater')
     metadata.rater = '';   
 end
-if ~isfield(metadata,'protocole')
-    metadata.protocole = '';   
+if ~isfield(metadata,'protocol')
+    metadata.protocol = 'unknown';   
+end
+if ~isfield(metadata,'hospital')
+    metadata.hospital = '';   
 end
 if ~isfield(metadata,'tissue')
     metadata.tissue = '';   
 end
 if ~isfield(metadata,'pth')
     metadata.pth = '';
+else
+    metadata.pth = strtrim(metadata.pth);
 end
 %==========================================================================
