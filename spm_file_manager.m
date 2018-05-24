@@ -2,8 +2,8 @@ function varargout = spm_file_manager(varargin)
 %__________________________________________________________________________
 % Collection of functions for reading and organising data.
 %
-% FORMAT dat   = spm_file_manager('init_dat',dir_population,dat)
-% FORMAT model = spm_file_manager('init_model',input,dat)
+% FORMAT [dat,dict] = spm_file_manager('init_dat',dir_population,dat)
+% FORMAT model      = spm_file_manager('init_model',input,dat)
 % FORMAT spm_file_manager('modify_json_field',pth_json,field,val)
 % FORMAT spm_file_manager('modify_pth_in_population',dir_population,field,npth)
 % FORMAT spm_file_manager('make_pth_relative',input)
@@ -37,19 +37,26 @@ end
 
 
 %==========================================================================
-function dat = init_dat(input,dat)
+function [dat,dict] = init_dat(input,dat)
 %__________________________________________________________________________
 % Initialise a dat object from one or several JSON files.
 % These JSON files can either be explicitely provided, or searched for in a
-% directory.
+% directory:
 %
-% FORMAT dat = spm_file_manager('init_dat',input)
+% FORMAT [dat,dict] = spm_file_manager('init_dat',input)
+%
 % input - Path to a JSON file or ot a directory with all the JSON files.
 %         The input can also be a list (= cell) of paths.
 %
-% It is also possible to addup to an existing dat object.
+% dat   - A hierarchical object (cell of structs) representing all input
+%         files and metadata
+% dict  - A dictionary mapping subject IDs to indices in dat.
 %
-% FORMAT dat = spm_file_manager('init_dat', ..., dat)
+%
+% It is also possible to addup to an existing dat object:
+%
+% FORMAT [dat,dict] = spm_file_manager('init_dat', ..., dat)
+%
 % dat - An already initialised model structure.
 %--------------------------------------------------------------------------
 % JSON SYNTAX
@@ -71,9 +78,15 @@ function dat = init_dat(input,dat)
 % + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
 % 'rater':      Rater name (for manual segmentation)
 % + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
+% 'tissue':     Tissue name (for automated segmentations) ('GM'/'WM'/...)
+% + 'type':     Segmentation type ('c'/'wc'/'rc'/...)
+% + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
 %
 % Any other field name can be used to store additional metadata (age,
 % weight, ...). They will be stored at the root of each subject.
+%
+% Be aware that all keys (name, population, modality, channel, rater, ...)
+% are case sensitive! Consequently, 'T1' is not the same as 't1'.
 %--------------------------------------------------------------------------
 % OUTPUT OBJECT
 % -------------
@@ -82,16 +95,19 @@ function dat = init_dat(input,dat)
 % However, in reality, fields only appear if the corresponding data was
 % found in the JSON files.
 %
-% dat.modalities                            [map modality names to indices]
-% dat.modality{m}.name                                     [modality names]
-% dat.modality{m}.nii                         [nifti - single channel case]
-% dat.modality{m}.channels                   [map channel names to indices]
-% dat.modality{m}.channel{c}.name                           [channel names]
-% dat.modality{m}.channel{c}.nii            [nifti - multiple channel case]
-% dat.raters                                   [map rater names to indices]
-% dat.label{r}.name                                           [rater names]
-% dat.label{r}.nii                                                  [nifti]
-%
+% dat{s}.modalities                         [map modality names to indices]
+% dat{s}.modality{m}.name                                  [modality names]
+% dat{s}.modality{m}.nii                      [nifti - single channel case]
+% dat{s}.modality{m}.channels                [map channel names to indices]
+% dat{s}.modality{m}.channel{c}.name                        [channel names]
+% dat{s}.modality{m}.channel{c}.nii         [nifti - multiple channel case]
+% dat{s}.raters                                [map rater names to indices]
+% dat{s}.label{r}.name                                        [rater names]
+% dat{s}.label{r}.nii                                               [nifti]
+% dat{s}.segmentations                  [map segmentation types to indices]
+% dat{s}.segmentation{t}.name                           [segmentation type]
+% dat{s}.segmentation{t}.class{k}.name                        [tissue name]
+% dat{s}.segmentation{t}.class{k}.nii                               [nifti]
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -243,7 +259,8 @@ for j=1:J
         % -----------------------------------------------------------------
         if ~isempty(metadata.rater)
             
-            rater = metadata.rater;
+            rater     = metadata.rater;
+            protocole = metadata.protocole;
             
             % -------------------------------------------------------------
             % Get path to image and read
@@ -275,6 +292,7 @@ for j=1:J
             end
             dat{s}.label{r}.nii(N+1)      = Nii;
             dat{s}.label{r}.json(N+1).pth = pth_json;
+            dat{s}.label{r}.protocole     = protocole;
         end
 
         
@@ -358,10 +376,22 @@ str = sprintf(['Initialise dat | %' num2str(base10) 'd of %' num2str(base10) 'd 
 fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
 fprintf('\n');
 
+reswhos = whos('dat');
+siz = reswhos.bytes;
+unit = 'B';
+if siz > 1e6
+    siz = ceil(siz/1e6);
+    unit = 'MB';
+end
+if siz > 1e6
+    siz = ceil(siz/1e6);
+    unit = 'GB';
+end
+
 if numel(input) == 1
-    fprintf('Initialise dat | Loaded %i subjects from %s in %0.1f seconds.\n',dict.Count - pre_count,input{1},toc);
+    fprintf('Initialise dat | Loaded %i subjects from %s in %0.1f seconds (%d%s).\n',dict.Count - pre_count,input{1},toc,siz,unit);
 else
-    fprintf('Initialise dat | Loaded %i subjects in %0.1f seconds.\n',dict.Count - pre_count,toc);
+    fprintf('Initialise dat | Loaded %i subjects in %0.1f seconds (%d%s).\n',dict.Count - pre_count,toc,siz,unit);
 end
 %==========================================================================
 
@@ -537,6 +567,7 @@ end
 % missing modalities or missing channels.
 % A dictionary is used to map channel names with indices in the GMM.
 
+model.dim = 0;
 if ~isempty(dat)
     for s=1:numel(dat)
         if isfield(dat{s}, 'modality')
@@ -558,12 +589,43 @@ if ~isempty(dat)
                         if ~model.modality{mm}.channels.isKey(name)
                             model.modality{mm}.channels(name) = model.modality{mm}.channels.Count + 1;
                         end
+                        dim = 3 - (size(dat{s}.modality{m}.channel{c}.nii, 3) == 1);
+                        if model.dim && model.dim ~= dim
+                            error('Input data with different dimensions (2D/3D)');
+                        elseif ~model.dim
+                            model.dim = dim;
+                        end
                     end
                 else
                     model.modality{mm}.channels(name) = 1;
+                    dim = 3 - (size(dat{s}.modality{m}.nii, 3) == 1);
+                    if model.dim && model.dim ~= dim
+                        error('Input data with different dimensions (2D/3D)');
+                    elseif ~model.dim
+                        model.dim = dim;
+                    end
                 end
             end
-        end 
+        end
+        if isfield(dat{s}, 'label')
+            for r=1:numel(dat{s}.label)
+                if ~isfield(model, 'raters'),     model.raters     = containers.Map; end
+                if ~isfield(model, 'protocoles'), model.protocoles = containers.Map; end
+                if ~isfield(model, 'rater'),      model.rater      = {}; end
+                if ~isfield(model, 'protocole'),  model.protocole  = {}; end
+                % Create rater (to store ???)
+                name      = dat{s}.label{r}.name;
+                protocole = dat{s}.label{r}.protocole;
+                if ~model.raters.isKey(name)
+                    model.rater{end+1}.name = name;
+                    model.raters(name)      = numel(model.rater);
+                end
+                if ~model.protocoles.isKey(protocole)
+                    model.protocole{end+1}.name = protocole;
+                    model.protocoles(protocole) = numel(model.protocole);
+                end
+            end
+        end
     end
 end
 
@@ -842,6 +904,9 @@ if ~isfield(metadata,'channel')
 end
 if ~isfield(metadata,'rater')
     metadata.rater = '';   
+end
+if ~isfield(metadata,'protocole')
+    metadata.protocole = '';   
 end
 if ~isfield(metadata,'tissue')
     metadata.tissue = '';   
