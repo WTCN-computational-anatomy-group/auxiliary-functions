@@ -266,7 +266,7 @@ function msk = msk_modality(f,modality)
 % FORMAT msk = msk_modality(f,modality)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-if strcmp(modality,'MRI'),    
+if strcmpi(modality,'mri'),    
     msk = isfinite(f) & (f~=0);
 elseif strcmp(modality,'CT'), 
     msk = isfinite(f) & (f~=0) & (f>=-1000) & (f<=3000);       

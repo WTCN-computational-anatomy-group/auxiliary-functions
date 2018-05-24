@@ -2,9 +2,11 @@ function varargout = spm_json_manager(varargin)
 %__________________________________________________________________________
 % Collection of functions for reading and organising data.
 %
-% FORMAT dat = init_dat(dir_population,S,dat)
-% FORMAT modify_json_field(pth_json,field,val)
-% FORMAT modify_pth_in_population(dir_population,field,npth)
+% FORMAT dat   = spm_file_manager('init_dat',dir_population,dat)
+% FORMAT model = spm_file_manager('init_model',input,dat)
+% FORMAT spm_file_manager('modify_json_field',pth_json,field,val)
+% FORMAT spm_file_manager('modify_pth_in_population',dir_population,field,npth)
+% FORMAT spm_file_manager('make_pth_relative',input)
 %
 % FORMAT help spm_json_manager>function
 % Returns the help file of the selected function.
@@ -18,253 +20,565 @@ id = varargin{1};
 varargin = varargin(2:end);
 switch lower(id) 
     case 'init_dat'
-        [varargout{1:nargout}] = init_dat(varargin{:});             
+        [varargout{1:nargout}] = init_dat(varargin{:});   
+    case 'init_model'
+        [varargout{1:nargout}] = init_model(varargin{:});           
     case 'modify_json_field'
         [varargout{1:nargout}] = modify_json_field(varargin{:});             
     case 'modify_pth_in_population'
-        [varargout{1:nargout}] = modify_pth_in_population(varargin{:});                 
+        [varargout{1:nargout}] = modify_pth_in_population(varargin{:});    
+    case 'make_pth_relative'
+        [varargout{1:nargout}] = make_pth_relative(varargin{:});              
     otherwise
         help spm_json_manager
         error('Unknown function %s. Type ''help spm_json_manager'' for help.', id)
 end
 %==========================================================================
 
+
 %==========================================================================
-function dat = init_dat(dir_population,dat)
-% Reads population and meta data into a dat struct.
-% FORMAT dat = init_dat(dir_population,dat)
-%
-% dir_population - Path to a directory containing JSON files. Each JSON
-% file holds subject-specific meta data.
-% S - Number of subjects to read. [S=Inf]
-% dat - A cell-array that contains subject-specific data. Give as input to append 
-% already exisiting dat object with new subjects or new data for already 
-% existing subjects. [dat={}]
+function dat = init_dat(input,dat)
 %__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-if nargin<2, 
-    dat = {}; 
-    J1  = 0; % Path to JSON file.
-else
-    J1  = numel(dat);
+% Initialise a dat object from one or several JSON files.
+% These JSON files can either be explicitely provided, or searched for in a
+% directory.
+%
+% FORMAT dat = spm_file_manager('init_dat',input)
+% input - Path to a JSON file or ot a directory with all the JSON files.
+%         The input can also be a list (= cell) of paths.
+%
+% It is also possible to addup to an existing dat object.
+%
+% FORMAT dat = spm_file_manager('init_dat', ..., dat)
+% dat - An already initialised model structure.
+%--------------------------------------------------------------------------
+% JSON SYNTAX
+% -----------
+%
+% JSON files should contain either a dictionary or a list of dictionaries.
+% Each dictionary should follow the following syntax:
+%
+% mandatory
+% ---------
+% 'name':       Subject name
+% 
+% optional
+% --------
+% 'population': Populatipn name ('Healty'/'Lesion'/...). 
+%               If provided, the unique subject id is <population>_<name>.
+% 'modality':   Modality name (for imaging modality) ('CT'/'MRI'/...)
+% + 'channel':  Channel name ('T1'/'T2'/...)
+% + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
+% 'rater':      Rater name (for manual segmentation)
+% + 'pth':      Path to image file (absolute or relative w.r.t. JSON file)
+%
+% Any other field name can be used to store additional metadata (age,
+% weight, ...). They will be stored at the root of each subject.
+%--------------------------------------------------------------------------
+% OUTPUT OBJECT
+% -------------
+%
+% The output object has the following form. Here, all fields are shown.
+% However, in reality, fields only appear if the corresponding data was
+% found in the JSON files.
+%
+% dat.modalities                            [map modality names to indices]
+% dat.modality{m}.name                                     [modality names]
+% dat.modality{m}.nii                         [nifti - single channel case]
+% dat.modality{m}.channels                   [map channel names to indices]
+% dat.modality{m}.channel{c}.name                           [channel names]
+% dat.modality{m}.channel{c}.nii            [nifti - multiple channel case]
+% dat.raters                                   [map rater names to indices]
+% dat.label{r}.name                                           [rater names]
+% dat.label{r}.nii                                                  [nifti]
+%
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+
+if nargin<2
+    dat = {};
 end
 
-% Create a dictionary which will map subject names to dat indeces
+% -------------------------------------------------------------------------
+% Create a dictionary which will map subject names to dat indices
 dict = containers.Map;
-
-% Get all JSON files in population directory
-json_files = dir(fullfile(dir_population,'*.json'));
-J          = numel(json_files);
-
-% For displaying number of files read
-base10 = floor(log10(J)) + 1;
-s      = sprintf(['spm_json_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
-fprintf(1, ['%-' num2str(2*base10 + 50) 's'], s);
-    
-tic;
-for j=1:J % Loop over JSON files
-    
-    if ~mod(j,10)
-        % Display number of files read
-        fprintf(1, repmat('\b',1,2*base10 + 50));
-        s = sprintf(['spm_json_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
-        fprintf(1, ['%-' num2str(2*base10 + 50) 's'], s);
+if ~isempty(dat)
+    for s=1:numel(dat)
+        dict(dat{s}.name) = s;
     end
-    
-    % Read subject-specific meta data
-    pth_json = fullfile(dir_population,json_files(j).name);
-    metadata = spm_jsonread(pth_json);       
-    
-    % Check and init meta_data
-    metadata = check_metadata(metadata);   
-    
-    % Get poulation and subject name
-    name       = metadata.name;
-    population = metadata.population;
-    
-    % Create dictionary key
-    key = [population '_' name];
-    
-    if ~dict.isKey(key)
-        % Subject not in dictionary -> add subject to dictionary
-        dict(key)                 = J1 + dict.Count + 1;          
-        dat{dict(key)}.name       = name;
-        dat{dict(key)}.population = population;
-    end                    
-    
-    if ~isempty(metadata.modality)
-        % Process imaging data
-        %------------------------------------------------------------------
-        modality    = metadata.modality;
-        Nii         = nifti(metadata.pth);
-        channel     = metadata.channel;
-
-        if ~isfield(dat{dict(key)},'modality') || isempty(dat{dict(key)}.modality)
-            % No image data exists -> create image data fields
-            dat{dict(key)}.modality{1}.name = modality;
-            if isempty(channel)
-                % Single-channel data
-                dat{dict(key)}.modality{1}.nii      = Nii;
-                dat{dict(key)}.modality{1}.json.pth = pth_json;
-            else
-                % Multi-channel data
-                dat{dict(key)}.modality{1}.channel{1}.name      = channel;
-                dat{dict(key)}.modality{1}.channel{1}.nii       = Nii;
-                dat{dict(key)}.modality{1}.channel{1}.json.pth  = pth_json;
-            end
-        else
-            % Modality field already exists for subject -> append to appropriate
-            % modality and channel
-            M       = numel(dat{dict(key)}.modality); % Number of modalities
-            has_mod = false;
-            for m=1:M
-                if strcmp(modality,dat{dict(key)}.modality{m}.name)
-                    % Modality found -> append                               
-                    if isempty(channel)
-                        N = numel(dat{dict(key)}.modality{m}.nii);
-                        dat{dict(key)}.modality{m}.nii(N + 1)      = Nii;
-                        dat{dict(key)}.modality{m}.json(N + 1).pth = pth_json;
-                    else
-                        C       = numel(dat{dict(key)}.modality{m}.channel);
-                        has_chn = false;
-                        for c=1:C % Loop over channels
-                            if strcmp(channel,dat{dict(key)}.modality{m}.channel{c}.name)
-                                % Channel found -> append
-                                N = numel(dat{dict(key)}.modality{m}.channel{c}.nii);
-                                dat{dict(key)}.modality{m}.channel{c}.nii(N + 1)      = Nii;
-                                dat{dict(key)}.modality{m}.channel{c}.json(N + 1).pth = pth_json;
-                                
-                                has_chn = true;
-                                break
-                            end                           
-                        end
-
-                        if ~has_chn
-                            % Channel not found -> add channel
-                            dat{dict(key)}.modality{m}.channel{C + 1}.name      = channel;
-                            dat{dict(key)}.modality{m}.channel{C + 1}.nii       = Nii;
-                            dat{dict(key)}.modality{m}.channel{C + 1}.json.pth  = pth_json;
-                        end
-                    end
-
-                    has_mod = true;
-                    break
-                end
-            end        
-
-            if ~has_mod
-                % Modality not found -> add modality
-                if isempty(channel)
-                    % Single-channel data
-                    dat{dict(key)}.modality{M + 1}.nii      = Nii;
-                    dat{dict(key)}.modality{M + 1}.json.pth = pth_json;
-                else
-                    % Multi-channel data
-                    dat{dict(key)}.modality{M + 1}.channel{1}.name      = channel;
-                    dat{dict(key)}.modality{M + 1}.channel{1}.nii       = Nii;
-                    dat{dict(key)}.modality{M + 1}.channel{1}.json.pth  = pth_json;
-                end
-            end
-        end
-    end
-    
-    if ~isempty(metadata.rater)
-        % Process label data
-        %------------------------------------------------------------------
-        rater = metadata.rater;
-        Nii   = nifti(metadata.pth);
-        
-        if ~isfield(dat{dict(key)},'label')
-            dat{dict(key)}.label{1}.name     = rater;
-            dat{dict(key)}.label{1}.nii      = Nii;
-            dat{dict(key)}.label{1}.json.pth = pth_json;
-        else
-            R = numel(dat{dict(key)}.label); % Number of raters
-            
-            dat{dict(key)}.label{R + 1}.name     = rater;
-            dat{dict(key)}.label{R + 1}.nii      = Nii;
-            dat{dict(key)}.label{R + 1}.json.pth = pth_json;
-        end
-    end
-    
-    if ~isempty(metadata.class)
-        % Process segmentations
-        %------------------------------------------------------------------
-        class  = metadata.class;        
-        k      = class(1);
-        K_a    = class(2);        
-        Nii    = nifti(metadata.pth);
-        type   = metadata.type;        
-        tissue = metadata.tissue;        
-        
-        if ~isfield(dat{dict(key)},'segmentation')
-            dat{dict(key)}.segmentation{1}.class = cell(1,K_a);
-            dat{dict(key)}.segmentation{1}.json  = cell(1,K_a);
-            
-            dat{dict(key)}.segmentation{1}.name            = type;            
-            dat{dict(key)}.segmentation{1}.class{k}.nii    = Nii;
-            dat{dict(key)}.segmentation{1}.class{k}.tissue = tissue;
-            dat{dict(key)}.segmentation{1}.json{k}.pth     = pth_json;
-        else
-            T        = numel(dat{dict(key)}.segmentation); % number of segmentation types (e.g. 'c','wc')
-            has_type = false;
-            for t=1:T % Loop over segmentation types
-                if strcmp(dat{dict(key)}.segmentation{t}.name,type)
-                    dat{dict(key)}.segmentation{t}.class{k}.nii    = Nii;
-                    dat{dict(key)}.segmentation{t}.class{k}.tissue = tissue;
-                    dat{dict(key)}.segmentation{t}.json{k}.pth     = pth_json;
-                    
-                    has_type = true;
-                    break
-                end
-            end
-            
-            if ~has_type
-                dat{dict(key)}.segmentation{T + 1}.class = cell(1,K_a);
-                dat{dict(key)}.segmentation{T + 1}.json  = cell(1,K_a);
-            
-                dat{dict(key)}.segmentation{T + 1}.name            = type;            
-                dat{dict(key)}.segmentation{T + 1}.class{k}.nii    = Nii;
-                dat{dict(key)}.segmentation{T + 1}.class{k}.tissue = tissue;
-                dat{dict(key)}.segmentation{T + 1}.json{k}.pth     = pth_json;
-            end
-        end
-    end
-        
-    % Append other meta data fields (if there are any)
-    %----------------------------------------------------------------------
-    fn = fieldnames(metadata);
-    for i=1:numel(fn)
-        field_name = fn{i};
-        
-        if exclude_fn(field_name)           
-            continue
-        end
-        
-        dat{dict(key)}.(fn{i}) = metadata.(field_name);
-    end            
-    
-    % Make sure fields are ordered alphabetically
-    dat{dict(key)} = orderfields(dat{dict(key)});
 end
+pre_count = dict.Count;
 
+% -------------------------------------------------------------------------
+% Get all input json files
+if ~iscell(input), input = {input}; end
+json_files = [];
+for i=1:numel(input)
+    if numel(input{i}) >= 5 && strcmpi(input{i}(end-4:end), '.json')
+        json_files = [json_files ; dir(input{i})];
+    else
+        json_files = [json_files ; rdir(input{i}, '*.json')];
+    end
+end
+% clear input
+J = numel(json_files);
+
+% -------------------------------------------------------------------------
+% Display the number of files read
+base10 = floor(log10(J)) + 1;
+str    = sprintf(['Initialise dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
+fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
+tic;
+
+% -------------------------------------------------------------------------
+% Loop over files
+for j=1:J
+    
+    pth_json      = fullfile(json_files(j).folder,json_files(j).name);
+    list_metadata = spm_jsonread(pth_json);  
+    if ~iscell(list_metadata), list_metadata = {list_metadata}; end
+    I = numel(list_metadata);
+        
+    % ---------------------------------------------------------------------
+    % Display the number of files read
+    if ~mod(j,10)
+        fprintf(1, repmat('\b',1,2*base10 + 50));
+        str = sprintf(['Initialise dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
+        fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
+    end
+    
+    % ---------------------------------------------------------------------
+    % Loop over elements in the file
+    % > In order to store multiple elements in a single JSON file, I
+    %   support lists of dictionaries. Each element of the list is treated 
+    %   as one json object.
+    for i=1:I
+        metadata = list_metadata{i};
+        metadata = check_metadata_dat(metadata);
+          
+        % Get poulation and subject name
+        name       = metadata.name;
+        population = metadata.population;
+
+        % Create dictionary key
+        if ~isempty(population),    key = [population '_' name];
+        else,                       key = name;
+        end
+
+        if ~dict.isKey(key)
+            % Subject not in dictionary -> add subject to dictionary
+            dict(key)                 = dict.Count + 1;         
+            dat{dict(key)}.name       = name;
+            dat{dict(key)}.population = population;
+        end
+        s = dict(key);
+
+        % -----------------------------------------------------------------
+        % Process imaging data
+        % -----------------------------------------------------------------
+        if ~isempty(metadata.modality)
+            
+            modality = metadata.modality;
+            channel  = metadata.channel;
+            
+            % -------------------------------------------------------------
+            % Get path to image and read
+            Nii = read_nifti(metadata.pth, json_files(j).folder, json_files(j).name, 'ro');
+            if isempty(Nii)
+                continue
+            end
+            
+            % -------------------------------------------------------------
+            % Create modality
+            if ~isfield(dat{s},'modality')
+                % No image data exists -> create image data fields
+                dat{s}.modalities           = containers.Map;
+                dat{s}.modality             = {};
+            end
+            if ~dat{s}.modalities.isKey(modality)
+                m                           = numel(dat{s}.modality) + 1;
+                dat{s}.modality{m}.name     = modality;
+                dat{s}.modalities(modality) = m;
+            end
+            % -------------------------------------------------------------
+            % Add modality (single channel)  
+            m = dat{s}.modalities(modality);
+            if isempty(channel)
+                if isfield(dat{s}.modality{m}, 'nii')
+                    N = numel(dat{s}.modality{m}.nii);
+                else
+                    dat{s}.modality{m}.nii = nifti;
+                    N = 0;
+                end
+                dat{s}.modality{m}.nii(N + 1)      = Nii;
+                dat{s}.modality{m}.json(N + 1).pth = pth_json;
+            else
+                % ---------------------------------------------------------
+                % Create channel
+                if ~isfield(dat{s}.modality{m}, 'channel')
+                    dat{s}.modality{m}.channel  = {};
+                    dat{s}.modality{m}.channels = containers.Map;
+                end
+                if ~dat{s}.modality{m}.channels.isKey(channel)
+                    c                                    = numel(dat{s}.modality{m}.channel) + 1;
+                    dat{s}.modality{m}.channel{c}.name   = channel;
+                    dat{s}.modality{m}.channels(channel) = c;
+                end
+                % ---------------------------------------------------------
+                % Add channel
+                c = dat{s}.modality{m}.channels(channel);
+                if isfield(dat{s}.modality{m}.channel{c}, 'nii')
+                    N = numel(dat{s}.modality{m}.channel{c}.nii);
+                else
+                    dat{s}.modality{m}.channel{c}.nii = nifti;
+                    N = 0;
+                end
+                dat{s}.modality{m}.channel{c}.nii(N + 1)      = Nii;
+                dat{s}.modality{m}.channel{c}.json(N + 1).pth = pth_json;
+            end % < Channel
+        end % < Modality
+
+        % -----------------------------------------------------------------
+        % Process label data
+        % -----------------------------------------------------------------
+        if ~isempty(metadata.rater)
+            
+            rater = metadata.rater;
+            
+            % -------------------------------------------------------------
+            % Get path to image and read
+            Nii = read_nifti(metadata.pth, json_files(j).folder, json_files(j).name, 'ro');
+            if isempty(Nii)
+                continue
+            end
+            
+            % -------------------------------------------------------------
+            % Create label
+            if ~isfield(dat{s},'label')
+                % No image data exists -> create image data fields
+                dat{s}.raters   = containers.Map;
+                dat{s}.label    = {};
+            end
+            if ~dat{s}.raters.isKey(rater)
+                r                    = numel(dat{s}.label) + 1;
+                dat{s}.label{r}.name = rater;
+                dat{s}.raters(rater) = r;
+            end
+            % -------------------------------------------------------------
+            % Add label
+            r = dat{s}.raters(rater);
+            if isfield(dat{s}.label{r}, 'nii')
+                N = numel(dat{s}.label{r}.nii);
+            else
+                dat{s}.label{r}.nii = nifti;
+                N = 0;
+            end
+            dat{s}.label{r}.nii(N+1)      = Nii;
+            dat{s}.label{r}.json(N+1).pth = pth_json;
+        end
+
+        
+        % -----------------------------------------------------------------
+        % Process segmentation data
+        % -----------------------------------------------------------------
+        if ~isempty(metadata.tissue)
+                
+            type   = metadata.type;        
+            tissue = metadata.tissue;   
+            
+            % -------------------------------------------------------------
+            % Get path to image and read
+            Nii = read_nifti(metadata.pth, json_files(j).folder, json_files(j).name, 'ro');
+            if isempty(Nii)
+                continue
+            end
+
+            % -------------------------------------------------------------
+            % Create segmentation
+            if ~isfield(dat{s},'segmentation')
+                % No image data exists -> create image data fields
+                dat{s}.segmentations = containers.Map;
+                dat{s}.segmentation  = {};
+            end
+            if ~dat{s}.segmentations.isKey(type)
+                t                           = numel(dat{s}.segmentations) + 1;
+                dat{s}.segmentation{t}.name = type;
+                dat{s}.segmentation(type)   = t;
+            end
+            % -------------------------------------------------------------
+            % Create class
+            t = dat{s}.segmentation(type);
+            if ~isfield(dat{s}.segmentation{t}, 'class')
+                dat{s}.segmentation{t}.class   = {};
+                dat{s}.segmentation{t}.classes = containers.Map;
+            end
+            if ~dat{s}.segmentation{t}.classes.isKey(tissue)
+                c                                      = numel(dat{s}.segmentation{t}.class) + 1;
+                dat{s}.segmentation{t}.class{c}.name   = tissue;
+                dat{s}.segmentation{t}.classes(tissue) = c;
+            end
+            % -------------------------------------------------------------
+            % Add class
+            if isfield(dat{s}.segmentation{t}.class{c}, 'nii')
+                N = numel(dat{s}.segmentation{t}.class{c}.nii);
+            else
+                dat{s}.segmentation{t}.class{c}.nii = nifti;
+                N = 0;
+            end
+            dat{s}.segmentation{t}.class{c}.nii(N+1)      = Nii;
+            dat{s}.segmentation{t}.class{c}.json(N+1).pth = pth_json;
+            
+        end
+    
+        % -----------------------------------------------------------------
+        % Append other meta data fields (if there are any)
+        % -----------------------------------------------------------------
+        fn = fieldnames(metadata);
+        protected_fields = {'pth','modality','name','rater','channel','tissue'};
+        for k=1:numel(fn)
+            field_name = fn{k};
+
+            if any(strcmpi(field_name, protected_fields))
+                continue
+            end
+
+            dat{s}.(fn{k}) = metadata.(field_name);
+        end            
+
+        % Make sure fields are ordered alphabetically
+        dat{s} = orderfields(dat{s});
+        
+    end % < Loop over elements (I)
+end % < Loop over files (J)
+
+% -------------------------------------------------------------------------
 % Display number of files read
 fprintf(1, repmat('\b',1,2*base10 + 50));
-s = sprintf(['spm_json_manager(''init_dat'') | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
-fprintf(1, ['%-' num2str(2*base10 + 50) 's'], s);
+str = sprintf(['Initialise dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
+fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
 fprintf('\n');
 
-fprintf('spm_json_manager(''init_dat'') | Loaded %i subjects from %s in %0.1f seconds.\n',dict.Count,dir_population,toc);
+if numel(input) == 1
+    fprintf('Initialise dat | Loaded %i subjects from %s in %0.1f seconds.\n',dict.Count - pre_count,input{1},toc);
+else
+    fprintf('Initialise dat | Loaded %i subjects in %0.1f seconds.\n',dict.Count - pre_count,toc);
+end
 %==========================================================================
+
+
+%==========================================================================
+function model = init_model(input, varargin)
+%__________________________________________________________________________
+% Initialise a model object from one or several JSON files.
+% These JSON files can either be explicitely provided, or searched for in a
+% directory.
+%
+% FORMAT model = spm_file_manager('init_model',input)
+% input - Path to a JSON file or ot a directory with all the JSON files.
+%         The input can also be a list (= cell) of paths.
+%
+% It is also possible to provide an already initialised 'dat' structure
+% from which some information can be extracted (modalities, hospitals, ...)
+%
+% FORMAT model = spm_file_manager('init_model', ..., dat)
+% dat - An already initialised dat structure from which we can get info.
+%
+% Finally, it is possible to addup to an existing model object. An input
+% structure is detected as a model object if it has only one element
+% (whereas dat objects have several elements).
+%
+% FORMAT model = spm_file_manager('init_model', ..., model)
+% model - An already initialised model structure.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+
+model = struct;
+for i=1:numel(varargin)
+    if isstruct(varargin{i}) && numel(varargin{i}) == 1
+        model = varargin{i};
+        varargin = [varargin{1:i-1} varargin{i+1:end}];
+    end
+end
+if numel(varargin) == 1
+    dat = varargin{1};
+elseif numel(varargin) > 1
+    warning('[spm_file_manager::init_model] Too many arguments. Don''t know what to do.')
+end
+
+% -------------------------------------------------------------------------
+% Dictionary for modalities / hospitals
+% -------------------------------------------------------------------------
+if ~isfield(model, 'modalities'), model.modalities = containers.Map; end
+if ~isfield(model, 'hospitals'),  model.hospitals  = containers.Map; end
+
+% -------------------------------------------------------------------------
+% Parse JSON files
+% -------------------------------------------------------------------------
+
+% JSON file can be used to provide already known elements of the model.
+% It can be an existing template, an existing shape model (subspace,
+% residual precision, latent precision...) or a GMM.
+
+% -------------------------------------------------------------------------
+% Get all input json files
+if ~iscell(input), input = {input}; end
+json_files = [];
+for i=1:numel(input)
+    if numel(input{i}) >= 5 && strcmpi(input{i}(end-4:end), '.json')
+        json_files = [json_files ; dir(input{i})];
+    else
+        json_files = [json_files ; rdir(input{i}, '*.json')];
+    end
+end
+clear input
+J = numel(json_files);
+
+% -------------------------------------------------------------------------
+% Loop over files
+for j=1:J
+    pth_json      = fullfile(json_files(j).folder,json_files(j).name);
+    list_metadata = spm_jsonread(pth_json);  
+    if ~iscell(list_metadata), list_metadata = {list_metadata}; end
+    I = numel(list_metadata);
+    
+    % ---------------------------------------------------------------------
+    % Loop over elements in the file
+    % > In order to store multiple elements in a single JSON file, I
+    %   support lists of dictionaries. Each element of the list is treated 
+    %   as one json object.
+    for i=1:I
+        metadata = list_metadata{i};
+        metadata = check_metadata_model(metadata);
+    
+        switch lower(metadata.type)
+            % -------------------------------------------------------------
+            % Shape model
+            case 'shape'
+                model.shape = struct;
+                if isfield(metadata, 'prm')
+                    model.shape.prm = metadata.prm;
+                end
+                if isfield(metadata, 'boundary')
+                    model.shape.boundary = metadata.boundary;
+                end
+                if isfield(metadata, 'subspace')
+                    model.shape.subspace.nii = read_nifti(metadata.subspace, json_files(j).folder, json_files(j).name, 'rw');
+                end
+                if isfield(metadata, 'latent')
+                    if ischar(metadata.latent)
+                        model.shape.latent.A = read_mat(metadata.latent, json_files(j).folder, json_files(j).name);
+                    else
+                        model.shape.latent.A = metadata.latent;
+                    end
+                end
+                if isfield(metadata, 'residual')
+                    if ischar(metadata.residual)
+                        model.shape.residual.lambda = read_mat(metadata.residual, json_files(j).folder, json_files(j).name);
+                    else
+                        model.shape.residual.lambda = metadata.residual;
+                    end
+                end
+            % -------------------------------------------------------------
+            % Template
+            case 'template'
+                model.template = struct;
+                if isfield(metadata, 'prm')
+                    model.template.prm = metadata.prm;
+                end
+                if isfield(metadata, 'boundary')
+                    model.template.boundary = metadata.boundary;
+                end
+                if isfield(metadata, 'log')
+                    model.template.log.nii = read_nifti(metadata.log, json_files(j).folder, json_files(j).name, 'rw');
+                end
+                if isfield(metadata, 'derivatives')
+                    model.template.derivatives.nii = read_nifti(metadata.derivatives, json_files(j).folder, json_files(j).name, 'rw');
+                end
+            % -------------------------------------------------------------
+            % Intensity priors
+            case 'gmm'
+                if ~isfield(metadata, 'gmm')
+                    error('GMM json files must have a ''gmm'' field.');
+                end
+                if ~isfield(metadata, 'channels')
+                    error('GMM json files must have a ''channels'' field.');
+                end
+                if ~isfield(model, 'modality'), model.modality = {}; end
+                if ~model.modalities.isKey(metadata.modality)
+                    model.modality{end+1}.name          = metadata.modality;
+                    model.modalities(metadata.modality) = numel(model.modality);
+                    model.modality{end}.channels        = metadata.channels;
+                end
+                m = model.modalities(metadata.modality);
+                if isfield(metadata, 'hospital')
+                    if ~isfield(model.modality{m}, 'hospital')
+                        model.modality{m}.hospital = {};
+                    end
+                    if ~model.hospitals.isKey(metadata.hospital)
+                        model.modality{m}.hospital{end+1}.name = metadata.hospital;
+                        model.hospitals(metadata.hospital)     = numel(model.modality{m}.hospital);
+                    end
+                    h = model.hospitals(metadata.hospital);
+                    model.modality{m}.hospital{h}.gmm = metadata.gmm;
+                else
+                    model.modality{m}.gmm = metadata.gmm;
+                end
+        end
+    end
+end
+
+% -------------------------------------------------------------------------
+% Extract info from dat structure
+% -------------------------------------------------------------------------
+
+% By looking to the dat structure, we can detect how many modalities (and
+% thus GMM) exist, as well as how many channels per GMM. It is important to
+% look at the entire dat structure, because some individuals may have
+% missing modalities or missing channels.
+% A dictionary is used to map channel names with indices in the GMM.
+
+if ~isempty(dat)
+    for s=1:numel(dat)
+        if isfield(dat{s}, 'modality')
+            for m=1:numel(dat{s}.modality)
+                if ~isfield(model, 'modality'), model.modality = {}; end
+                % Create modality to store future GMM
+                name = dat{s}.modality{m}.name;
+                if ~model.modalities.isKey(name)
+                    model.modality{end+1}.name   = name;
+                    model.modalities(name)       = numel(model.modality);
+                    model.modality{end}.channels = containers.Map;
+                    model.modality{end}.gmm      =  {};
+                end
+                mm = model.modalities(name);
+                % Register channel names to map with channel number in GMM.
+                if isfield(dat{s}.modality{m}, 'channel')
+                    for c=1:numel(dat{s}.modality{m}.channel)
+                        name = dat{s}.modality{m}.channel{c}.name;
+                        if ~model.modality{mm}.channels.isKey(name)
+                            model.modality{mm}.channels(name) = model.modality{mm}.channels.Count + 1;
+                        end
+                    end
+                else
+                    model.modality{mm}.channels(name) = 1;
+                end
+            end
+        end 
+    end
+end
+
+%==========================================================================
+
 
 %==========================================================================
 function modify_json_field(pth_json,field,val)
-% Reads population and meta data into a dat struct.
-% FORMAT modify_json_field(pth_json,field,val)
+% FORMAT spm_file_manager('modify_json_field',pth_json,field,val)
 %
 % pth_json - Path to JSON file.
-% field - Field to change.
-% val - Value to change to.
+% field    - Field to change.
+% val      - Value to change to.
+%
+% Modifies a field in a JSON file.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 a         = spm_jsonread(pth_json);
@@ -273,22 +587,24 @@ a         = orderfields(a);
 spm_jsonwrite(pth_json,a);
 %==========================================================================
 
+
 %==========================================================================
 function modify_pth_in_population(dir_population,field,npth)
-% Reads population and meta data into a dat struct.
-% FORMAT modify_pth_in_population(dir_population,field,npth)
+% FORMAT spm_file_manager('modify_pth_in_population',dir_population,field,new_pth)
 %
-% dir_population - Path to a directory containing JSON files. Each JSON
-% file holds subject-specific meta data.
-% field - Field to change.
-% npth - New path
+% dir_population - Path to a directory containing JSON files. 
+%                  Each JSON file holds subject-specific meta data.
+% field          - Field to change.
+% new_pth        - New path
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+
+% Get all JSON files
 json_files = dir(fullfile(dir_population,'*.json'));
 J          = numel(json_files);
 
-for s=1:J % Loop over JSON files
-    pth_json = fullfile(dir_population,json_files(s).name);
+for s=1:J
+    pth_json    = fullfile(dir_population,json_files(s).name);
         
     a           = spm_jsonread(pth_json);
     opth        = a.(field);
@@ -305,31 +621,221 @@ end
 %==========================================================================
 
 %==========================================================================
+function make_pth_relative(input)
+% FORMAT spm_file_manager('make_pth_relative',input)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+
+% -------------------------------------------------------------------------
+% Parse JSON files
+% -------------------------------------------------------------------------
+
+% JSON file can be used to provide already known elements of the model.
+% It can be an existing template, an existing shape model (subspace,
+% residual precision, latent precision...) or a GMM.
+
+% -------------------------------------------------------------------------
+% Get all input json files
+if ~iscell(input), input = {input}; end
+json_files = [];
+for i=1:numel(input)
+    if numel(input{i}) >= 5 && strcmpi(input{i}(end-4:end), '.json')
+        json_files = [json_files ; dir(input{i})];
+    else
+        json_files = [json_files ; rdir(input{i}, '*.json')];
+    end
+end
+clear input
+J = numel(json_files);
+
+% -------------------------------------------------------------------------
+% Loop over files
+for j=1:J
+    pth_json      = fullfile(json_files(j).folder,json_files(j).name);
+    list_metadata = spm_jsonread(pth_json); 
+    is_list = iscell(list_metadata);
+    if ~iscell(list_metadata)
+        list_metadata = {list_metadata};
+    end
+    I = numel(list_metadata);
+    
+    fprintf('%s\n', pth_json);
+    
+    % ---------------------------------------------------------------------
+    % Loop over elements in the file
+    % > In order to store multiple elements in a single JSON file, I
+    %   support lists of dictionaries. Each element of the list is treated 
+    %   as one json object.
+    for i=1:I
+        metadata = list_metadata{i};
+        
+        if isfield(metadata, 'pth')
+            [~, fname, ext] = fileparts(metadata.pth);
+            new_pth = fullfile(json_files(j).folder, [fname ext]);
+            if exist(new_pth, 'file')
+                metadata.pth = [fname ext];
+            end
+        end
+        
+        list_metadata{i} = metadata;
+    end
+    
+    if ~is_list
+        list_metadata = list_metadata{1};
+    end
+    spm_jsonwrite(pth_json, list_metadata);
+end
+%==========================================================================
+
+
+
+%==========================================================================
 % HELPER FUNCTIONS
 %==========================================================================
 
+
 %==========================================================================
-function exclude = exclude_fn(fn)
-exclude    = false;
-fn_exclude = {'pth','modality','name','channel','type','tissue','class','rater'};
-for i=1:numel(fn_exclude)
-    if strcmp(fn,fn_exclude{i})
-        exclude = true;
-        break
+function files = rdir(pop_dir, pattern)
+% FORMAT files = rdir(folder, pattern)
+% folder  - Root folder where to start the search
+% pattern - Pattern for file names (ex: *.json)
+%
+% Recursive file search.
+
+if ~is_absolute(pop_dir)
+    pop_dir = fullfile(pwd, pop_dir);
+end
+if isdir(pop_dir)
+    files = dir(fullfile(pop_dir, pattern));
+    dirs  = dir(pop_dir);
+    is_dir = [dirs.isdir];
+    dirs = dirs(is_dir);
+    for i=1:numel(dirs)
+        if ~any(strcmpi(dirs(i).name, {'.','..'}))
+            files = [files ; rdir(fullfile(dirs(i).folder, dirs(i).name), pattern)];
+        end
     end
 end
 %==========================================================================
 
+
 %==========================================================================
-function metadata = check_metadata(metadata)
-if ~isfield(metadata,'name')
-    error('~isfield(metadata,''name'')')        
+function test = is_absolute(path)
+% FORMAT test = is_absolute(path)
+% path  - A path
+%
+% Check of a path is absolute or relative.
+
+if isempty(path)
+    test = false;
+elseif path(1) == filesep
+    test = true;
+elseif ~ispc
+    test = false;
+else
+    res  = regexp(path, '^[A-Za-z]:\\', 'once');
+    test = ~isempty(res);
 end
-if ~isfield(metadata,'population')
-    error('~isfield(metadata,''population'')')        
+%==========================================================================
+
+
+%==========================================================================
+function path = check_path(path, folder, json, possible_ext)
+
+% If no path: try to find an image with the same name as the JSON file
+if isempty(path)
+    [~, fname, ~] = fileparts(json);
+    for e=1:numel(possible_ext)
+        path = fullfile(folder, [fname possible_ext{e}]);
+        if exist(path, 'file')
+            break
+        end
+        path = '';
+    end
+end
+
+% If still no path: failure
+if isempty(path)
+    warning('[spm_file_manager] Missing path. Could not find the corresponding file.')
+    return
+end
+
+% If not absolute: assume relative path w.r.t. JSON file location
+if ~is_absolute(path)
+    path = fullfile(folder, path);
+end
+
+% If file does not exist: failure
+if ~exist(path, 'file')
+    warning('[spm_file_manager] Missing path. Could not find the corresponding file.')
+    path = '';
+    return
+end
+%==========================================================================
+
+
+%==========================================================================
+function nii = read_nifti(path, folder, json, permission)
+
+if nargin < 4
+    permission = 'ro'; % Inputs should be read-only (for security)
+end
+
+path = check_path(path, folder, json, {'.nii', '.nii.gz', '.img', '.img.gz'});
+if isempty(path)
+    nii = [];
+    return
+end
+
+% Read nifti file
+nii                = nifti(path);
+nii.dat.permission = permission;
+%==========================================================================
+
+
+%==========================================================================
+function obj = read_mat(path, folder, json)
+
+path = check_path(path, folder, json, '.mat');
+if isempty(path)
+    obj = [];
+    return
+end
+
+% Read nifti file
+obj = load(path);
+%==========================================================================
+
+
+%==========================================================================
+function metadata = check_metadata_model(metadata)
+% FORMAT metadata = check_metadata_model(metadata)
+%
+% Check metadata in the model case.
+
+if ~isfield(metadata,'type')
+    error('[spm_file_manager] field ''type'' is mandatory.')        
 end
 if ~isfield(metadata,'modality')
-    metadata.modality = '';   
+    metadata.modality = '';
+end
+%==========================================================================
+
+
+%==========================================================================
+function metadata = check_metadata_dat(metadata)
+% FORMAT metadata = check_metadata_dat(metadata)
+%
+% Check metadata in the dat case.
+
+if ~isfield(metadata,'name')
+    error('[spm_file_manager] Field ''name'' is mandatory.')        
+end
+if ~isfield(metadata,'population')
+    metadata.population = '';       
+end
+if ~isfield(metadata,'modality')
+    metadata.modality = '';
 end
 if ~isfield(metadata,'channel')
     metadata.channel = '';   
@@ -337,17 +843,10 @@ end
 if ~isfield(metadata,'rater')
     metadata.rater = '';   
 end
-if ~isfield(metadata,'class')
-    metadata.class = '';   
-else
-    if ~isfield(metadata,'type')
-        error('~isfield(metadata,''type'')')        
-    end
-    if ~isfield(metadata,'tissue')
-        metadata.tissue = '';       
-    end
+if ~isfield(metadata,'tissue')
+    metadata.tissue = '';   
 end
-if ~isempty(metadata.channel) && isempty(metadata.channel)
-    error('~isempty(metadata.channel) && isempty(metadata.channel)')
+if ~isfield(metadata,'pth')
+    metadata.pth = '';
 end
 %==========================================================================
