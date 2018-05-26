@@ -2,8 +2,8 @@ function varargout = spm_json_manager(varargin)
 %__________________________________________________________________________
 % Collection of functions for reading and organising data.
 %
-% FORMAT [dat,dict] = spm_json_manager('init_dat',dir_population,dat)
-% FORMAT model      = spm_json_manager('init_model',input,dat)
+% FORMAT [dat,dict] = spm_json_manager('init_dat',dir_population,load_dat,dat)
+% FORMAT model      = spm_json_manager('init_model',input,load_dat,dat)
 % FORMAT spm_json_manager('modify_json_field',pth_json,field,val)
 % FORMAT spm_json_manager('modify_pth_in_population',dir_population,field,npth)
 % FORMAT spm_json_manager('make_pth_relative',input)
@@ -37,16 +37,17 @@ end
 
 
 %==========================================================================
-function [dat,dict] = init_dat(input,dat)
+function [dat,dict] = init_dat(input,load_dat,dat)
 %__________________________________________________________________________
 % Initialise a dat object from one or several JSON files.
 % These JSON files can either be explicitely provided, or searched for in a
 % directory:
 %
-% FORMAT [dat,dict] = spm_json_manager('init_dat',input)
+% FORMAT [dat,dict] = spm_json_manager('init_dat',input,load_dat)
 %
 % input - Path to a JSON file or ot a directory with all the JSON files.
 %         The input can also be a list (= cell) of paths.
+% load_dat - Load (if exists) from population specific dat.mat files
 %
 % dat   - A hierarchical object (cell of structs) representing all input
 %         files and metadata
@@ -112,6 +113,9 @@ function [dat,dict] = init_dat(input,dat)
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
 if nargin<2
+    load_dat = false;
+end
+if nargin<3
     dat = {};
 end
 
@@ -147,14 +151,16 @@ fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
 tic;
 
 % -------------------------------------------------------------------------
+% Used as a flag for saving the dat object to check if more than one population
+% exists
+odir_json   = '';
+first_iter  = true;
+loading_dat = false;
+
+% -------------------------------------------------------------------------
 % Loop over files
 for j=1:J
     
-    pth_json      = fullfile(json_files(j).folder,json_files(j).name);
-    list_metadata = spm_jsonread(pth_json);  
-    if ~iscell(list_metadata), list_metadata = {list_metadata}; end
-    I = numel(list_metadata);
-        
     % ---------------------------------------------------------------------
     % Display the number of files read
     if ~mod(j,10)
@@ -163,6 +169,45 @@ for j=1:J
         fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
     end
     
+    % ---------------------------------------------------------------------
+    % Get path to JSON file
+    pth_json = fullfile(json_files(j).folder,json_files(j).name);    
+    
+    if load_dat        
+        % Loading from file (if exists)
+        pth_dat = fullfile(json_files(j).folder,'dat.mat');
+        if exist(pth_dat,'file')==2
+            loading_dat = true;                        
+            
+            dir_json = json_files(j).folder;
+            if strcmp(dir_json,odir_json)
+                % This just increments the for-loop index
+                continue
+            end
+            odir_json = dir_json;
+            
+            dat1 = load(pth_dat);
+            dat1 = dat1.dat1;
+            J1   = numel(dat1);                      
+            
+            for j1=1:J1
+                dat{end + 1} = dat1{j1};
+            end                              
+            
+            first_iter = true;
+             
+            continue
+        end
+    end
+    
+    if loading_dat
+        error('Currently does not support both loading from dat.mat and reading from JSONs')
+    end
+    
+    list_metadata = spm_jsonread(pth_json);  
+    if ~iscell(list_metadata), list_metadata = {list_metadata}; end
+    I = numel(list_metadata);
+            
     % ---------------------------------------------------------------------
     % Loop over elements in the file
     % > In order to store multiple elements in a single JSON file, I
@@ -175,7 +220,21 @@ for j=1:J
         % Get poulation and subject name
         name       = metadata.name;
         population = metadata.population;
-
+                  
+        if ~first_iter
+            if ~strcmp(opopulation,population)
+                % New population -> save dat object for previous population
+                pth_dat = fullfile(json_files(j - 1).folder,'dat.mat');
+                if exist(pth_dat,'file')==2
+                    delete(pth_dat);
+                end
+                
+                dat1 = get_population(dat,opopulation);                
+                save(pth_dat,'dat1')
+            end
+        end
+        opopulation = population;     
+        
         % Create dictionary key
         if ~isempty(population),    key = [population '_' name];
         else,                       key = name;
@@ -209,7 +268,7 @@ for j=1:J
             % Create modality
             if ~isfield(dat{s},'modality')
                 % No image data exists -> create image data fields
-                dat{s}.modality_map           = containers.Map;
+                dat{s}.modality_map         = containers.Map;
                 dat{s}.modality             = {};
             end
             if ~dat{s}.modality_map.isKey(modality)
@@ -332,7 +391,7 @@ for j=1:J
             t = dat{s}.segmentation_map(type);
             if ~isfield(dat{s}.segmentation{t}, 'class')
                 dat{s}.segmentation{t}.class   = {};
-                dat{s}.segmentation{t}.class_map = containers.Map;
+                dat{s}.segmentaload_dattion{t}.class_map = containers.Map;
             end
             if ~dat{s}.segmentation{t}.class_map.isKey(tissue)
                 c                                      = numel(dat{s}.segmentation{t}.class) + 1;
@@ -371,6 +430,21 @@ for j=1:J
         dat{s} = orderfields(dat{s});
         
     end % < Loop over elements (I)
+    
+    if ~first_iter || J==1
+        if strcmp(opopulation,population) && j==J
+            % Only one, or last population -> save dat object
+            pth_dat = fullfile(json_files(j).folder,'dat.mat');
+            if exist(pth_dat,'file')==2
+                delete(pth_dat);
+            end
+
+            dat1 = get_population(dat,opopulation);                
+            save(pth_dat,'dat1')
+        end
+    else
+        first_iter = false;
+    end
 end % < Loop over files (J)
 
 % -------------------------------------------------------------------------
@@ -397,9 +471,9 @@ if siz > 1024
 end
 
 if numel(input) == 1
-    fprintf('Initialising dat | Loaded %i subjects from %s in %0.1f seconds (%d%s).\n',dict.Count - pre_count,input{1},toc,siz,unit);
+    fprintf('Initialising dat | Loaded %i subjects from %s in %0.1f seconds (%d%s).\n',numel(dat),input{1},toc,siz,unit);
 else
-    fprintf('Initialising dat | Loaded %i subjects in %0.1f seconds (%d%s).\n',dict.Count - pre_count,toc,siz,unit);
+    fprintf('Initialising dat | Loaded %i subjects in %0.1f seconds (%d%s).\n',numel(dat),toc,siz,unit);
 end
 %==========================================================================
 
@@ -872,7 +946,7 @@ path = check_path(path, folder, json, '.mat');
 if isempty(path)
     obj = [];
     return
-end
+end%==========================================================================
 
 % Read nifti file
 obj = load(path);
@@ -928,5 +1002,15 @@ if ~isfield(metadata,'pth')
     metadata.pth = '';
 else
     metadata.pth = strtrim(metadata.pth);
+end
+%==========================================================================
+
+%==========================================================================
+function ndat = get_population(dat,population)
+ndat = {};
+for s=1:numel(dat)
+    if strcmpi(dat{s}.population,population)
+        ndat{end + 1} = dat{s};
+    end
 end
 %==========================================================================
