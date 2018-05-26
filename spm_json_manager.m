@@ -2,11 +2,11 @@ function varargout = spm_json_manager(varargin)
 %__________________________________________________________________________
 % Collection of functions for reading and organising data.
 %
-% FORMAT [dat,dict] = spm_file_manager('init_dat',dir_population,dat)
-% FORMAT model      = spm_file_manager('init_model',input,dat)
-% FORMAT spm_file_manager('modify_json_field',pth_json,field,val)
-% FORMAT spm_file_manager('modify_pth_in_population',dir_population,field,npth)
-% FORMAT spm_file_manager('make_pth_relative',input)
+% FORMAT [dat,dict] = spm_json_manager('init_dat',dir_population,dat)
+% FORMAT model      = spm_json_manager('init_model',input,dat)
+% FORMAT spm_json_manager('modify_json_field',pth_json,field,val)
+% FORMAT spm_json_manager('modify_pth_in_population',dir_population,field,npth)
+% FORMAT spm_json_manager('make_pth_relative',input)
 %
 % FORMAT help spm_json_manager>function
 % Returns the help file of the selected function.
@@ -43,7 +43,7 @@ function [dat,dict] = init_dat(input,dat)
 % These JSON files can either be explicitely provided, or searched for in a
 % directory:
 %
-% FORMAT [dat,dict] = spm_file_manager('init_dat',input)
+% FORMAT [dat,dict] = spm_json_manager('init_dat',input)
 %
 % input - Path to a JSON file or ot a directory with all the JSON files.
 %         The input can also be a list (= cell) of paths.
@@ -55,7 +55,7 @@ function [dat,dict] = init_dat(input,dat)
 %
 % It is also possible to addup to an existing dat object:
 %
-% FORMAT [dat,dict] = spm_file_manager('init_dat', ..., dat)
+% FORMAT [dat,dict] = spm_json_manager('init_dat', ..., dat)
 %
 % dat - An already initialised model structure.
 %--------------------------------------------------------------------------
@@ -142,7 +142,7 @@ J = numel(json_files);
 % -------------------------------------------------------------------------
 % Display the number of files read
 base10 = floor(log10(J)) + 1;
-str    = sprintf(['Initialise dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
+str    = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
 fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
 tic;
 
@@ -159,7 +159,7 @@ for j=1:J
     % Display the number of files read
     if ~mod(j,10)
         fprintf(1, repmat('\b',1,2*base10 + 50));
-        str = sprintf(['Initialise dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
+        str = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
         fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
     end
     
@@ -376,7 +376,7 @@ end % < Loop over files (J)
 % -------------------------------------------------------------------------
 % Display number of files read
 fprintf(1, repmat('\b',1,2*base10 + 50));
-str = sprintf(['Initialise dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
+str = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
 fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
 fprintf('\n');
 
@@ -397,9 +397,9 @@ if siz > 1024
 end
 
 if numel(input) == 1
-    fprintf('Initialise dat | Loaded %i subjects from %s in %0.1f seconds (%d%s).\n',dict.Count - pre_count,input{1},toc,siz,unit);
+    fprintf('Initialising dat | Loaded %i subjects from %s in %0.1f seconds (%d%s).\n',dict.Count - pre_count,input{1},toc,siz,unit);
 else
-    fprintf('Initialise dat | Loaded %i subjects in %0.1f seconds (%d%s).\n',dict.Count - pre_count,toc,siz,unit);
+    fprintf('Initialising dat | Loaded %i subjects in %0.1f seconds (%d%s).\n',dict.Count - pre_count,toc,siz,unit);
 end
 %==========================================================================
 
@@ -411,21 +411,21 @@ function model = init_model(input, varargin)
 % These JSON files can either be explicitely provided, or searched for in a
 % directory.
 %
-% FORMAT model = spm_file_manager('init_model',input)
+% FORMAT model = spm_json_manager('init_model',input)
 % input - Path to a JSON file or ot a directory with all the JSON files.
 %         The input can also be a list (= cell) of paths.
 %
 % It is also possible to provide an already initialised 'dat' structure
 % from which some information can be extracted (modality_map, hospital_map, ...)
 %
-% FORMAT model = spm_file_manager('init_model', ..., dat)
+% FORMAT model = spm_json_manager('init_model', ..., dat)
 % dat - An already initialised dat structure from which we can get info.
 %
 % Finally, it is possible to addup to an existing model object. An input
 % structure is detected as a model object if it has only one element
 % (whereas dat objects have several elements).
 %
-% FORMAT model = spm_file_manager('init_model', ..., model)
+% FORMAT model = spm_json_manager('init_model', ..., model)
 % model - An already initialised model structure.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
@@ -440,7 +440,7 @@ end
 if numel(varargin) == 1
     dat = varargin{1};
 elseif numel(varargin) > 1
-    warning('[spm_file_manager::init_model] Too many arguments. Don''t know what to do.')
+    warning('[spm_json_manager::init_model] Too many arguments. Don''t know what to do.')
 end
 
 % -------------------------------------------------------------------------
@@ -642,7 +642,7 @@ end
 
 %==========================================================================
 function modify_json_field(pth_json,field,val)
-% FORMAT spm_file_manager('modify_json_field',pth_json,field,val)
+% FORMAT spm_json_manager('modify_json_field',pth_json,field,val)
 %
 % pth_json - Path to JSON file.
 % field    - Field to change.
@@ -660,7 +660,7 @@ spm_jsonwrite(pth_json,a);
 
 %==========================================================================
 function modify_pth_in_population(dir_population,field,npth)
-% FORMAT spm_file_manager('modify_pth_in_population',dir_population,field,new_pth)
+% FORMAT spm_json_manager('modify_pth_in_population',dir_population,field,new_pth)
 %
 % dir_population - Path to a directory containing JSON files. 
 %                  Each JSON file holds subject-specific meta data.
@@ -692,7 +692,7 @@ end
 
 %==========================================================================
 function make_pth_relative(input)
-% FORMAT spm_file_manager('make_pth_relative',input)
+% FORMAT spm_json_manager('make_pth_relative',input)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 
@@ -828,7 +828,7 @@ end
 
 % If still no path: failure
 if isempty(path)
-    warning('[spm_file_manager] Missing path. Could not find the corresponding file.')
+    warning('[spm_json_manager] Missing path. Could not find the corresponding file.')
     return
 end
 
@@ -839,7 +839,7 @@ end
 
 % If file does not exist: failure
 if ~exist(path, 'file')
-    warning('[spm_file_manager] Missing path. Could not find the corresponding file.')
+    warning('[spm_json_manager] Missing path. Could not find the corresponding file.')
     path = '';
     return
 end
@@ -886,7 +886,7 @@ function metadata = check_metadata_model(metadata)
 % Check metadata in the model case.
 
 if ~isfield(metadata,'type')
-    error('[spm_file_manager] field ''type'' is mandatory.')        
+    error('[spm_json_manager] field ''type'' is mandatory.')        
 end
 if ~isfield(metadata,'modality')
     metadata.modality = '';
@@ -901,7 +901,7 @@ function metadata = check_metadata_dat(metadata)
 % Check metadata in the dat case.
 
 if ~isfield(metadata,'name')
-    error('[spm_file_manager] Field ''name'' is mandatory.')        
+    error('[spm_json_manager] Field ''name'' is mandatory.')        
 end
 if ~isfield(metadata,'population')
     metadata.population = '';       
