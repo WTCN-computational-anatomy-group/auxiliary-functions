@@ -444,12 +444,6 @@ elseif numel(varargin) > 1
 end
 
 % -------------------------------------------------------------------------
-% Dictionary for modality_map / hospital_map
-% -------------------------------------------------------------------------
-if ~isfield(model, 'modality_map'), model.modality_map = containers.Map; end
-if ~isfield(model, 'hospital_map'),  model.hospital_map  = containers.Map; end
-
-% -------------------------------------------------------------------------
 % Parse JSON files
 % -------------------------------------------------------------------------
 
@@ -541,20 +535,20 @@ for j=1:J
                 if ~isfield(metadata, 'channel_map')
                     error('GMM json files must have a ''channel_map'' field.');
                 end
-                if ~isfield(model, 'modality'), model.modality = {}; end
+                if ~isfield(model, 'modality'),     model.modality     = {}; end
+                if ~isfield(model, 'modality_map'), model.modality_map = containers.Map; end
                 if ~model.modality_map.isKey(metadata.modality)
-                    model.modality{end+1}.name          = metadata.modality;
+                    model.modality{end+1}.name            = metadata.modality;
                     model.modality_map(metadata.modality) = numel(model.modality);
-                    model.modality{end}.channel_map        = metadata.channel_map;
+                    model.modality{end}.channel_map       = metadata.channel_map;
                 end
                 m = model.modality_map(metadata.modality);
                 if isfield(metadata, 'hospital')
-                    if ~isfield(model.modality{m}, 'hospital')
-                        model.modality{m}.hospital = {};
-                    end
+                    if ~isfield(model.modality{m}, 'hospital'),     model.modality{m}.hospital     = {}; end
+                    if ~isfield(model.modality{m}, 'hospital_map'), model.modality{m}.hospital_map = containers.Map; end
                     if ~model.hospital_map.isKey(metadata.hospital)
                         model.modality{m}.hospital{end+1}.name = metadata.hospital;
-                        model.hospital_map(metadata.hospital)     = numel(model.modality{m}.hospital);
+                        model.hospital_map(metadata.hospital)  = numel(model.modality{m}.hospital);
                     end
                     h = model.hospital_map(metadata.hospital);
                     model.modality{m}.hospital{h}.gmm = metadata.gmm;
@@ -578,16 +572,19 @@ end
 model.dim = 0;
 if ~isempty(dat)
     for s=1:numel(dat)
+        % -----------------------------------------------------------------
+        % Modality specific
         if isfield(dat{s}, 'modality')
             for m=1:numel(dat{s}.modality)
-                if ~isfield(model, 'modality'), model.modality = {}; end
+                if ~isfield(model, 'modality'),     model.modality     = {}; end
+                if ~isfield(model, 'modality_map'), model.modality_map = containers.Map; end
                 % Create modality to store future GMM
                 name = dat{s}.modality{m}.name;
                 if ~model.modality_map.isKey(name)
-                    model.modality{end+1}.name   = name;
-                    model.modality_map(name)       = numel(model.modality);
+                    model.modality{end+1}.name      = name;
+                    model.modality_map(name)        = numel(model.modality);
                     model.modality{end}.channel_map = containers.Map;
-                    model.modality{end}.gmm      =  {};
+                    model.modality{end}.gmm         =  {};
                 end
                 mm = model.modality_map(name);
                 % Register channel names to map with channel number in GMM.
@@ -615,25 +612,39 @@ if ~isempty(dat)
                 end
             end
         end
+        % -----------------------------------------------------------------
+        % Label specific
         if isfield(dat{s}, 'label')
             for r=1:numel(dat{s}.label)
-                if ~isfield(model, 'rater_map'),     model.rater_map     = containers.Map; end
+                if ~isfield(model, 'rater_map'),    model.rater_map    = containers.Map; end
                 if ~isfield(model, 'protocol_map'), model.protocol_map = containers.Map; end
-                if ~isfield(model, 'rater'),      model.rater      = {}; end
-                if ~isfield(model, 'protocol'),  model.protocol  = {}; end
+                if ~isfield(model, 'rater'),        model.rater        = {}; end
+                if ~isfield(model, 'protocol'),     model.protocol     = {}; end
                 % Create rater (to store ???)
-                name      = dat{s}.label{r}.name;
+                name     = dat{s}.label{r}.name;
                 protocol = dat{s}.label{r}.protocol;
                 if ~model.rater_map.isKey(name)
                     model.rater{end+1}.name = name;
-                    model.rater_map(name)      = numel(model.rater);
+                    model.rater_map(name)   = numel(model.rater);
                 end
                 if ~model.protocol_map.isKey(protocol)
-                    model.protocol{end+1}.name = protocol;
+                    model.protocol{end+1}.name   = protocol;
                     model.protocol_map(protocol) = numel(model.protocol);
                 end
             end
         end
+        % -----------------------------------------------------------------
+        % Populations (= Groups)
+        if isfield(dat{s}, 'population')
+            if ~isfield(model, 'population_map'), model.population_map = containers.Map; end
+            if ~isfield(model, 'population'),     model.population     = {}; end
+            name = dat{s}.population;
+            if ~model.population.isKey(name)
+                model.population{end+1}.name = name;
+                model.population(name)       = numel(model.population);
+            end
+        end
+            
     end
 end
 
