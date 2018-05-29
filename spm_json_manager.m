@@ -37,28 +37,41 @@ end
 
 
 %==========================================================================
-function [dat,dict] = init_dat(input,load_dat,dat)
+function [dat,dict] = init_dat(input,dat,output_path)
 %__________________________________________________________________________
 % Initialise a dat object from one or several JSON files.
 % These JSON files can either be explicitely provided, or searched for in a
 % directory:
 %
-% FORMAT [dat,dict] = spm_json_manager('init_dat',input,load_dat)
+% FORMAT [dat,dict] = spm_json_manager('init_dat',input)
 %
 % input - Path to a JSON file or ot a directory with all the JSON files.
 %         The input can also be a list (= cell) of paths.
-% load_dat - Load (if exists) from population specific dat.mat files
 %
 % dat   - A hierarchical object (cell of structs) representing all input
 %         files and metadata
 % dict  - A dictionary mapping subject IDs to indices in dat.
 %
+% ---
 %
-% It is also possible to addup to an existing dat object:
+% The input files can also be `.mat` files containing an already built dat 
+% object. In this case, it is just loaded.
+%
+% ---
+%
+% It is possible to addup to an existing dat object:
 %
 % FORMAT [dat,dict] = spm_json_manager('init_dat', ..., dat)
 %
 % dat - An already initialised model structure.
+%
+% ---
+% 
+% Finally, it is possible to write the dat structure on disk, in a .mat
+% file:
+%
+% FORMAT [dat,dict] = spm_json_manager('init_dat', ..., 'path/to/dat.mat')
+% 
 %--------------------------------------------------------------------------
 % JSON SYNTAX
 % -----------
@@ -96,16 +109,16 @@ function [dat,dict] = init_dat(input,load_dat,dat)
 % However, in reality, fields only appear if the corresponding data was
 % found in the JSON files.
 %
-% dat{s}.modality_map                         [map modality names to indices]
+% dat{s}.modality_map                       [map modality names to indices]
 % dat{s}.modality{m}.name                                  [modality names]
 % dat{s}.modality{m}.nii                      [nifti - single channel case]
-% dat{s}.modality{m}.channel_map                [map channel names to indices]
+% dat{s}.modality{m}.channel_map             [map channel names to indices]
 % dat{s}.modality{m}.channel{c}.name                        [channel names]
 % dat{s}.modality{m}.channel{c}.nii         [nifti - multiple channel case]
-% dat{s}.rater_map                                [map rater names to indices]
+% dat{s}.rater_map                             [map rater names to indices]
 % dat{s}.label{r}.name                                        [rater names]
 % dat{s}.label{r}.nii                                               [nifti]
-% dat{s}.segmentation_map                  [map segmentation types to indices]
+% dat{s}.segmentation_map               [map segmentation types to indices]
 % dat{s}.segmentation{t}.name                           [segmentation type]
 % dat{s}.segmentation{t}.class{k}.name                        [tissue name]
 % dat{s}.segmentation{t}.class{k}.nii                               [nifti]
@@ -113,10 +126,15 @@ function [dat,dict] = init_dat(input,load_dat,dat)
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
 if nargin<2
-    load_dat = false;
-end
-if nargin<3
-    dat = {};
+    output_path = '';
+    dat         = {};
+elseif nargin<3
+    if ischar(dat)
+        output_path = dat;
+        dat         = {};
+    else
+        output_path = '';
+    end
 end
 
 % -------------------------------------------------------------------------
@@ -124,14 +142,52 @@ end
 dict = containers.Map;
 if ~isempty(dat)
     for s=1:numel(dat)
-        dict(dat{s}.name) = s;
+        if isempty(dat{s}.population)
+            key = dat{s}.name;
+        else
+            key = [dat{s}.population '_' dat{s}.name];
+        end
+        dict(key) = s;
     end
 end
 pre_count = dict.Count;
 
+
+if ~iscell(input), input = {input}; end
+
+% -------------------------------------------------------------------------
+% Get all input mat files
+mat_files = [];
+mat_idx   = zeros(1,numel(input), 'logical');
+for i=1:numel(input)
+    if numel(input{i}) >= 5 && strcmpi(input{i}(end-3:end), '.mat')
+        mat_files  = [mat_files ; dir(input{i})];
+        mat_idx(i) = true;
+    end
+end
+for j=1:numel(mat_files)
+    pth_mat = fullfile(mat_files(j).folder,mat_files(j).name);
+    if exist(pth_mat, 'file')
+        dat1 = load(pth_mat, 'dat');
+        dat1 = dat1.dat;
+        if ~isempty(dat1)
+            for s=1:numel(dat1)
+                if isempty(dat1{s}.population)
+                    key = dat1{s}.name;
+                else
+                    key = [dat1{s}.population '_' dat1{s}.name];
+                end
+                dict(key) = dict.Count + 1;
+            end
+            dat = [dat dat1];
+        end
+        clear dat1
+    end
+end
+input = input(~mat_idx);
+
 % -------------------------------------------------------------------------
 % Get all input json files
-if ~iscell(input), input = {input}; end
 json_files = [];
 for i=1:numel(input)
     if numel(input{i}) >= 5 && strcmpi(input{i}(end-4:end), '.json')
@@ -145,16 +201,12 @@ J = numel(json_files);
 
 % -------------------------------------------------------------------------
 % Display the number of files read
-base10 = floor(log10(J)) + 1;
-str    = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
-fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
-tic;
-
-% -------------------------------------------------------------------------
-% Stuff for reading and writing the dat object
-odir_json  = '';
-first_iter = true;
-loaded_dat = false;
+if J > 0
+    base10 = floor(log10(J)) + 1;
+    str    = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
+    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
+    tic;
+end
 
 % -------------------------------------------------------------------------
 % Loop over files
@@ -171,36 +223,6 @@ for j=1:J
     % ---------------------------------------------------------------------
     % Get path to JSON file
     pth_json = fullfile(json_files(j).folder,json_files(j).name);    
-    
-    if load_dat        
-        % Loading from file (if exists)
-        pth_dat = fullfile(json_files(j).folder,'dat.mat');
-        if exist(pth_dat,'file')==2
-            loaded_dat = true;                        
-            
-            dir_json = json_files(j).folder;
-            if strcmp(dir_json,odir_json)
-                % This just increments the for-loop index
-                continue
-            end
-            odir_json = dir_json;
-            
-            dat1 = load(pth_dat);
-            dat1 = dat1.dat1;
-            J1   = numel(dat1);                      
-            
-            for j1=1:J1
-                dat{end + 1} = dat1{j1};
-            end                
-             
-            continue
-        end
-    end
-    
-    if loaded_dat
-        error('Currently does not support both loading from dat.mat and reading from JSONs')
-    end
-    
     list_metadata = spm_jsonread(pth_json);  
     if ~iscell(list_metadata), list_metadata = {list_metadata}; end
     I = numel(list_metadata);
@@ -217,20 +239,6 @@ for j=1:J
         % Get poulation and subject name
         name       = metadata.name;
         population = metadata.population;
-                  
-        if ~first_iter
-            if ~strcmp(opopulation,population)
-                % New population -> save dat object for previous population
-                pth_dat = fullfile(json_files(j - 1).folder,'dat.mat');
-                if exist(pth_dat,'file')==2
-                    delete(pth_dat);
-                end
-                
-                dat1 = get_population(dat,opopulation);                
-                save(pth_dat,'dat1')
-            end
-        end
-        opopulation = population;     
         
         % Create dictionary key
         if ~isempty(population),    key = [population '_' name];
@@ -427,29 +435,22 @@ for j=1:J
         dat{s} = orderfields(dat{s});
         
     end % < Loop over elements (I)
-    
-    if ~first_iter || J==1
-        if strcmp(opopulation,population) && j==J
-            % Only one, or last population -> save dat object
-            pth_dat = fullfile(json_files(j).folder,'dat.mat');
-            if exist(pth_dat,'file')==2
-                delete(pth_dat);
-            end
-
-            dat1 = get_population(dat,opopulation);                
-            save(pth_dat,'dat1')
-        end
-    else
-        first_iter = false;
-    end
 end % < Loop over files (J)
 
 % -------------------------------------------------------------------------
+% Save file on disk if needed
+if ~isempty(output_path)
+    save(output_path, 'dat');
+end
+
+% -------------------------------------------------------------------------
 % Display number of files read
-fprintf(1, repmat('\b',1,2*base10 + 50));
-str = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
-fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
-fprintf('\n');
+if J > 0
+    fprintf(1, repmat('\b',1,2*base10 + 50));
+    str = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
+    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
+    fprintf('\n');
+end
 
 reswhos = whos('dat');
 siz = reswhos.bytes;
@@ -468,9 +469,9 @@ if siz > 1024
 end
 
 if numel(input) == 1
-    fprintf('Initialising dat | Loaded %i subjects from %s in %0.1f seconds (%d%s).\n',numel(dat),input{1},toc,siz,unit);
+    fprintf('Initialising dat | Loaded %i subjects from %s in %0.1f seconds (%d%s).\n',numel(dat)-pre_count,input{1},toc,siz,unit);
 else
-    fprintf('Initialising dat | Loaded %i subjects in %0.1f seconds (%d%s).\n',numel(dat),toc,siz,unit);
+    fprintf('Initialising dat | Loaded %i subjects in %0.1f seconds (%d%s).\n',numel(dat)-pre_count,toc,siz,unit);
 end
 %==========================================================================
 
@@ -513,12 +514,6 @@ if numel(varargin) == 1
 elseif numel(varargin) > 1
     warning('[spm_json_manager::init_model] Too many arguments. Don''t know what to do.')
 end
-
-% -------------------------------------------------------------------------
-% Dictionary for modality_map / hospital_map
-% -------------------------------------------------------------------------
-if ~isfield(model, 'modality_map'), model.modality_map = containers.Map; end
-if ~isfield(model, 'hospital_map'),  model.hospital_map  = containers.Map; end
 
 % -------------------------------------------------------------------------
 % Parse JSON files
@@ -612,20 +607,20 @@ for j=1:J
                 if ~isfield(metadata, 'channel_map')
                     error('GMM json files must have a ''channel_map'' field.');
                 end
-                if ~isfield(model, 'modality'), model.modality = {}; end
+                if ~isfield(model, 'modality'),     model.modality     = {}; end
+                if ~isfield(model, 'modality_map'), model.modality_map = containers.Map; end
                 if ~model.modality_map.isKey(metadata.modality)
-                    model.modality{end+1}.name          = metadata.modality;
+                    model.modality{end+1}.name            = metadata.modality;
                     model.modality_map(metadata.modality) = numel(model.modality);
-                    model.modality{end}.channel_map        = metadata.channel_map;
+                    model.modality{end}.channel_map       = metadata.channel_map;
                 end
                 m = model.modality_map(metadata.modality);
                 if isfield(metadata, 'hospital')
-                    if ~isfield(model.modality{m}, 'hospital')
-                        model.modality{m}.hospital = {};
-                    end
+                    if ~isfield(model.modality{m}, 'hospital'),     model.modality{m}.hospital     = {}; end
+                    if ~isfield(model.modality{m}, 'hospital_map'), model.modality{m}.hospital_map = containers.Map; end
                     if ~model.hospital_map.isKey(metadata.hospital)
                         model.modality{m}.hospital{end+1}.name = metadata.hospital;
-                        model.hospital_map(metadata.hospital)     = numel(model.modality{m}.hospital);
+                        model.hospital_map(metadata.hospital)  = numel(model.modality{m}.hospital);
                     end
                     h = model.hospital_map(metadata.hospital);
                     model.modality{m}.hospital{h}.gmm = metadata.gmm;
@@ -649,16 +644,19 @@ end
 model.dim = 0;
 if ~isempty(dat)
     for s=1:numel(dat)
+        % -----------------------------------------------------------------
+        % Modality specific
         if isfield(dat{s}, 'modality')
             for m=1:numel(dat{s}.modality)
-                if ~isfield(model, 'modality'), model.modality = {}; end
+                if ~isfield(model, 'modality'),     model.modality     = {}; end
+                if ~isfield(model, 'modality_map'), model.modality_map = containers.Map; end
                 % Create modality to store future GMM
                 name = dat{s}.modality{m}.name;
                 if ~model.modality_map.isKey(name)
-                    model.modality{end+1}.name   = name;
-                    model.modality_map(name)       = numel(model.modality);
+                    model.modality{end+1}.name      = name;
+                    model.modality_map(name)        = numel(model.modality);
                     model.modality{end}.channel_map = containers.Map;
-                    model.modality{end}.gmm      =  {};
+                    model.modality{end}.gmm         =  {};
                 end
                 mm = model.modality_map(name);
                 % Register channel names to map with channel number in GMM.
@@ -686,25 +684,39 @@ if ~isempty(dat)
                 end
             end
         end
+        % -----------------------------------------------------------------
+        % Label specific
         if isfield(dat{s}, 'label')
             for r=1:numel(dat{s}.label)
-                if ~isfield(model, 'rater_map'),     model.rater_map     = containers.Map; end
+                if ~isfield(model, 'rater_map'),    model.rater_map    = containers.Map; end
                 if ~isfield(model, 'protocol_map'), model.protocol_map = containers.Map; end
-                if ~isfield(model, 'rater'),      model.rater      = {}; end
-                if ~isfield(model, 'protocol'),  model.protocol  = {}; end
+                if ~isfield(model, 'rater'),        model.rater        = {}; end
+                if ~isfield(model, 'protocol'),     model.protocol     = {}; end
                 % Create rater (to store ???)
-                name      = dat{s}.label{r}.name;
+                name     = dat{s}.label{r}.name;
                 protocol = dat{s}.label{r}.protocol;
                 if ~model.rater_map.isKey(name)
                     model.rater{end+1}.name = name;
-                    model.rater_map(name)      = numel(model.rater);
+                    model.rater_map(name)   = numel(model.rater);
                 end
                 if ~model.protocol_map.isKey(protocol)
-                    model.protocol{end+1}.name = protocol;
+                    model.protocol{end+1}.name   = protocol;
                     model.protocol_map(protocol) = numel(model.protocol);
                 end
             end
         end
+        % -----------------------------------------------------------------
+        % Populations (= Groups)
+        if isfield(dat{s}, 'population')
+            if ~isfield(model, 'population_map'), model.population_map = containers.Map; end
+            if ~isfield(model, 'population'),     model.population     = {}; end
+            name = dat{s}.population;
+            if ~model.population.isKey(name)
+                model.population{end+1}.name = name;
+                model.population(name)       = numel(model.population);
+            end
+        end
+            
     end
 end
 
@@ -847,14 +859,20 @@ if ~is_absolute(pop_dir)
     pop_dir = fullfile(pwd, pop_dir);
 end
 if isdir(pop_dir)
+    % get json files
     files           = dir(fullfile(pop_dir, pattern));
     [files.folder]  = deal(pop_dir);
+    % filter out hidden files
+    good_idx = regexp({files.name}, '^[^.]+');  
+    good_idx = ~cellfun('isempty', good_idx);
+    files    = files(good_idx);
+    % search subfolders
     dirs            = dir(pop_dir);
     [dirs.folder]   = deal(pop_dir);
     is_dir          = [dirs.isdir];
     dirs            = dirs(is_dir);
     for i=1:numel(dirs)
-        if ~any(strcmpi(dirs(i).name, {'.','..'}))
+        if dirs(i).name(1) ~= '.'
             files = [files ; rdir(fullfile(dirs(i).folder, dirs(i).name), pattern)];
         end
     end
