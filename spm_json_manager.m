@@ -388,7 +388,7 @@ for j=1:J
             t = dat{s}.segmentation_map(type);
             if ~isfield(dat{s}.segmentation{t}, 'class')
                 dat{s}.segmentation{t}.class   = {};
-                dat{s}.segmentaload_dattion{t}.class_map = containers.Map;
+                dat{s}.segmentation{t}.class_map = containers.Map;
             end
             if ~dat{s}.segmentation{t}.class_map.isKey(tissue)
                 c                                      = numel(dat{s}.segmentation{t}.class) + 1;
