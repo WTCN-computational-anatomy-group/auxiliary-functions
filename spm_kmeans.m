@@ -21,7 +21,7 @@ function [L,C,SUMD,D] = spm_kmeans(X, K, varargin)
 %                   or a KxPxR array with R the number of replicates
 % Replicates - Number of replicates with different starts [1]
 % Missing    - Keep rows with missing data [true]
-% Order      - Centroid ordering method: ['random'], 'total', 'magnitude'
+% Order      - Centroid ordering method: ['magnitude'], 'total', 'random'
 % Verbose    - Verbosity level [0]
 %
 % OUTPUT
@@ -48,7 +48,7 @@ p.addOptional('W',           1,             @isnumeric);
 p.addParameter('Distance',   'sqeuclidian', @ischar);
 p.addParameter('Start',      'plus',        @(X) ischar(X) || isnumeric(X));
 p.addParameter('Replicates', 1,             @isnumeric);
-p.addParameter('Order',      'random',      @ischar);
+p.addParameter('Order',      'magnitude',   @ischar);
 p.addParameter('Missing',    true,          @isscalar);
 p.addParameter('Verbose',    0,             @isscalar);
 p.parse(X, K, varargin{:});
