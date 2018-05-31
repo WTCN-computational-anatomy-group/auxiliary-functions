@@ -713,9 +713,9 @@ if ~isempty(dat)
             if ~isfield(model, 'population_map'), model.population_map = containers.Map; end
             if ~isfield(model, 'population'),     model.population     = {}; end
             name = dat{s}.population;
-            if ~model.population.isKey(name)
+            if ~model.population_map.isKey(name)
                 model.population{end+1}.name = name;
-                model.population(name)       = numel(model.population);
+                model.population_map(name)       = numel(model.population);
             end
         end
             
