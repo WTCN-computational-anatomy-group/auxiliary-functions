@@ -161,8 +161,10 @@ mat_files = [];
 mat_idx   = zeros(1,numel(input), 'logical');
 for i=1:numel(input)
     if numel(input{i}) >= 5 && strcmpi(input{i}(end-3:end), '.mat')
-        mat_files  = [mat_files ; dir(input{i})];
-        mat_idx(i) = true;
+        mat_files          = [mat_files ; dir(input{i})];
+        folder             = fileparts(input{i});
+        [mat_files.folder] = deal(folder);
+        mat_idx(i)         = true;
     end
 end
 for j=1:numel(mat_files)
