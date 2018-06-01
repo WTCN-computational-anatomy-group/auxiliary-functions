@@ -357,6 +357,7 @@ function [V,W,C] = hist(X,varargin)
 % Missing  - Keep rows with missing data [false]
 %            Additional bins are created for missing values.
 % Reshape  - Reshape W and V so that their lattice is B1xB2x... [false]
+% Smooth   - FWHM of the smoothing kernel (in bins) [0]
 % Verbose  - Verbosity level [0]
 %
 % OUTPUT
@@ -378,6 +379,7 @@ p.addOptional('B',           64,    @isnumeric);
 p.addParameter('KeepZero',   true,  @isscalar);
 p.addParameter('Missing',    false, @isscalar);
 p.addParameter('Reshape',    false, @isscalar);
+p.addParameter('Smooth',     0,     @isnumeric);
 p.addParameter('Verbose',    0,     @isscalar);
 p.parse(X, varargin{:});
 B = p.Results.B;
@@ -425,13 +427,14 @@ clear B
 I = cell(1,P);
 V = cell(1,P);
 dim = zeros(1,P);
+hasnan = zeros(1,P,'logical');
 for c=1:P
     [I{c},V{c}]       = discretize(X(:,c),E{c});
     I{c}(isnan(I{c})) = numel(V{c});
     V{c} = (V{c}(2:end) + V{c}(1:end-1))/2;
-    hasnan = any(isnan(X(:,c)));
-    dim(c) = numel(V{c}) + hasnan;
-    if hasnan
+    hasnan(c) = any(isnan(X(:,c)));
+    dim(c) = numel(V{c}) + hasnan(c);
+    if hasnan(c)
         V{c}(end+1) = NaN;
     end
 end
@@ -449,6 +452,33 @@ W    = W.';
 
 if p.Results.Reshape && ~p.Results.KeepZero
     error('spm_imbasics::hist - Cannot Reshape and not KeepZero')
+end
+
+
+% -------------------------------------------------------------------------
+% Smooth
+if p.Results.Smooth
+    W = reshape(W, dim);
+    lim = ceil(4/2.355*p.Results.Smooth);
+    ker = spm_smoothkern(p.Results.Smooth, -lim:lim, 0);
+    ker = ker(ker~=0);
+    for c=1:P
+        if hasnan(c)
+            W1        = W;
+            subs      = cell(1,P);
+            [subs{:}] = deal(':');
+            subs{c}   = 1:size(W,c)-1;
+            W = subsref(W1, struct('type', '()', 'subs', {subs}));
+        end
+        W = convn(W, reshape(ker, [ones(1,c-1) numel(ker) 1]), 'same');
+        if hasnan(c)
+            [W1,W] = deal(W,W1);
+            W = subsasgn(W, struct('type', '()', 'subs', {subs}), W1);
+            clear W1
+        end
+        
+    end
+    W = W(:);
 end
 
 % -------------------------------------------------------------------------
