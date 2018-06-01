@@ -206,12 +206,12 @@ J = numel(json_files);
 if J > 0
     base10 = floor(log10(J)) + 1;
     str    = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
-    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
-    tic;
+    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);    
 end
 
 % -------------------------------------------------------------------------
 % Loop over files
+tic;
 for j=1:J
     
     % ---------------------------------------------------------------------
