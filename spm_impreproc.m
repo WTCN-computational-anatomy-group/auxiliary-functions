@@ -2,12 +2,13 @@ function varargout = spm_impreproc(varargin)
 %__________________________________________________________________________
 % Collection of tools for image pre-processing.
 %
-% FORMAT [Affine,bb] = atlas_crop(P,Affine,prefix,rem_neck)
-% FORMAT nm_reorient(Vin,vx,type)
-% FORMAT reset_origin(P)
-% FORMAT R = rigid_align(P)
-% FORMAT V = reg_and_reslice(V)
-% FORMAT subvol(V,bb,prefix)
+% FORMAT [Affine,bb] = spm_impreproc('atlas_crop',P,Affine,prefix,rem_neck)
+% FORMAT spm_impreproc('nm_reorient',Vin,vx,type)
+% FORMAT spm_impreproc('reset_origin',P)
+% FORMAT R = spm_impreproc('rigid_align',P)
+% FORMAT V = spm_impreproc('reg_and_reslice',V)
+% FORMAT spm_impreproc('subvol',V,bb,prefix)
+% FORMAT nfname = spm_impreproc('decimate_inplane',fname,vx1)
 %
 % FORMAT help spm_impreproc>function
 % Returns the help file of the selected function.
@@ -33,7 +34,9 @@ switch lower(id)
     case 'rigid_align'
         [varargout{1:nargout}] = rigid_align(varargin{:});                  
     case 'subvol'
-        [varargout{1:nargout}] = subvol(varargin{:});                
+        [varargout{1:nargout}] = subvol(varargin{:});    
+    case 'decimate_inplane'
+        [varargout{1:nargout}] = decimate_inplane(varargin{:});            
     otherwise
         help spm_impreproc
         error('Unknown function %s. Type ''help spm_impreproc'' for help.', id)
@@ -426,6 +429,56 @@ end
 %==========================================================================
 
 %==========================================================================
+function nfname = decimate_inplane(fname,vx1)
+% Down-sample a NIfTI image in the high-resolution plane
+% FORMAT nfname = decimate_inplane(fname,vx1)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging  
+if nargin<2, vx1 = 1; end
+
+if numel(vx1)==1
+    vx1 = [vx1(1) vx1(1) vx1(1)];
+end
+
+Nii  = nifti(fname);
+mat0 = Nii.mat;             
+
+% Get down-sampling factor
+vx0       = spm_misc('vxsize',mat0);   
+d         = ((vx0 < vx1).*vx0)./vx1;
+d(d == 0) = 1;   
+
+if sum(d)==3
+    % Do not downsample if in-plane res Xhat equals in-plane res Y
+    warning('do_dsinp::false')
+    return
+end
+
+% Decimate (smooth and resample)
+%--------------------------------------------------------------------------
+D      = diag([d, 1]);          
+mat_ds = mat0/D;
+vx_ds  = spm_misc('vxsize',mat_ds);
+
+X   = Nii.dat(:,:,:);     
+dm0 = size(X);    
+
+fwhm = max(vx_ds./vx0 - 1,0.01);        
+spm_imbasics('smooth_img_in_mem',X,fwhm);                                                 
+         
+C               = spm_bsplinc(X,[1 1 1 0 0 0]); % Resample using 1st order b-splines
+[x1,y1,z1]      = get_downsampling_grid(D,dm0);                  
+X               = spm_bsplins(C,x1,y1,z1,[1 1 1 0 0 0]);
+X(~isfinite(X)) = 0;
+
+fname         = Nii.dat.fname;
+[pth,nam,ext] = fileparts(fname);
+nfname        = fullfile(pth,['ds_' nam ext]);
+
+spm_misc('create_nii',nfname,X,mat_ds,Nii.dat.dtype,Nii.descrip);
+%==========================================================================
+
+%==========================================================================
 % HELPER FUNCTIONS
 %==========================================================================
 
@@ -446,4 +499,17 @@ y1 = zeros(size(y0),'single');
 for d=1:3,
     y1(:,:,:,d) = y0(:,:,:,1)*M(d,1) + y0(:,:,:,2)*M(d,2) + y0(:,:,:,3)*M(d,3) + M(d,4);
 end
+%==========================================================================
+
+%==========================================================================
+function [x1,y1,z1] = get_downsampling_grid(M,dm)
+T          = eye(4)/M;   
+dm         = floor(M(1:3,1:3)*dm')';
+[x0,y0,z0] = ndgrid(1:dm(1),...
+                    1:dm(2),...
+                    1:dm(3));
+
+x1 = T(1,1)*x0 + T(1,2)*y0 + T(1,3)*z0 + T(1,4);
+y1 = T(2,1)*x0 + T(2,2)*y0 + T(2,3)*z0 + T(2,4);
+z1 = T(3,1)*x0 + T(3,2)*y0 + T(3,3)*z0 + T(3,4);  
 %==========================================================================
