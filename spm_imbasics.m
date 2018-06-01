@@ -2,11 +2,12 @@ function varargout = spm_imbasics(varargin)
 %__________________________________________________________________________
 % Collection of tools for image calculation (gradient, suff stat, ...).
 %
-% FORMAT div = dive(Dx,Dy,Dz,vx)
-% FORMAT [Dx,Dy,Dz] = grad(X,vx)
-% FORMAT smooth_img_in_mem(img,fwhm) 
-% FORMAT [mg,mn,vr] = fit_gmm2hist(c,x,K,verbose)
-% FORMAT [a,m,b,n,W,mg,lb] = fit_vbgmm2hist(c,x,K,stop_early,tol,verbose)
+% FORMAT [V,W,C]    = spm_imbasics('hist',X,...)
+% FORMAT div        = spm_imbasics('dive',Dx,Dy,Dz,vx)
+% FORMAT [Dx,Dy,Dz] = spm_imbasics('grad',X,vx)
+% FORMAT spm_imbasics('smooth_img_in_mem',img,fwhm) 
+% FORMAT [mg,mn,vr] = spm_imbasics('fit_gmm2hist',c,x,K,verbose)
+% FORMAT [a,m,b,n,W,mg,lb] = spm_imbasics('fit_vbgmm2hist',c,x,K,stop_early,tol,verbose)
 %
 % FORMAT help spm_imbasics>function
 % Returns the help file of the selected function.
@@ -24,7 +25,9 @@ switch lower(id)
     case 'grad'
         [varargout{1:nargout}] = grad(varargin{:});
     case 'smooth_img_in_mem'
-        [varargout{1:nargout}] = smooth_img_in_mem(varargin{:});          
+        [varargout{1:nargout}] = smooth_img_in_mem(varargin{:});           
+    case 'hist'
+        [varargout{1:nargout}] = hist(varargin{:});        
     case 'fit_gmm2hist'
         [varargout{1:nargout}] = fit_gmm2hist(varargin{:});                 
     case 'fit_vbgmm2hist'
@@ -328,6 +331,170 @@ end
 % mg = exp(lnpi); % Expected mixing coefficients
 return
 %==========================================================================
+
+%==========================================================================
+function [V,W,C] = hist(X,varargin)
+% _________________________________________________________________________
+%
+% Compute the (joint) histogram of a (multidimensional) dataset
+%
+% FORMAT [V,W,C] = spm_misc('hist',X,B..)
+% FORMAT [V,W]   = spm_misc('hist',X,C..)
+%
+% MANDATORY
+% ---------
+% X - NxP matrix of observed values
+% 
+% OPTIONAL
+% --------
+% B - 1x1 or 1xP number of bins [64]
+%   or
+% C - Bx1 ordered bin centres (or 1xP cell of bin centres)
+%
+% KEYWORD
+% -------
+% KeepZero - Keep bins with zero observations [true]
+% Missing  - Keep rows with missing data [false]
+%            Additional bins are created for missing values.
+% Reshape  - Reshape W and V so that their lattice is B1xB2x... [false]
+% Smooth   - FWHM of the smoothing kernel (in bins) [0]
+% Verbose  - Verbosity level [0]
+%
+% OUTPUT
+% ------
+% V - prod(Bp) x P matrix of multidimensional values (bin centres)
+% W - prod(Bp) x 1 vector of weights (bin counts)
+% C - 1xP cell of Bx1 bin centres
+%
+% (B can be smaller that the specified number of bins if KeepZero = false)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+    
+% -------------------------------------------------------------------------
+% Parse inputs
+p = inputParser;
+p.FunctionName = 'spm_misc(''hist'')';
+p.addRequired('X',                  @isnumeric);
+p.addOptional('B',           64,    @isnumeric);
+p.addParameter('KeepZero',   true,  @isscalar);
+p.addParameter('Missing',    false, @isscalar);
+p.addParameter('Reshape',    false, @isscalar);
+p.addParameter('Smooth',     0,     @isnumeric);
+p.addParameter('Verbose',    0,     @isscalar);
+p.parse(X, varargin{:});
+B = p.Results.B;
+
+
+% -------------------------------------------------------------------------
+% Discard missing values
+if ~p.Results.Missing
+    missing = any(isnan(X),2);
+    X       = X(~missing,:);
+end
+
+% -------------------------------------------------------------------------
+% Compute bin centres
+P      = size(X,2); % Number of channels
+N      = size(X,1); % Number of observations
+minval = min(X, [], 1, 'omitnan'); % Min value / channel
+maxval = max(X, [], 1, 'omitnan'); % Max value / channel
+if ~iscell(B) && size(B,1) == 1
+% Number of bins provided
+    E = B;
+    if numel(B) < P
+        E = padarray(E, P-numel(B), 'replicate', 'post');
+    end
+    E = num2cell(E);
+else
+% Bin centres provided
+    if ~iscell(B)
+        if size(B,2) == 1
+            B = repmat(B(:), P);
+        end
+        B = num2cell(B, 1);
+    end
+        
+    E = cell(1,P);
+    for c=1:P
+        E{c} = (B{c}(2:end) + B{c}(1:end-1))/2;
+        E{c} = [minval(c); E{c}; maxval(c)];
+    end
+end
+clear B
+
+% -------------------------------------------------------------------------
+% Discretize data
+I = cell(1,P);
+V = cell(1,P);
+dim = zeros(1,P);
+hasnan = zeros(1,P,'logical');
+for c=1:P
+    [I{c},V{c}]       = discretize(X(:,c),E{c});
+    I{c}(isnan(I{c})) = numel(V{c});
+    V{c} = (V{c}(2:end) + V{c}(1:end-1))/2;
+    hasnan(c) = any(isnan(X(:,c)));
+    dim(c) = numel(V{c}) + hasnan(c);
+    if hasnan(c)
+        V{c}(end+1) = NaN;
+    end
+end
+clear E
+clear X
+
+% -------------------------------------------------------------------------
+% Count
+linI = sub2ind(dim, I{:}); clear I
+W    = histcounts(linI, 1:prod(dim)+1); clear linI
+C    = V;
+V    = combvec(V{:});
+V    = V.';
+W    = W.';
+
+if p.Results.Reshape && ~p.Results.KeepZero
+    error('spm_imbasics::hist - Cannot Reshape and not KeepZero')
+end
+
+
+% -------------------------------------------------------------------------
+% Smooth
+if p.Results.Smooth
+    W = reshape(W, dim);
+    lim = ceil(4/2.355*p.Results.Smooth);
+    ker = spm_smoothkern(p.Results.Smooth, -lim:lim, 0);
+    ker = ker(ker~=0);
+    for c=1:P
+        if hasnan(c)
+            W1        = W;
+            subs      = cell(1,P);
+            [subs{:}] = deal(':');
+            subs{c}   = 1:size(W,c)-1;
+            W = subsref(W1, struct('type', '()', 'subs', {subs}));
+        end
+        W = convn(W, reshape(ker, [ones(1,c-1) numel(ker) 1]), 'same');
+        if hasnan(c)
+            [W1,W] = deal(W,W1);
+            W = subsasgn(W, struct('type', '()', 'subs', {subs}), W1);
+            clear W1
+        end
+        
+    end
+    W = W(:);
+end
+
+% -------------------------------------------------------------------------
+% Reshape
+if p.Results.Reshape
+    W = reshape(W, dim);
+    V = reshape(V, [dim P]);
+end
+
+% -------------------------------------------------------------------------
+% Remove empty bins
+if ~p.Results.KeepZero
+    empty = W == 0;
+    W     = W(~empty);
+    V     = V(~empty,:);
+end
 
 %==========================================================================
 % HELPER FUNCTIONS
