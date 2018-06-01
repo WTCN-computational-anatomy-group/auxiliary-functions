@@ -8,7 +8,7 @@ function varargout = spm_impreproc(varargin)
 % FORMAT R = spm_impreproc('rigid_align',P)
 % FORMAT V = spm_impreproc('reg_and_reslice',V)
 % FORMAT spm_impreproc('subvol',V,bb,prefix)
-% FORMAT nfname = spm_impreproc('decimate_inplane',fname,vx1)
+% FORMAT nfname = spm_impreproc('downsample_inplane',fname,vx1)
 %
 % FORMAT help spm_impreproc>function
 % Returns the help file of the selected function.
@@ -35,8 +35,8 @@ switch lower(id)
         [varargout{1:nargout}] = rigid_align(varargin{:});                  
     case 'subvol'
         [varargout{1:nargout}] = subvol(varargin{:});    
-    case 'decimate_inplane'
-        [varargout{1:nargout}] = decimate_inplane(varargin{:});            
+    case 'downsample_inplane'
+        [varargout{1:nargout}] = downsample_inplane(varargin{:});            
     otherwise
         help spm_impreproc
         error('Unknown function %s. Type ''help spm_impreproc'' for help.', id)
@@ -429,9 +429,9 @@ end
 %==========================================================================
 
 %==========================================================================
-function nfname = decimate_inplane(fname,vx1)
+function nfname = downsample_inplane(fname,vx1)
 % Down-sample a NIfTI image in the high-resolution plane
-% FORMAT nfname = decimate_inplane(fname,vx1)
+% FORMAT nfname = downsample_inplane(fname,vx1)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging  
 if nargin<2, vx1 = 1; end
@@ -454,7 +454,7 @@ if sum(d)==3
     return
 end
 
-% Decimate (smooth and resample)
+% Downsample
 %--------------------------------------------------------------------------
 D      = diag([d, 1]);          
 mat_ds = mat0/D;
@@ -463,10 +463,10 @@ vx_ds  = spm_misc('vxsize',mat_ds);
 X   = Nii.dat(:,:,:);     
 dm0 = size(X);    
 
-fwhm = max(vx_ds./vx0 - 1,0.01);        
-spm_imbasics('smooth_img_in_mem',X,fwhm);                                                 
+% fwhm = max(vx_ds./vx0 - 1,0.01);        
+% spm_imbasics('smooth_img_in_mem',X,fwhm);                                                 
          
-C               = spm_bsplinc(X,[1 1 1 0 0 0]); % Resample using 1st order b-splines
+C               = spm_bsplinc(X,[0 0 0 0 0 0]); % Resample using 0th order b-splines (NN)
 [x1,y1,z1]      = get_downsampling_grid(D,dm0);                  
 X               = spm_bsplins(C,x1,y1,z1,[1 1 1 0 0 0]);
 X(~isfinite(X)) = 0;
