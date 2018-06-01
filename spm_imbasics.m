@@ -8,6 +8,7 @@ function varargout = spm_imbasics(varargin)
 % FORMAT spm_imbasics('smooth_img_in_mem',img,fwhm) 
 % FORMAT [mg,mn,vr] = spm_imbasics('fit_gmm2hist',c,x,K,verbose)
 % FORMAT [a,m,b,n,W,mg,lb] = spm_imbasics('fit_vbgmm2hist',c,x,K,stop_early,tol,verbose)
+% FORMAT nfname = spm_imbasics('decimate_inplane',fname,vx1)
 %
 % FORMAT help spm_imbasics>function
 % Returns the help file of the selected function.
@@ -32,6 +33,8 @@ switch lower(id)
         [varargout{1:nargout}] = fit_gmm2hist(varargin{:});                 
     case 'fit_vbgmm2hist'
         [varargout{1:nargout}] = fit_vbgmm2hist(varargin{:});                 
+    case 'decimate_inplane'
+        [varargout{1:nargout}] = decimate_inplane(varargin{:});                         
     otherwise
         help spm_imcalc
         error('Unknown function %s. Type ''help spm_imcalc'' for help.', id)
@@ -495,9 +498,74 @@ if ~p.Results.KeepZero
     W     = W(~empty);
     V     = V(~empty,:);
 end
+%==========================================================================
+
+%==========================================================================
+function nfname = decimate_inplane(fname,vx1)
+% Down-sample a NIfTI image in the high-resolution plane
+% FORMAT nfname = decimate_inplane(fname,vx1)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging  
+if nargin<2, vx1 = 1; end
+
+if numel(vx1)==1
+    vx1 = [vx1(1) vx1(1) vx1(1)];
+end
+
+Nii  = nifti(fname);
+mat0 = Nii.mat;             
+
+% Get down-sampling factor
+vx0       = spm_misc('vxsize',mat0);   
+d         = ((vx0 < vx1).*vx0)./vx1;
+d(d == 0) = 1;   
+
+if sum(d)==3
+    % Do not downsample if in-plane res Xhat equals in-plane res Y
+    warning('do_dsinp::false')
+    return
+end
+
+% Smooth and resample in-plane                
+D      = diag([d, 1]);          
+mat_ds = mat0/D;
+vx_ds  = spm_misc('vxsize',mat_ds);
+
+X   = Nii.dat(:,:,:);     
+dm0 = size(X);    
+
+fwhm = max(vx_ds./vx0 - 1,0.01);        
+spm_imbasics('smooth_img_in_mem',X,fwhm);                                                 
+
+% Resample using 1st order b-splines             
+C               = spm_bsplinc(X,[1 1 1 0 0 0]);            
+[x1,y1,z1]      = get_downsampling_grid(D,dm0);                  
+X               = spm_bsplins(C,x1,y1,z1,[1 1 1 0 0 0]);
+X(~isfinite(X)) = 0;
+
+fname         = Nii.dat.fname;
+[pth,nam,ext] = fileparts(fname);
+nfname        = fullfile(pth,['ds_' nam ext]);
+
+spm_misc('create_nii',nfname,X,mat_ds,Nii.dat.dtype,Nii.descrip);
+delete(fname);
+%==========================================================================
 
 %==========================================================================
 % HELPER FUNCTIONS
+%==========================================================================
+
+%==========================================================================
+function [x1,y1,z1] = get_downsampling_grid(M,dm)
+T          = eye(4)/M;   
+dm         = floor(M(1:3,1:3)*dm')';
+[x0,y0,z0] = ndgrid(1:dm(1),...
+                    1:dm(2),...
+                    1:dm(3));
+
+x1 = T(1,1)*x0 + T(1,2)*y0 + T(1,3)*z0 + T(1,4);
+y1 = T(2,1)*x0 + T(2,2)*y0 + T(2,3)*z0 + T(2,4);
+z1 = T(3,1)*x0 + T(3,2)*y0 + T(3,3)*z0 + T(3,4);  
 %==========================================================================
 
 %==========================================================================
