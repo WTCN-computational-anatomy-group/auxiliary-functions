@@ -109,7 +109,7 @@ for r=1:p.Results.Replicates
     
     % ---------------------------------------------------------------------
     % Initial centroids
-    C1 = start(p.Results.Start, X, K, dist, r);
+    C1 = start(p.Results.Start, X, WW, K, dist, r);
     
     % ---------------------------------------------------------------------
     % Iterate
@@ -243,7 +243,7 @@ for k=1:size(C,1)
 end
 
 % =========================================================================
-function [C,K] = start(method, X, K, dist, r)
+function [C,K] = start(method, X, WW, K, dist, r)
 % FORMAT C = start(method, X, K, dist)
 % method - Method to use to select starting centroids
 %               'plus', 'sample', 'uniform' or provided matrix
@@ -267,7 +267,7 @@ switch method
     % proportional to theirs distance to the closest centroid.
     % This allows to start with centroids that are reasonably far from one
     % another.
-        X = X(~any(isnan(X),2),:); % Remove all rows with NaNs
+        X = X(~any(WW==0,2),:); % Remove all rows w/ NaNs or w/o obs
         C = zeros(K, size(X,2));
         i = randi(size(X,1));
         C(1,:) = X(i,:);
@@ -283,7 +283,7 @@ switch method
     % All centroids are selected at random from the observed values.
     % They are all unique (to avoid starting with several identical
     % centroids)
-        X = X(~any(isnan(X),2),:); % Remove all rows with NaNs
+        X = X(~any(WW==0,2),:); % Remove all rows w/ NaNs or w/o obs
         i = randperm(size(X,1));
         i = i(1:K);
         C = X(i,:);
