@@ -3,7 +3,7 @@ function varargout = spm_misc(varargin)
 % Collection of miscellaneous functions.
 %
 % FORMAT [M_avg,d] = compute_avg_mat(Mat0,dims)
-% FORMAT create_nii(pth,dat,mat,dtype,descrip)
+% FORMAT Nii = create_nii(pth,dat,mat,dtype,descrip,scl)
 % FORMAT y = linspace_vec(x1,x2,n)
 % FORMAT manage_parpool(num_workers)
 % FORMAT nw = nbr_parfor_workers
@@ -51,16 +51,18 @@ end
 %==========================================================================
 
 %==========================================================================
-function create_nii(pth,dat,mat,dtype,descrip)
+function Nii = create_nii(pth,dat,mat,dtype,descrip,scl)
 % Create a NIfTI file
-% FORMAT create_nii(pth,dat,mat,dtype,descrip)
+% FORMAT Nii = create_nii(pth,dat,mat,dtype,descrip,scl)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+if nargin<6, scl = 1; end
+
 if exist(pth,'file')==2, delete(pth); end
 
 Nii         = nifti;
 dm          = size(dat);
-Nii.dat     = file_array(pth,dm,dtype,0,1,0);
+Nii.dat     = file_array(pth,dm,dtype,0,scl,0);
 Nii.mat     = mat;
 Nii.mat0    = mat;
 Nii.descrip = descrip;
