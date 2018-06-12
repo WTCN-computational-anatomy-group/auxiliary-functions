@@ -328,15 +328,25 @@ if N==1
     return;
 end
 
+% Get image with smallest voxel size and pick this image as reference
+prod_vx = zeros(1,N);
+for n=1:N
+    vx         = spm_misc('vxsize',V(n).mat);
+    prod_vx(n) = prod(vx);
+end
+[~,ref_ix] = min(prod_vx);
+
 % Set options
-matlabbatch{1}.spm.spatial.coreg.estimate.ref               = {V(1).fname};
+matlabbatch{1}.spm.spatial.coreg.estimate.ref               = {V(ref_ix).fname};
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.cost_fun = 'nmi';
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.sep      = [4 2];
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.tol      = [0.02 0.02 0.02 0.001 0.001 0.001 0.01 0.01 0.01 0.001 0.001 0.001];
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.fwhm     = [7 7];
 
 % Co-register
-for n=2:N
+ixs       = 1:N;
+source_ix = ixs(ixs~=ref_ix);
+for n=source_ix
     matlabbatch{1}.spm.spatial.coreg.estimate.source = {V(n).fname};         
 
     spm_jobman('run',matlabbatch);
@@ -367,7 +377,7 @@ end
 % reference)
 vol = zeros(N,3);
 for n=1:N
-    vx       = sqrt(sum(V(n).mat(1:3,1:3).^2));
+    vx       = spm_misc('vxsize',V(n).mat);
     vol(n,:) = vx.*V(n).dim;
 end
 vol        = prod(vol,2);
