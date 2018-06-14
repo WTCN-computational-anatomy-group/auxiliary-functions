@@ -373,7 +373,7 @@ function [V,W,C] = hist(X,varargin)
 % -------------------------------------------------------------------------
 % Parse inputs
 p = inputParser;
-p.FunctionName = 'spm_misc(''hist'')';
+p.FunctionName = 'spm_imbasics(''hist'')';
 p.addRequired('X',                  @isnumeric);
 p.addOptional('B',           64,    @isnumeric);
 p.addParameter('KeepZero',   true,  @isscalar);

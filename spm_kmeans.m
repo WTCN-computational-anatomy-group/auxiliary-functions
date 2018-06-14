@@ -12,7 +12,7 @@ function [L,C,SUMD,D] = spm_kmeans(X, K, varargin)
 % 
 % OPTIONAL
 % --------
-% W - Nx1 Vector of weights associated with each observation
+% W - Nx1 Vector of weights associated with each observation [1]
 %
 % KEYWORD
 % -------
@@ -32,9 +32,9 @@ function [L,C,SUMD,D] = spm_kmeans(X, K, varargin)
 % D    - NxK distances to each centroid
 % _________________________________________________________________________
 %
-% User learned clusters to segment an image.
+% Use learned clusters to segment an image.
 %
-% FORMAT [L,D] = spm_kmeans(X,C)
+% FORMAT [L,D] = spm_kmeans(X,C,...)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -125,7 +125,7 @@ for r=1:p.Results.Replicates
         % -----------------------------------------------------------------
         % Check convergence
         E = sum(MinD.*W);
-        if (E0-E) < 1e-7
+        if (E0-E)/E0 < 1e-7
             break
         end
         E0 = E;
