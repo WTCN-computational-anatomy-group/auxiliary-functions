@@ -354,14 +354,15 @@ end
 %==========================================================================
 
 %==========================================================================
-function V = reslice(V)
+function V = reslice(V,ref_ix)
 % Re-slice images
 % FORMAT V = reslice(V)
 % V - SPM volume object that can contain N different modalities (e.g. T1- 
 % and T2-weighted MRIs.
+% ref_ix - index of reference image in V
 %
 % Takes medical images of the same subject and re-slices the images to the
-% same dimensions. The image with the largest field of view is chosen as
+% same dimensions. If no reference index is given, the image with the largest field of view is chosen as
 % reference for the re-slicing. First order interpolation is used not to
 % introduce any negative values.
 %
@@ -373,15 +374,17 @@ if N==1
     return;
 end
 
-% Get image with largest volume (for reslicing using this image as
-% reference)
-vol = zeros(N,3);
-for n=1:N
-    vx       = spm_misc('vxsize',V(n).mat);
-    vol(n,:) = vx.*V(n).dim;
+if nargin<2
+    % Get image with largest volume (for reslicing using this image as
+    % reference)
+    vol = zeros(N,3);
+    for n=1:N
+        vx       = spm_misc('vxsize',V(n).mat);
+        vol(n,:) = vx.*V(n).dim;
+    end
+    vol        = prod(vol,2);
+    [~,ref_ix] = max(vol);
 end
-vol        = prod(vol,2);
-[~,ref_ix] = max(vol);
 
 % Set options
 matlabbatch{1}.spm.spatial.coreg.write.ref             = {V(ref_ix).fname};
