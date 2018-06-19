@@ -481,7 +481,7 @@ dm0 = size(X);
          
 C               = spm_bsplinc(X,[0 0 0 0 0 0]); % Resample using 0th order b-splines (NN)
 [x1,y1,z1]      = get_downsampling_grid(D,dm0);                  
-X               = spm_bsplins(C,x1,y1,z1,[1 1 1 0 0 0]);
+X               = spm_bsplins(C,x1,y1,z1,[0 0 0 0 0 0]);
 X(~isfinite(X)) = 0;
 
 fname         = Nii.dat.fname;
