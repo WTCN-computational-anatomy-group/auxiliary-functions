@@ -93,7 +93,7 @@ function A = loaddiag(A)
 
     factor = 1e-7;
     while rcond(A) < 1e-5
-        A = A + factor * max(diag(A)) * eye(size(A));
+        A = A + factor * max([diag(A); eps]) * eye(size(A));
         factor = 10 * factor;
     end
 
@@ -112,8 +112,13 @@ function A = inv(A)
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
 
     [V,D] = eig(A);
+    if any(diag(D) <= 0)
+        warning('[spm_matcomp::inv] Matrix has negative eigenvalues')
+        D(D <= 0) = eps; % Threshold negative eigenvalues
+    end
     D     = loaddiag(D);
     A     = real(V * (D \ V'));
+%     A     = 0.5*(A + A.'); % Ensure symetric inverse
 
 end
 
