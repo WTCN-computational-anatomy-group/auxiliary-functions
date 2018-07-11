@@ -1,34 +1,36 @@
-function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, K, varargin)
-% _________________________________________________________________________
+function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, varargin)
+%__________________________________________________________________________
 %
 % Fit a [Bayesian] Gaussian mixture model to observed [weighted] data.
 %
-% FORMAT [Z,MU,A,PI,(b,V,n),(a),(X)] = spm_gmm(X,K,...)
+% FORMAT [Z,MU,A,PI,...] = spm_gmm(X,...)
 % 
 % MANDATORY
 % ---------
 % X - NxP matrix of observed values
-% K - Number of cluster
 % 
 % OPTIONAL
 % --------
-% W  - Nx1 Vector of weights associated with each observation [1]
+% K  - Number of cluster [0=guess from options, 2 if cannot guess]
+% W  - [N]x1 Vector of weights associated with each observation [1]
 %
 % KEYWORD
 % -------
 % PropPrior  - 1x[K] vector of Dirichlet priors [0=ML]
 %                or NxK matrix of fixed observation-wise proportions.
-% GaussPrior - {MU(PxK),b(1x[K]),V(PxPx[K]),n(1x[K])} Gauss-Wishart prior
-%              [{}=non-Bayesian GMM]
+% GaussPrior - {MU(PxK),b(1x[K]),V([PxP]x[K]),n(1x[K])} Gauss-Wishart prior
+%              [{}=ML]
 % Prune      - Threshold on proportions to prune uninformative clusters
 %              [0=no pruning]
-% Missing    - Infer missing data [true]
+% Missing    - Infer missing data: ['infer']/'remove'
 % Start      - Starting method: METHOD or {METHOD, PRECISION} with
-%    METHOD    = ['linspace'],'kmeans','prior','sample','uniform',MU(PxK)
-%    PRECISION = A([PxP]x[K]) [default: diag(a) with a = (range/(2K))^(-2)]
+%   METHOD    = ['kmeans'],'linspace','prior','sample','uniform',MU(PxK)
+%   PRECISION = A([PxP]x[K]) [default: diag(a) with a = (range/(2K))^(-2)]
 % KMeans     - Cell of KMeans options [{}].
 % IterMax    - Maximum number of EM iterations [1000]
-% Tolerance  - Convergence criterion (~ lower bound gain) [1e-5]
+% Tolerance  - Convergence criterion (~ lower bound gain) [1e-4]
+% BinWidth   - 1x[P] Bin width (histogram mode: add bits of variance) [0]
+% InputDim   - Input space dimension [0=try to guess]
 % Verbose    - Verbosity level: [0]=quiet, 1=write, 2=plot
 %
 % OUTPUT
@@ -41,669 +43,872 @@ function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, K, varargin)
 % V    - PxPxK posterior scale matrix                         [if Bayesian]
 % n    - 1xK   posterior precision degrees of freedom         [if Bayesian]
 % a    - 1xK   posterior Dirichlet                            [if Bayesian]
-% X    - NxK   obs and inferred values                         [if Missing]
-%
-% (Note: MAP labels can be obtained with [~,L] = max(Z,[],2)
-% _________________________________________________________________________
+% X    - NxP   obs and inferred values                           [if infer]
+%__________________________________________________________________________
 %
 % Use a learned mixture to segment an image.
 %
-% FORMAT Z = spm_gmm(X,{MU,A},{PI},...)     > Classical
-% FORMAT Z = spm_gmm(X,{MU,b,V,n},{a},...)  > Bayesian
+% FORMAT [Z, X] = spm_gmm(X,{MU,A},{PI},...)     > Classical
+% FORMAT [Z, X] = spm_gmm(X,{MU,b,V,n},{a},...)  > Bayesian
+%__________________________________________________________________________
+%
+% help spm_gmm>Options
+% help spm_gmm>TellMeMore
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
 % TODO
-% - include weights when computing lower bound
-% - code the "apply" mode
-% - decide what default GaussPrior should be:
-%   > Bayesian with small DF is more robust than non-Bayesian
-% - Better way to include Prop prior for entirely missing voxels?
-%   (when all(isnan(X),2))
+% - Code the "apply" mode
+% - Which default missing mode?
+% - Check Start from Kmeans with missing data -> unstable?
+
+% Convention:
+% N: Number of observations
+% P: Dimension of observation space
+% K: Number of clusters
+
+
+% -------------------------------------------------------------------------
+% Special case: Apply model
+% > Here, we use a learned GMM to segment an image
+if nargin > 1 ...
+        && iscell(varargin{2})    ...
+        && ~isempty(varargin{2})  ...
+        && ~ischar(varargin{2}{1})
+    if nargout > 1
+        [Z,MU]  = gmm_apply(X, varargin{:}); % (MU actually contains X)
+    else
+        Z       = gmm_apply(X, varargin{:});
+    end
+    return
+end
 
 % -------------------------------------------------------------------------
 % Parse inputs
 p = inputParser;
 p.FunctionName = 'spm_gmm';
-p.addRequired('X', @isnumeric);
-p.addRequired('K', @isnumeric);
+p.addRequired('X',                          @isnumeric);
+p.addOptional('K',           0,             @(X) isscalar(X) && isnumeric(X));
 p.addOptional('W',           1,             @isnumeric);
 p.addParameter('PropPrior',  0,             @isnumeric);
 p.addParameter('GaussPrior', {},            @iscell);
-p.addParameter('Prune',      0,             @isscalar);
-p.addParameter('Missing',    true,          @isscalar);
+p.addParameter('Prune',      0,             @(X) isscalar(X) && isnumeric(X));
+p.addParameter('Missing',    'infer',       @ischar);
 p.addParameter('Start',      'kmeans',      @(X) ischar(X) || isnumeric(X));
 p.addParameter('KMeans',     {},            @iscell);
-p.addParameter('IterMax',    1000,          @isnumeric);
-p.addParameter('Tolerance',  1e-5,          @isnumeric);
-p.addParameter('Verbose',    0,             @isscalar);
-p.parse(X, K, varargin{:});
-W         = p.Results.W;
-Start     = p.Results.Start;
-KMeans    = p.Results.KMeans;
-PropPrior = p.Results.PropPrior;
+p.addParameter('IterMax',    1000,          @(X) isscalar(X) && isnumeric(X));
+p.addParameter('Tolerance',  1e-4,          @(X) isscalar(X) && isnumeric(X));
+p.addParameter('BinWidth',   0,             @isnumeric);
+p.addParameter('InputDim',   0,             @(X) isscalar(X) && isnumeric(X));
+p.addParameter('Verbose',    0,             @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.parse(X, varargin{:});
+W          = p.Results.W;
+K          = p.Results.K;
+P          = p.Results.InputDim;
+E          = p.Results.BinWidth;
+Start      = p.Results.Start;
+KMeans     = p.Results.KMeans;
+PropPrior  = p.Results.PropPrior;
+GaussPrior = p.Results.GaussPrior;
+Prune      = p.Results.Prune;
+Missing    = p.Results.Missing;
 
-KMeans = [KMeans {'Missing', p.Results.Missing}];
+% -------------------------------------------------------------------------
+% A bit of formatting
 if ~iscell(Start)
     Start = {Start};
 end
-
-% -------------------------------------------------------------------------
-% Special case: Apply model
-% > Here, we use a learned GMM to segment an image
-if numel(K) > 1
-    Z = gmm_apply(X, K, p.Results.Missing);
-    return
+if ~iscell(GaussPrior)
+    GaussPrior = {GaussPrior};
+end
+if islogical(Prune)
+    Prune = 1e-7 * Prune;
 end
 
 % -------------------------------------------------------------------------
-% Guess clusters from provided initial values
-if ~ischar(Start{1})
-    K = size(Start{1}, 2);
-end
+% Guess dimension/clusters from provided initial values
+[K,P,Start]      = dimFromStart(K,P,Start);
+[K,P,GaussPrior] = dimFromGaussPrior(K,P,GaussPrior);
+[K,PropPrior]    = dimFromPropPrior(K,PropPrior);
+[P,dimX]         = dimFromObservations(P, X);
+% ---
+% default value
+if K == 0, K = 2; end
+        
 
 % -------------------------------------------------------------------------
 % Proportion / Dirichlet
 if size(PropPrior, 1) > 1
-    PI              = PropPrior;
+    % Class probability map (fixed proportions)
+    PI              = reshape(PropPrior, [], K);
     logPI           = log(max(PI,eps));
-    voxelwise_prior = true;
     a0              = zeros(1,K);
 else
+    % Dirichlet prior
     a0              = PropPrior(:)';
     if numel(a0) < K
         a0          = padarray(a0, [0 K - numel(a0)], 'replicate', 'post');
     end
-    voxelwise_prior = false;
     PI              = [];
+    logPI           = [];
 end
 
 % -------------------------------------------------------------------------
-% Vector case
-row_vector = size(X,1) == 1 && numel(size(X)) == 2;
-if row_vector
-    X = X';
+% Reshape X (observations)
+if dimX(1) == 1 && numel(dimX) == 2
+    % row-vector case
+    latX = dimX;
+else
+    latX = dimX(1:end-1);
 end
-dim = size(X);
-X   = reshape(X, [], dim(end));
-X   = double(X);
-P   = size(X,2);
+X = double(reshape(X, [], P));
+N  = size(X, 1); % Number of observations
+N0 = N;          % Original number of observations
+
 
 % -------------------------------------------------------------------------
-% Prepare weights and "missing code"
-if numel(W) == 1
-    W = W * ones(size(X,1),1);
-end
+% Reshape W (weights)
 W = double(W(:));
-if p.Results.Missing % Deal with missing data
-    code      = obs2code(X);
-    code_list = unique(code);
-else % Discard rows with missing values
-    N0        = size(X,1);
-    missing   = any(isnan(X),2);
-    W         = W(~missing);
-    X         = X(~missing,:);
-    code      = double2int((2^P-1) * ones(size(X,1),1));
-    code_list = 2^P-1;
-    if voxelwise_prior
-        PI0   = PI(missing,:);
-        PI    = PI(~missing,:);
-    end
+
+% -------------------------------------------------------------------------
+% Prepare missing data stuff (code image, mask, ...)
+if ~any(any(isnan(X)))
+    Missing = 'remove';
 end
+if strcmpi(Missing, 'infer')
+    % Deal with missing data
+    code      = spm_gmm_lib('obs2code', X);     % Code image
+    code_list = unique(code);                   % List of codes
+    missmsk   = [];
+else
+    % Compute mask of removed rows
+    missmsk   = any(isnan(X),2);
+    code      = spm_gmm_lib('double2int', (2^P-1) * ones(sum(~missmsk),1));
+    code_list = 2^P-1;
+end
+% Discard rows with missing values
+if ~isempty(missmsk)
+    X         = X(~missmsk,:);
+    if size(W,1) > 1
+        W     = W(~missmsk);
+    end
+    if size(PI,1) > 1
+        PI0   = PI(missmsk,:);
+        PI    = PI(~missmsk,:);
+    end
+    N         = sum(~missmsk);
+end
+missmsk = find(missmsk); % saves a bit of memory
+
+% -------------------------------------------------------------------------
+% "Bin" variance
+% > When we work with histograms, a bit of variance is lost due to the
+% binning. Here, we assume some kind of uniform distribution inside the bin
+% and consequently add the corresponding variance to the 2nd order moment.
+if numel(E) < P
+    E = padarray(E, [0 P - numel(E)], 'replicate', 'post');
+end
+E = (E.^2)/12;
 
 % -------------------------------------------------------------------------
 % Initialise Gauss-Wishart prior
-pr = initialise_prior(p.Results.GaussPrior, K, P);
+[MU0,b0,V0,n0] = initialise_prior(GaussPrior, K, P);
+pr = struct('MU', MU0, 'b', b0, 'V', V0, 'n', n0);
     
 % -------------------------------------------------------------------------
 % Initialise mixture
-[~, MU, A, PIstart,logPIstart] = start(Start, X, W, K, a0, pr, KMeans);
+[~, MU, A, PI00,logPI00] = start(Start, X, W, K, a0, pr, KMeans);
 if isempty(PI)
-    PI    = PIstart;
-    logPI = logPIstart;
+    PI    = PI00;
+    logPI = logPI00;
 end
-clear PIstart
+clear PI00 logPI00
+if size(PI, 1) > 1,     Z = PI;
+else,                   Z = repmat(PI, [N 1]);
+end
 
 % -------------------------------------------------------------------------
 % Default prior mean/precision if needed
-if isempty(pr.MU) && ~isempty(pr.b)
-    pr.MU = MU;
+if isempty(MU0) && ~isempty(b0)
+    MU0 = MU;
 end
-if isempty(pr.V) && ~isempty(pr.n)
-    pr.V = bsxfun(@rdivide, A, reshape(pr.n, [1 1 K]));
+if isempty(V0) && ~isempty(n0)
+    V0 = bsxfun(@rdivide, A, reshape(n0, [1 1 K]));
 end
 
 % -------------------------------------------------------------------------
 % Initialise posterior
-if isempty(pr.b) && isempty(pr.n)
-    b      = [];
-    n      = [];
-    V      = [];
-    const  = constant_term(MU,[],A,[]);
-    const0 = constant_term(MU,[],A,[],code_list);
-elseif isempty(pr.b)
-    b      = [];
-    n      = pr.n;
-    V      = bsxfun(@rdivide,A,reshape(n,[1 1 K]));
-    const  = constant_term(MU,[],V,n);
-    const0 = constant_term(MU,[],V,n,code_list);
-elseif isempty(pr.n)
-    b      = pr.b;
-    n      = [];
-    V      = [];
-    const  = constant_term(MU,b,A,[]);
-    const0 = constant_term(MU,b,A,[],code_list);
+b = b0;
+n = n0;
+if sum(n) > 0, V    = bsxfun(@rdivide,A,reshape(n,[1 1 K])); end
+if sum(b) > 0, mean = {MU, b};
+else,          mean = MU;        end
+if sum(n) > 0, prec = {V, b};
+else,          prec = {A};       end
+if strcmpi(Missing, 'infer')
+    const = spm_gmm_lib('Const', mean, prec, code_list);
 else
-    b      = pr.b;
-    n      = pr.n;
-    V      = bsxfun(@rdivide,A,reshape(n,[1 1 K]));
-    const  = constant_term(MU,b,V,n);
-    const0 = constant_term(MU,b,V,n,code_list);
+    const  = spm_gmm_lib('Const', mean, prec);
 end
-          
-% EM loop
-lb  = struct('sum', [], 'X', [], 'Z', [], 'P', [], 'MU', [], 'A', []);
-ll0 = nan;
-for em=1:p.Results.IterMax
-    
-    if em == 1
-        % Compute responsibilities from non-missing values only
-        Z = responsibility(X, MU, A, logPI, code, code_list, const0);
-        Z(all(isnan(X),2),:) = repmat([0.9 repmat(0.1/(K-1), [1 K-1])], [sum(all(isnan(X),2)) 1]);
-    else
-        % Infer missing data
-        X = infer_missing(X, Z, MU, A, code, code_list);
 
-        % Compute responsibilities
-        [Z,lb.X(end+1),lb.Z(end+1)] = responsibility(X, MU, A, logPI, code, code_list, const);
+          
+% -------------------------------------------------------------------------
+% Lower bound structure
+lb  = struct('sum', [], 'last', NaN, ...
+             'X', [], 'Z', [], 'P', [], 'MU', [], 'A', []);
+         
+% -------------------------------------------------------------------------
+% Initialise marginal log-likelihood
+logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
+
+% -------------------------------------------------------------------------
+% EM loop
+for em=1:p.Results.IterMax
+
+    % ---------------------------------------------------------------------
+    % Compute responsibilities
+    Z = spm_gmm_lib('Responsibility', logpX, logPI);
+    clear logpX
+    
+    % ---------------------------------------------------------------------
+    % Compute sufficient statistics (bin uncertainty part)
+    if sum(E) > 0
+    	SS2b = spm_gmm_lib('SuffStat', 'bin', E, Z, W, {code, code_list});
+    else
+        SS2b = 0;
     end
     
-    % Compute sufficient statistics
-    [SS0,SS1,SS2] = suffstat(X, W, Z, A, code, code_list);
+    if strcmpi(Missing, 'infer')
+    % ---------------------------------------------------------------------
+    % sub-EM algorithm to update Mean/Precision with missing data
+    % . Responsibilities (E[z]) are kept fixed
+    % . Missing values (E[z*h], E[z*hh']) are updated
+    % . Cluster parameters (MU,b,A/V,n) are updated
     
+        % -----------------------------------------------------------------
+        % Compute fast sufficient statistics:
+        % > sum{E[z]}, sum{E[z]*g}, sum{E[z]*gg'}
+        %   for each configuration of missing data
+        [lSS0,lSS1,lSS2] = spm_gmm_lib('SuffStat', 'base', X, Z, W, {code, code_list});
+        
+        L = NaN;
+        for i=1:1024
+            % -------------------------------------------------------------
+            % Infer missing suffstat
+            % sum{E[z]}, sum{E[z*x]}, sum{E[z*xx']}
+            [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', 'infer', lSS0, lSS1, lSS2, {MU,A}, code_list);
+            SS2 = SS2 + SS2b;
+
+            % -------------------------------------------------------------
+            % Update GMM
+            [MU,A1,b,V1,n] = spm_gmm_lib('UpdateClusters', ...
+                                       SS0, SS1, SS2, {MU0,b0,V0,n0});
+            for k=1:K
+                [~,cholp] = chol(A1(:,:,k));
+                if cholp == 0
+                    A(:,:,k) = A1(:,:,k);
+                    if sum(n) > 0
+                        V(:,:,k) = V1(:,:,k);
+                    end
+                end
+            end
+            mean = {MU,b};
+            if ~sum(n), prec = {A};
+            else,       prec = {V,n};   end
+            
+            % -------------------------------------------------------------
+            % Marginal / Objective function
+            [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
+            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, code_list, SS2b);
+            L          = [L L1+L2+L3];
+            subgain    = abs(L(end)-L(end-1))/(max(L,[],'omitnan')-min(L,[],'omitnan'));
+            if p.Results.Verbose > 0
+                fprintf('sub | %4d | lb = %6.10f | gain = %6.10f\n', i, L(end), subgain);
+            end
+            if subgain < p.Results.Tolerance
+                break
+            end
+        end
+        
+    else
+    % ---------------------------------------------------------------------
+    % Classical M-step
+    
+        % -----------------------------------------------------------------
+        % Compute sufficient statistics
+        [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', X, Z, W);
+        SS2 = SS2 + SS2b;
+        
+        % -------------------------------------------------------------
+        % Update GMM
+        [MU,A1,b,V1,n] = spm_gmm_lib('UpdateClusters', ...
+                                   SS0, SS1, SS2, {MU0,b0,V0,n0});
+        for k=1:K
+            [~,cholp] = chol(A1(:,:,k));
+            if cholp == 0
+                A(:,:,k) = A1(:,:,k);
+                if sum(n) > 0
+                    V(:,:,k) = V1(:,:,k);
+                end
+            end
+        end
+        mean = {MU,b};
+        if ~sum(n), prec =  {A};
+        else,       prec = {V,n};   end
+        const = spm_gmm_lib('const', mean, prec, code_list);
+        
+    end
+                 
+    % ---------------------------------------------------------------------
     % Update Proportions
-    if em > 1
-        lb.P(end+1) = kl_dirichlet(a, a0);
+    if size(PI,1) == 1
+        [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0);
     end
-    if ~voxelwise_prior
-        [PI,logPI,a] = update_proportions(SS0, a0);
+        
+    % ---------------------------------------------------------------------
+    % Plot GMM
+    if p.Results.Verbose >= 3
+        spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI)
     end
     
-    % Update GMM
-    if em > 1
-        if isempty(V)
-            [lb.MU(end+1),lb.A(end+1)] = kl_gauss_wishart(MU,b,A,n,pr.MU,pr.b,pr.V,pr.n);
-        else
-            [lb.MU(end+1),lb.A(end+1)] = kl_gauss_wishart(MU,b,V,n,pr.MU,pr.b,pr.V,pr.n);
-        end
-    end
-    [MU,b,V,n,A] = update_gmm(SS0,SS1,SS2,pr);
-    if isempty(V),  const = constant_term(MU,b,A,[]);
-    else,           const = constant_term(MU,b,V,n);   end
+    % ---------------------------------------------------------------------
+    % Marginal / Objective function
+    logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
     
+    % ---------------------------------------------------------------------
+    % Compute lower bound
+    lb.P(end+1) = spm_gmm_lib('KL', 'Dirichlet', a, a0);
+    lb.Z(end+1) = spm_gmm_lib('KL', 'Categorical', Z, W, logPI);
+    if ~strcmpi(Missing, 'infer')
+        [lb.MU(end+1),lb.A(end+1)] = spm_gmm_lib('KL', 'GaussWishart', ...
+            {MU,b}, prec, {MU0,b0}, {V0,n0});
+        lb.X(end+1) = sum(sum(bsxfun(@times, logpX, bsxfun(@times, Z, W)),'omitnan'),'omitnan');
+    else
+        lb.MU(end+1) = L1;
+        lb.A(end+1)  = L2;
+        lb.X(end+1)  = L3;
+    end
+
+    % ---------------------------------------------------------------------
     % Check convergence
-    if em > 1
-        lb.sum(end+1) = lb.X(end) + lb.Z(end) + lb.P(end) + lb.MU(end) + lb.A(end);
-        if p.Results.Verbose >= 2
-            subplot(2, 3, 1);
-            plot(lb.sum)
-            title('Lower Bound')
-            subplot(2, 3, 2);
-            plot(lb.X)
-            title('Observations (E[ln p(X)] - E[ln q(H)])')
-            subplot(2, 3, 3);
-            plot(lb.Z)
-            title('Responsibilities (KL)')
-            subplot(2, 3, 4);
-            plot(lb.P)
-            title('Proportions (KL)')
-            subplot(2, 3, 5);
-            plot(lb.MU)
-            title('Means (KL)')
-            subplot(2, 3, 6);
-            plot(lb.A)
-            title('Precisions (KL)')
-            drawnow
-        end
-        gain = abs((ll0 - lb.sum(end))/(max(lb.sum(:))-min(lb.sum(:))));
-        if p.Results.Verbose
-            fprintf('%3d | lb = %6g | gain = %6g\n', em, lb.sum(end), gain);
-        end
-        if gain < p.Results.Tolerance
-            break;
-        end
-        ll0 = lb.sum(end);
+    [lb,gain] = check_convergence(lb, em, p.Results.Verbose);
+    if gain < p.Results.Tolerance
+        break;
     end
     
+end
+
+% -------------------------------------------------------------------------
+% Infer missing values
+if nargout >= 9 && strcmpi(Missing, 'infer')
+    X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {code,code_list});
 end
 
 % -------------------------------------------------------------------------
 % Prune clusters
-if ~voxelwise_prior && p.Results.Prune > 0
-    kept = PI >= p.Results.Prune;
-    Z    = Z(:,kept);
-    MU   = MU(:,kept);
-    A    = A(:,:,kept);
-    PI   = PI(kept);
-    if ~isempty(pr)
-        b = b(kept)';
-        n = n(kept)';
-        V = V(:,:,kept);
-    end
+if Prune > 0
+    [K,PI,Z,MU,b,A,V,n] = prune(Prune, PI, Z, {MU,b}, {A,V,n});
 end
 
 % -------------------------------------------------------------------------
 % Replace discarded missing values
-if ~p.Results.Missing
-    Z1            = Z;
-    Z             = zeros([N0 size(Z1,2)], 'like', Z1);
-    Z(~missing,:) = Z1; clear Z1;
-    if voxelwise_prior
-        PI1            = PI;
-        PI             = zeros(N0, K);
-        PI(~missing,:) = PI1; clear PI1
-        PI(missing,:)  = PI0;
-    end
-end
-
-% =========================================================================
-function X = infer_missing(X, Z, MU, A, code, code_list)
-% FORMAT X = infer_missing(X, Z, MU, A, code, code_list)
-% X         - NxP   observations
-% Z         - NxK   responsibilities
-% MU        - PxK   (expected) means
-% A         - PxPxK (expected) precision matrices
-% code      - "Missing value" code image
-% code_list - List of existing codes
-%
-% Compute the mean expected value of missing voxels.
-
-for i=1:numel(code_list)
-    c       = code_list(i);
-    msk     = code == c;
-    missing = ~code2bin(c, size(X,2));
-    if sum(msk(:)) == 0 || sum(missing) == 0, continue; end
+if sum(missmsk) > 0
+    present = ones(N0, 1, 'logical');
+    present(missmsk) = false;
+    clear missing
     
-    K = size(Z,2);
-    X(msk,missing) = 0;
-    for k=1:K
-        X1k = 0;
-        X1k = X1k + MU(missing,k).' * A(missing,missing,k);
-        X1k = X1k + (MU(~missing,k).' - X(msk,~missing)) * A(~missing,missing,k);
-        X1k = X1k / A(missing,missing,k);
-        X(msk,missing) = X(msk,missing) + bsxfun(@times, X1k, Z(msk,k));
+    Z = expand(Z, present, N0, K, 0);
+    if size(PI,1) > 1 && nargout >= 4
+        PI = expand(PI, present, N0, K, PI0);
     end
+    if nargout >= 9
+        X = expand(X, present, N0, P, NaN);
+    end
+end
+    
+% -------------------------------------------------------------------------
+% Reshape everything (use input lattice)
+Z = reshape(Z, [latX K]);
+if size(PI,1) > 1 && nargout >= 4
+    PI = reshape(PI, [latX K]);
+end
+if nargout >= 9
+    X = reshape(X, [latX P]);
 end
 
 
 % =========================================================================
-function [logpX, logqX] = gmm_elogp(X, MU, A, code, code_list, const)
-% FORMAT [logpX, logqX] = gmm_elogp(X, MU, A, code, code_list, const)
+function TellMeMore
+% _________________________________________________________________________
+%
+% Gaussian mixture model (GMM)
+% ----------------------------
+% The  Gaussian  Mixture   relies  on  a  generative  model  of  the  data.
+% Each  observation is assumed  to stem  from one of  K clusters,  and each
+% cluster possesses a Gaussian density.
+%
+% Classical GMM
+% -------------
+% With  the  most  basic  (and  well  known)  model, we  look  for  maximum
+% likelihood  values  for  the  model  parameters,  which are  the mean and
+% precision matrix of each cluster: {Mu, A}_k = argmax p({x}_n | {Mu, A}_k)
+% To compute  this probabilitity,  we need to integrate  over all  possible
+% cluster  responsibility  (to which cluster belongs  a given observation),
+% which are unknown:
+%   p({x}_n | {Mu, A}_k) = int p({x}_n | {z}_n, {Mu, A}_k) p({z}_n) d{z}_n
+% Since  this integral is intractable,  we use the Expectation-Maximisation
+% algorithm:  we alternate between computing  the posterior distribution of
+% responsibilities (given known means and precision matrices)  and updating 
+% the mean and precisions (given the known posterior).
+%
+% Bayesian GMM
+% ------------
+% When we have some idea  about how these mean and precision look like,  we
+% can take it  into account in the form  of Bayesian beliefs,  i.e.,  prior
+% probability distributions  over the parameters we want to estimate.  What
+% we  are now  looking  for  are the  posterior  distributions  (given some
+% observed data) of these parameters:
+%   p({Mu, A}_k | {x}_n) = p({x}_n | {Mu, A}_k) p({Mu, A}_k) / p({x}_n)
+% To  make everything  tractable,  these prior  beliefs are  chosen  to  be
+% conjugate priors. It is not very important to know what it means,  except
+% that it makes computing the posterior probabilities easier.  In our case,
+% we can use a  Gaussian prior distribution for the means,  a Wishart prior
+% distribution  for   the  precision  matrices   (we  talk  of  Gauss-Prior
+% distirbution  when they  are combined)  and a  Dirichlet distribution for
+% clusters' proportion.
+% Despite all that,  we still cannot compute  these posteriors.  We make an
+% additional assumption,  which is that there is  some sort of independence
+% between  the  parameters to estimate;  we say that  the posterior  can be
+% factorised:
+%   q({Mu, A, Pi}_k, {z}_n) = q({Mu, A}_k) q({Pi}_k) q({z}_n)
+% We  can then  use a technique  called variational  Bayesian inference  to
+% estimate, in turn, these distributions.
+%
+% Histogram GMM
+% -------------
+% To speed up computation,  we sometimes prefer  to use an histogram  (that
+% is,  binned observations)  rather than  the full set  of observations.  A 
+% first way of doing this,  is by assuming that each bin centre corresponds 
+% to several identical observations (the bin count). In other words, we now
+% have weighted observations.
+% However, using weighted observations makes estimating the precisions less
+% robust,  as we artificially  reduce the  variance by  assigning different
+% values to the same bin centre.  To lower this effect,  we can assume that
+% each observation  is  actually  a  distribution, i.e.,  there is a bit of
+% uncertainty about the "true" value.  When computing the model, we want to
+% integrate over all possible values.
+% Here,  we assume that these distributions  are uniform in each bin.  This
+% makes the implementation  easy and efficient:  the expected value of each
+% observation is the bin centre, and their variance is (w^2)/12, where w is
+% the  bin width.  This consists of adding a bit of  jitter when  computing
+% second order statistics to update the precision matrices.
+%
+% Missing values
+% --------------
+% In the classical GMM case, in the presence of partial observations  (in a
+% given voxel, some modalities might be missing), it is easy to compute the
+% conditional  likelihood  of a  given  voxel,  but computing  ML mean  and
+% precision estimates is more tricky.
+% With one Gaussian,  an EM scheme can be designed  to obtain ML parameters
+% by  alternating   between  inferring  missing  values and   updating  the
+% parameters.   This scheme can be  extended to the mixture case,  in which
+% case the EM algorithm relies on a joint posterior distribution over class
+% repsonsibilities and missing values.
+% _________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+
+% =========================================================================
+function Options
+% _________________________________________________________________________
+%
+% FORMAT [Z,MU,A,PI,...] = spm_gmm(X,...)
 % 
-% X         - NxP observed values
-% MU        - PxK (expected) means
-% A         - PxPxK (expected) precision matrices
-% code      - Image of "missing" codes
-% code_list - List of existing codes
-% const     - [M]xK constant terms. If M > 1, discard missing values
+% MANDATORY
+% ---------
+% X is a set of multidimensional observations. It usually takes the form of
+%   a  matrix,  in which  case  its first  dimension (N)  is the number  of
+%   observations and its second dimension (P) is their dimension.  However, 
+%   it is possible  to provide a multidimensional array,  in which case the
+%   dimension P  must be provided  in some way.  This might be  through the 
+%   size of user-provided  starting estimates or priors,  or directly using 
+%   the 'InputDim' option. If the 'Missing' option is activated, X might
+%   contain missing values (NaN), which will be inferred by the model.  If
+%   the 'Missing'  option is  not activated,  all rows  containing  missing
+%   values will be excuded.
+% 
+% OPTIONAL
+% --------
+% K is the  number of  clusters in the  mixture.  If not provided,  we will
+%   first try to guess it from user-provided options (starting estimates or 
+%   priors). If this is not possible, the default value is 2.
 %
-% logpX     - NxK (expected) log-likelihood of belonging to each class
-% logqX     - 1x1 Posterior part of the lower bound: sum E[log q(h)]
+% W is a  vector of  weights  associated  with each  observation.  Usually,
+%   weights are used when the input dataset is an histogram. Suitable X and
+%   W arrays  can be obtained  with the  spm_imbasics('hist') function.  In
+%   this  case,  it is  advised to  also use the  'BinWidth' option,  which
+%   prevents  variances to collapse  due to the pooling of values.  If W is
+%   not provided, all observations have weight 1.
+%
+% KEYWORD
+% -------
+% PropPrior  may take two forms (+ the default):
+%            0) It can be empty (the default),  in which case the algorithm
+%            searches for maximum-likelihood proportion.
+%            1) It  can  be  a  vector of  concentration  parameters  for a 
+%            Dirichlet prior.  Dirichlet distributions are conjugate priors 
+%            for proportions,  e.g.  Categorical parameters.  In this case, 
+%            it  must  consist  of   K  strictly  positive  values.   Their 
+%            normalised value is the prior expected proportion, while their 
+%            sum  corresponds  to the precision  of the  distribution  (the 
+%            larger the precision, the stonger the prior).
+%            2) It can be a  matrix  (or multidimensional array)  of  fixed
+%            observation-wise    proportions.    We   often   talk    about
+%            non-stationary  class  proportions.  In  this  case,  it  must
+%            contain N (the number of observations) times K  (the number of
+%            clusters) elements. Elements must sum to one along the cluster
+%            dimension.
+%
+% GaussPrior {Mu(PxK),b(1x[K]),V([PxP]x[K]),n(1x[K])}
+%            The Gauss-Wishart  distribution is a  conjugate prior  for the 
+%            parameters  (mean  and  precision matrix)  of  a  multivariate
+%            Gaussian distribution.  Its  parameters are  Mu,  the expected
+%            mean,  b,  the prior degrees of freedom for the mean,  V,  the 
+%            scale  matrix  and n,  the prior degrees  of freedom  for  the
+%            precision.  The expected precision matrix is n*V.  This option
+%            allows to defines these parameters for each cluster: it should
+%            be a cell  of arrays with  the dimensions  stated above.  Note
+%            that some  parameters might be left empty,  in which case they
+%            will be  automatically determined.  Typically,  one could only
+%            provide the  degrees of freedom  (b and n),  in which case the
+%            starting  estimates will be  used as  prior expected means and
+%            precisions.  Also, dimensions that are written in brackets are 
+%            automatically expanded if needed.
+%            By  default,   this  option   is  empty,   and  the  algorithm
+%            searches for maximum-likelihood parameters.
+%
+% Prune      contains a  threshold  for  the  final  estimated proportions. 
+%            Classes  that are under this threshold  will be considered  as
+%            non-informative and pruned out. By default, the threshold is 0
+%            and no pruning is performed.
+%
+% Missing     'infer': (default) missing values are inferred by making  use
+%                      of  some properties of  the  Gaussian  distribution. 
+%                      However, the fit is  slower due to  this  inferrence 
+%                      scheme.
+%            'remove': all rows  with missing values are exclude,  and  the
+%                      fit   is   performed    without   inferrence.    For 
+%                      computational efficiency, when no values are missing 
+%                      from the input set  (i.e., there are no NaNs),  this 
+%                      option is activated by default.
+%
+% Start      Method used to select starting estimates:
+%              'kmeans': A K-means  clustering is  used to  obtain a  first
+%                        classification of the observations.  Centroids are
+%                        used  to  initialise   the  means,   intra-cluster
+%                        co-variance   is  used   to  initialise  precision 
+%                        matrices  (unless initial  precision matrices  are
+%                        user-provided)   and  cluster  size   is  used  to 
+%                        initialise proportions. Options can be provided to
+%                        the K-means algorithm using the 'KMeans' option.
+%            'linspace': Centroids  are  chosen so  that they are  linearly
+%                        spaced along the input range of values.  Precision
+%                        matrices are set as explained below.
+%               'prior': The prior  expected means  and  precision matrices
+%                        are used as initial estimates.
+%              'sample': Random samples are selected from the input dataset
+%                        and used as initial means.  Precision matrices are 
+%                        set as explained below.
+%             'uniform': Random values are uniformly sampled from the input
+%                        range  of  values   and  used  as  initial  means. 
+%                        Precision matrices are set as explained below.
+%               MU(PxK): Initial means are user-provided.
+%            The  method  can  be  provided along  with  initial  precision
+%            matrices,  in  a  cell:  {METHOD, A([PxP]x[K])}.  By  default, 
+%            the  initial  precision matrix  is  common to all classes  and 
+%            chosen so that the input range is well covered:
+%            -> A = diag(a) with a(p) = (range(p)/(2K))^(-2)
+%
+% KMeans     is a cell of options for the K-means algorithm.
+%
+% IterMax    is the maximum number of EM iterations. Default is 1000.
+%
+% Tolerance  is the  convergence  threshold  below  which the algorithm  is 
+%            stopped. The convergence criterion is a normalised lower bound
+%            gain (lcur-lprev)(lmax-lmin). The default tolerance is 1e-4.
+%
+% BinWidth   is a vector of bin widths.  It is useful when  the input is an
+%            histogram  (e.g.  weighted  observations)  to  regularise  the
+%            variance estimation.  If only  one width  is  provided,  it is
+%            automatically expanded to all dimensions.
+%
+% InputDim   Number of dimensions in the input space.  If not provided,  we
+%            will try  to infer  it from the  input  arrays, e.g.  starting
+%            estimates, last dimension of the input array, etc.
+%
+% Verbose    0: Quiet mode. Nothing is written or plotted.
+%            1: Verbose  mode.  The  lower  bound  is  written  after  each
+%               iteration. This slows down significantly the algorithm.
+%            2: Graphical mode. The evolution of the lower bound and its
+%               different components is plotted.
+%            3: Graphical mode +.  A representation  of the  fit  (marginal
+%               distribution,  joint  2D  distributions,  proportions)   is 
+%               plotted.  This slows things down  dramatically  and  should 
+%               only be used for education or debugging purpose.
+% _________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
-if size(const, 1) == 1
-    const = repmat(const, [numel(code_list) 1]);
-    discard_missing = false;
-else
-    discard_missing = true;
+% =========================================================================
+function [lb,gain] = check_convergence(lb, em, verbose)
+% FORMAT [lb,gain] = check_convergence(lb, em, verbose)
+% lb      - Lower bound structure with fields X, Z, P, MU, A, sum, last
+% em      - EM iteration
+% verbose - Verbosity level (>= 0)
+%
+% Compute lower bound (by summing its parts) and its gain
+% + print info
+
+lb.sum(end+1) = lb.X(end) + lb.Z(end) + lb.P(end) + lb.MU(end) + lb.A(end);
+if verbose >= 2
+    spm_gmm_lib('plot', 'LB', lb)
+end
+gain = abs((lb.last - lb.sum(end))/(max(lb.sum(:))-min(lb.sum(:))));
+if verbose >= 1
+    if     numel(lb.sum) < 2,           incr = '';
+    elseif lb.sum(end) > lb.sum(end-1), incr = '(+)';
+    elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
+    else,                               incr = '(=)';
+    end
+    fprintf('%3d | lb = %10.6g | gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
+end
+lb.last = lb.sum(end);
+
+% =========================================================================
+function [K,P,Start] = dimFromStart(K, P, Start)
+% FORMAT [K,P,Start] = dimFromStart(K, P, Start)
+% K - Number of clusters (previous guess)
+% K - Number of dimensions (previous guess)
+% Start - Cell of "starting estimates" options
+%
+% Guess input dimension and number of clusters from starting estimates.
+
+% ---
+% Guess from starting mean
+if numel(Start) > 1 && ~ischar(Start{2})
+    if size(Start{2}, 1) > 1
+        if P == 0
+            P = size(Start{2}, 1);
+        elseif P ~= size(Start{2}, 1)
+            warning(['Input space dimension does not agree with starting ' ...
+                     'precision: %d vs. %d'], P, size(Start{2}, 1));
+            Start{2} = Start{2}(1:P,1:P,:);
+        end
+    end
+    if size(Start{2}, 3) > 1
+        if K == 0
+            K = size(Start{2}, 3);
+        elseif K ~= size(Start{2}, 3)
+            warning(['Number of clusters does not agree with starting ' ...
+                     'precision: %d vs. %d'], K, size(Start{2}, 3));
+            Start{2} = Start{2}(:,:,1:K);
+        end
+    end
+end
+if ~ischar(Start{1})
+    if size(Start{1}, 1) > 0
+        if P == 0
+            P = size(Start{1}, 1);
+        elseif P ~= size(Start{1}, 1)
+            warning(['Input space dimension does not agree with starting ' ...
+                     'mean: %d vs. %d'], P, size(Start{1}, 1));
+            Start{1} = Start{1}(1:P,:);
+        end
+    end
+    if size(Start{1}, 2) > 0
+        if K == 0
+            K = size(Start{1}, 2);
+        elseif K ~= size(Start{1}, 2)
+            warning(['Number of clusters does not agree with starting ' ...
+                     'mean: %d vs. %d'], K, size(Start{1}, 2));
+            Start{1} = Start{1}(:,1:K);
+        end
+    end
 end
 
-N  = size(X,1);
-K  = size(MU,2);
-logpX  = zeros([N K]);
-logqX  = 0;
-
-% -------------------------------------------------------------------------
-% For each combination of missing voxels
-for i=1:numel(code_list)
-    c       = code_list(i);
-    msk     = code == c;
-    missing = ~code2bin(c, size(X,2));
-    if sum(msk(:)) == 0, continue; end
-    
-    logpX(msk,:) = repmat(const(i,:), [sum(msk), 1]);
-    X1 = X(msk,:)';
-    for k=1:K
-        % Compute expected log-likelihood (eq (23) of GMM-MD paper)
-        l = zeros([1 sum(msk)]);
-        % 1) quadratic in observed values
-        part1 = A(~missing,~missing,k) * (X1(~missing,:) - 2*MU(~missing,k));
-        part1 = dot(part1, X1(~missing,:), 1);
-        l = l - 0.5 * part1; clear part1
-        if ~discard_missing && sum(missing) > 0
-            % 2) quadratic in missing values
-            part2 = A(missing,missing,k) * (X1(missing,:) - 2*MU(missing,k));
-            part2 = dot(part2, X1(missing,:), 1);
-            part2 = part2 + sum(missing);
-            l = l - 0.5 * part2; clear part2
-            % 3) quadratic in observed x missing values
-            part3 = MU(missing,k)' * A(missing,~missing,k) * X1(~missing,:);
-            l = l + part3; clear part3
-            part4 = A(missing,~missing,k) * (X1(~missing,:) - MU(~missing,k));
-            part4 = dot(part4, X1(missing,:), 1);
-            l = l - part4; clear part4
+% ---
+% Guess from starting precision
+if numel(Start) > 1 && ~ischar(Start{2})
+    if size(Start{2}, 1) > 1
+        if P == 0
+            P = size(Start{2}, 1);
+        elseif P ~= size(Start{2}, 1)
+            warning(['Input space dimension does not agree with starting ' ...
+                     'precision: %d vs. %d'], P, size(Start{2}, 1));
+            Start{2} = Start{2}(1:P,1:P,:);
         end
-        % Reshape as a column vector
-        logpX(msk,k) = logpX(msk,k) + l'; clear l
-        
-        if  ~discard_missing && sum(missing) > 0
-            % E[ln q(H)] (posterior ~ missing values) 
-            logqX = logqX + 0.5*sum(msk)*( ...
-                - spm_matcomp('LogDet',A(missing,missing,k)) ...
-                - numel(missing)*(1+log(2*pi)) );
+    end
+    if size(Start{2}, 3) > 1
+        if K == 0
+            K = size(Start{2}, 3);
+        elseif K ~= size(Start{2}, 3)
+            warning(['Number of clusters does not agree with starting ' ...
+                     'precision: %d vs. %d'], K, size(Start{2}, 3));
+            Start{2} = Start{2}(:,:,1:K);
         end
     end
 end
 
 % =========================================================================
-function [Z,llX,klZ] = responsibility(X, MU, A, logPI, code, code_list, const)
-% FORMAT [Z,ll] = responsibility(X, MU, A, logPI, code, code_list, const)
+function [K,P,GaussPrior] = dimFromGaussPrior(K, P, GaussPrior)
+% FORMAT [K,P,GaussPrior] = dimFromGaussPrior(K, P, GaussPrior)
+% K          - Number of clusters (previous guess)
+% K          - Number of dimensions (previous guess)
+% GaussPrior - Cell of "prior" options
 %
-% X          - NxK   observed (+ inferred) values
-% MU         - PxK   (Expected) means
-% A          - PxPxK (Expected) precision matrices
-% logPI      - 1xK   (Expected) log proportions
-% code       - Nx1   Code image of missing values
-% code_list  -       List of exisinting codes (saves time)
-% const      - 1xK   Constant term (across voxels) of E[ln p(Xn|MUk,Ak)]
-%
-% Z          - NxK   (Posterior) responsibilities
-% ll         -       Lower bound =   E[Z]E[ln p(X|MU,A)] - E[ln q(H)]
-%                                  + E[ln p(Z|PI)]       - E[ln q(Z)]
+% Guess input dimension and number of clusters from Gauss-Wishart prior
 
-klZ = 0;
-% log-likelihood part: E[log p(X|MUk,Ak)]
-
-[logpX, llX] = gmm_elogp(X, MU, A, code, code_list, const);
-
-% prior part: E[log PI]
-Z = logpX + logPI;
-
-% Exponentiate and normalise
-Z = Z - max(Z, [], 2);
-Z = exp(Z);
-Z = bsxfun(@rdivide, Z, sum(Z, 2));
-
-% E[ln p(Z|PI)] (prior ~ responsibilities)
-klZ = klZ + sum(sum(Z .* logPI));
-
-% -E[ln q(Z)] (posterior ~ responsibilities))
-klZ = klZ - sum(sum(Z .* log(max(Z,eps))));
-
-% E[Z]E[ln p(X|A,MU)] (prior ~ intensities) 
-llX = -llX + sum(sum(logpX .* Z));
-
-% =========================================================================
-function [SS0,SS1,SS2] = suffstat(X, W, Z, A, code, code_list)
-% FORMAT [SS0,SS1,SS2] = suffstat(X, W, Z, code, code_list);
-%
-% X    - NxP Observed + Inferred values
-% W    - Nx1 Observation weights
-% Z    - NxK Responsibilities
-% A    - PxPxK precision matrices (useful for uncertainties)
-% code - Nx1 Missing values "code"
-% code_list - List of codes present (saves a tiny bit of time if provided)
-%
-% SS0 - 1xK   0th order suff stat (sum of resp)
-% SS1 - PxK   1st order suff stat (weighted sum of intensities)
-% SS2 - PxPxK 2nd order suff stat (weighted sum of squared intensities)
-%
-% Compute sufficient statistics up to 2nd order, taking into account
-% inferred values and their uncertainty.
-%
-% Note that, because we use the code image, no uncertainties are added 
-% if missing values were discarded ("~Missing" case)
-
-if nargin < 6
-    code_list = unique(code);
-end
-
-N = size(X,1);
-P = size(X,2);
-K = size(A,3);
-Z   = bsxfun(@times, Z, W); % Multiply resp with observation count
-SS0 = sum(Z, 1);
-SS1 = sum(bsxfun(@times, X, reshape(Z, [N 1 K])), 1, 'omitnan');
-SS1 = reshape(SS1, [P K]);
-SS2 = zeros(P,P,K);
-% Add quadratic terms ~ observed/inferred
-for i=1:P
-    SS2(i,i,:) = reshape(sum(bsxfun(@times, Z, X(:,i).^2),1,'omitnan'), [1 1 K]);
-    for j=i+1:P
-        SS2(i,j,:) = reshape(sum(bsxfun(@times, Z, X(:,i).*X(:,j)),1,'omitnan'), [1 1 K]);
-        SS2(j,i,:) = SS2(i,j,:);
+% ---
+% Guess from prior mean
+if numel(GaussPrior) > 1
+    if size(GaussPrior{1}, 1) > 0
+        if P == 0
+            P = size(GaussPrior{1}, 1);
+        elseif P ~= size(GaussPrior{1}, 1)
+            warning(['Input space dimension does not agree with prior ' ...
+                     'mean: %d vs. %d'], P, size(GaussPrior{1}, 1));
+            GaussPrior{1} = GaussPrior{1}(1:P,:);
+        end
+    end
+    if size(GaussPrior{1}, 2) > 0
+        if K == 0
+            K = size(GaussPrior{1}, 2);
+        elseif K ~= size(GaussPrior{1}, 2)
+            warning(['Number of clusters does not agree with prior ' ...
+                     'mean: %d vs. %d'], K, size(GaussPrior{1}, 2));
+            GaussPrior{1} = GaussPrior{1}(:,1:K);
+        end
     end
 end
-% Add uncertainty ~ inferred values
-for k=1:K
-    A(:,:,k) = spm_matcomp('Inv', A(:,:,k));
-end
-for i=1:numel(code_list)
-    c       = code_list(i);
-    missing = ~code2bin(c, size(X,2));
-    if sum(missing) > 0
-        msk = (code == c) & (~any(isnan(X),2));
-        if sum(msk) > 0
-            Zc  = Z(msk,:);
-            sumA = bsxfun(@times, ...
-                reshape(Zc, [size(Zc,1) 1 1 K]), ...
-                reshape(A(missing,missing,:), [1 sum(missing) sum(missing) K]));
-            sumA = reshape(sum(sumA, 1), [sum(missing) sum(missing) K]);
-            SS2(missing,missing,:) = SS2(missing,missing,:) + sumA;
+% ---
+% Guess from prior precision
+if numel(GaussPrior) > 3
+    if size(GaussPrior{2}, 1) > 1
+        if P == 0
+            P = size(GaussPrior{2}, 1);
+        elseif P ~= size(GaussPrior{2}, 1)
+            warning(['Input space dimension does not agree with prior ' ...
+                     'precision: %d vs. %d'], P, size(GaussPrior{2}, 1));
+            GaussPrior{2} = GaussPrior{2}(1:P,1:P,:);
+        end
+    end
+    if size(GaussPrior{2}, 3) > 1
+        if K == 0
+            K = size(GaussPrior{2}, 3);
+        elseif K ~= size(GaussPrior{2}, 3)
+            warning(['Number of clusters does not agree with prior ' ...
+                     'precision: %d vs. %d'], K, size(GaussPrior{2}, 3));
+            GaussPrior{2} = GaussPrior{2}(:,:,1:K);
         end
     end
 end
 
-% =========================================================================
-function const = constant_term(MU,b,V,n,code_list)
-% FORMAT const = constant_term(MU,b,(V|A),n)
-% MU - (Expected) mean
-% b  - Mean df (if empty or 0 -> no Bayesian prior)
-% V  - Scale matrix     (if not n empty or 0) 
-% A  - Precision matrix (if n empty or 0)
-% n  - Precision df (if empty or 0 -> no Bayesian prior)
-%
-% Compute the constant term (w.r.t. voxels) of each Gaussian 
-% (expected) log-likelihood.
 
-P = size(MU,1);
-K = size(MU,2);
-    
-if nargin == 5
-% Discard missing values
-    const = zeros(numel(code_list), K);
-    for i=1:numel(code_list)
-        c = code_list(i);
-        missing = ~code2bin(c, P);
-        for k=1:K
-            const(i,k) = - 0.5 * numel(~missing) * log(2*pi);
-            if ~isempty(n) && n(k) > 0
-                const(i,k) = const(i,k) + 0.5 * spm_prob('W','ELogDet',V(~missing,~missing,k),n(k)) ...
-                                    - 0.5 * n(k) * MU(~missing,k)' * V(~missing,~missing,k) * MU(~missing,k);
-            else
-                const(i,k) = const(i,k) + 0.5 * spm_matcomp('LogDet',V(~missing,~missing,k)) ...
-                                    - 0.5 * MU(~missing,k)' * V(~missing,~missing,k) * MU(~missing,k);
-            end
-            if ~isempty(b) && b(k) > 0
-                const(i,k) = const(i,k) - 0.5 * numel(~missing) / b(k);
-            end
-        end
-        
+% =========================================================================
+function [K,PropPrior] = dimFromPropPrior(K, PropPrior)
+% Guess number of clusters from Dirichlet prior
+
+% ---
+% Guess from prior proportion
+if size(PropPrior, 2) > 1
+    if K == 0
+        K = size(PropPrior, 2);
+    elseif K ~= size(PropPrior, 2)
+        warning(['Number of clusters does not agree with prior ' ...
+                 'proportion: %d vs. %d'], K, size(PropPrior, 2));
+        PropPrior = PropPrior(:,1:K);
     end
-    
-else
-% With missing values
-    const = zeros(1,K);
-    for k=1:K
-        const(k) = - 0.5 * P * log(2*pi);
-        if ~isempty(n) && n(k) > 0
-            const(k) = const(k) + 0.5 * spm_prob('W','ELogDet',V(:,:,k),n(k)) ...
-                                - 0.5 * n(k) * MU(:,k)' * V(:,:,k) * MU(:,k);
+end
+
+% =========================================================================
+function [P,dimX] = dimFromObservations(P, X)
+dimX = size(X);
+if P == 0
+    if numel(dimX) == 2
+        if dimX(1) == 1
+            % row-vector case
+            P = dimX(1);
         else
-            const(k) = const(k) + 0.5 * spm_matcomp('LogDet',V(:,:,k)) ...
-                                - 0.5 * MU(:,k)' * V(:,:,k) * MU(:,k);
+            % matrix case
+            P = dimX(2);
         end
-        if ~isempty(b) && b(k) > 0
-            const(k) = const(k) - 0.5 * P / b(k);
+    else
+        % N-array case
+        dim = size(X);
+        P = dim(end);
+    end
+end
+
+% =========================================================================
+function varargout = prune(threshold, PI, Z, mean, prec)
+% FORMAT prune(threshold, PI, Z, {MU,b}, {A,V,n})
+%
+% Remove classes with proportion <= threshold
+
+kept = sum(PI,1)/sum(PI(:)) >= threshold;
+K    = sum(kept);
+
+Z    = Z(:,kept);
+PI   = PI(:,kept);
+
+if ~iscell(mean)
+    mean = {mean(:,kept)};
+else
+    if numel(mean) >= 1
+        mean{1} = mean{1}(:,kept);
+        if numel(mean) >= 2 && sum(mean{2}) > 0
+            mean{2} = mean{2}(kept);
         end
     end
 end
 
-% =========================================================================
-function [MU,b,V,n,A] = update_gmm(SS0,SS1,SS2,pr)
-% FORMAT [MU,b,V,n,A] = update_gmm_bayes(SS0,SS1,SS2,pr)
-% SS0 - 0th order sufficient statistics (sum Z_i)
-% SS1 - 1st order sufficient statistics (sum Z_i * X_i)
-% SS2 - 2nd order sufficient statistics (sum Z_i * (X_i * X_i'))
-% pr  - Structure of prior Gauss-Wishart parameters.
-%
-% Compute posterior GMM parameters from suff stats.
-
-K  = numel(SS0);
-
-% -------------------------------------------------------------------------
-% Mean
-if sum(pr.b) == 0
-    % ---------------------------------------------------------------------
-    % Without prior
-    b = [];
-    for k=1:K
-        SS2(:,:,k) = SS2(:,:,k) - SS1(:,k) * SS1(:,k).';
-    end
-    MU  = bsxfun(@rdivide, SS1, SS0);
+if ~iscell(prec)
+    prec = {prec(:,kept)};
 else
-    % ---------------------------------------------------------------------
-    % With prior
-    b  = pr.b + SS0;
-    MU = bsxfun(@rdivide, SS1 + bsxfun(@times,pr.b,pr.MU), b);
-    for k=1:K
-        SS2(:,:,k) = SS2(:,:,k) + pr.b(k) * pr.MU(:,k) * pr.MU(:,k).' ...
-                                -    b(k) *    MU(:,k) *    MU(:,k).';
+    if numel(prec) >= 1
+        if ~isempty(prec{1})
+            prec{1} = prec{1}(:,:,kept);
+        end
+        if numel(prec) >= 2
+            if ~isempty(prec{2})
+                prec{2} = prec{2}(:,:,kept);
+            end
+            if numel(prec) >= 3 && sum(prec{2}) > 0
+                prec{2} = prec{2}(kept);
+            end
+        end
     end
 end
 
-% -------------------------------------------------------------------------
-% Scale/Precision
-if sum(pr.n) == 0
-    % ---------------------------------------------------------------------
-    % Without prior
-    n   = [];
-    SS2 = bsxfun(@rdivide, SS2, reshape(SS0, [1 1 K]));
-else
-    % ---------------------------------------------------------------------
-    % With prior
-    n = pr.n + SS0;
-    for k=1:K
-        SS2(:,:,k) = SS2(:,:,k) + spm_matcomp('Inv',pr.V(:,:,k));
-    end
-end
-V = SS2;
-for k=1:K
-    V(:,:,k) = spm_matcomp('Inv', V(:,:,k));
-end
-if sum(n) > 0
-    A = bsxfun(@times, V, reshape(n, [1 1 K]));
-else
-    A = V;
-    V = [];
-end
-
+varargout = [{K} {PI} {Z} mean prec];
 
 % =========================================================================
-function [klMU,klA] = kl_gauss_wishart(MU,b,V,n,MU0,b0,V0,n0)
-
-P = size(MU,1);
-K = size(MU,2);
-LogDetA = zeros(1,K);
-if sum(n) > 0
-    A = bsxfun(@times, V, reshape(n, [1 1 K]));
-    for k=1:K
-        LogDetA(k) = spm_prob('W','ELogDet',V(:,:,k),n(k));
-    end
-else
-    A = V;
-    for k=1:K
-        LogDetA(k) = spm_matcomp('LogDet',A(:,:,k));
-    end
+function X = expand(X, msk, N, P, val)
+X1 = X;
+val = cast(val, 'like', X1);
+switch val
+    case 0
+        X = zeros(N, P, 'like', X1);
+    case 1
+        X = ones(N, P, 'like', X1);
+    case Inf
+        X = Inf(N, P, 'like', X1);
+    otherwise
+        if numel(val) == 1
+            X = val * ones(N, P, 'like', X1);
+        elseif numel(val) == P
+            X = repmat(val, [N 1]);
+        end
 end
-
-% Lower bound
-klMU = 0;
-klA  = 0;
-for k=1:K
-    % + prior
-    if sum(b0) > 0
-        % prior
-        klMU = klMU - P*log(2*pi) ...
-                    + P*log(b0(k)) ...
-                    + LogDetA(k) ...
-                    - b0(k)*(MU(:,k)-MU0(:,k)).'*A(:,:,k)*(MU(:,k)-MU0(:,k)) ...
-                    - P*b0(k)/b(k);
-        % posterior
-        klMU = klMU + P*log(2*pi) ...
-                    - P*log(b(k)) ...
-                    - LogDetA(k) ...
-                    + P;
-    end
-    if sum(n0) > 0
-        klA = klA - spm_prob('W', 'kl', V(:,:,k), n(k), V0(:,:,k), n0(k));
-    end
-end
-klMU = 0.5 * klMU;
-klA  = 0.5 * klA;
-
-
-% =========================================================================
-function [PI,logPI,a,ll] = update_proportions(SS0, a0)
-% FORMAT [PI,logPI,a,ll] = update_proportions(SS0, a0)
-%
-% SS0 - 1xK 0th order sufficient statistics (sum of responsibilities)
-% a0  - 1xK Dirichlet prior (can be 0)
-%
-% PI    - 1xK Cluster proportion posterior expected value
-% logPI - 1xK ln(PI) or E[ln(PI)] (if Bayesian)
-% a     - Dirichlet posterior (if Bayesian)
-% ll    - 1x1 Lower bound: E[ln p(PI|a)] - E[ln q(PI)]
-%
-% Bayesian or ML update of cluster proportions.
-
-K = numel(a0);
-a = a0 + SS0;
-if sum(a0(:))
-% Bayesian
-    % expected values
-    logPI = psi(a) - psi(sum(a));
-    PI    = a ./ sum(a(:));
-else
-% Maximum Likelihood
-    ll    = 0;
-    a     = max(a, eps);
-    PI    = a ./ sum(a(:));
-    logPI = log(PI);
-end
-
-% =========================================================================
-function klP = kl_dirichlet(a, a0)
-
-klP = 0;
-K   = numel(a);
-if sum(a0) > 0
-    % prior
-    klP = gammaln(sum(a0)) - sum(gammaln(a0));
-    klP = klP + sum((a0-1) .* (psi(a) - K*psi(sum(a))));
-    % posterior
-    klP = klP - gammaln(sum(a)) - sum(gammaln(a));
-    klP = klP - sum((a-1) .* (psi(a) - K*psi(sum(a))));
-end
+X(msk,:) = X1; clear X1
 
 % =========================================================================
 function [Z,MU,A,PI,logPI] = start(method, X, W, K, a0, pr, kmeans)
@@ -887,13 +1092,17 @@ if ~any(strcmpi(method{1}, {'kmeans'}))
 end
 
 % =========================================================================
-function pr = initialise_prior(pr0, K,P)
+function [MU,b,V,n] = initialise_prior(pr0, K, P)
 % FORMAT pr = initialise_prior(pr0)
 %
 % pr0 - Cell of paramters {MU, b, V, n}
 % K   - Number of classes
 % P   - Number of channels
-% pr  - Structure with fields MU, b, V, n
+%
+% MU  - Mean
+% b   - Mean degrees of freedom
+% V   - Scale matrix (E[A] = nV)
+% n   - Precision degrees of freedom
 %
 % Each input parameter can be missing or empty, in which case:
 %   isempty(MU) ->  isempty(b)  -> no prior over MU (ML optimisation)
@@ -903,128 +1112,66 @@ function pr = initialise_prior(pr0, K,P)
 %               -> ~isempty(n)  -> eye(P)
 %   isempty(n)  -> ~isempty(V)  -> P (most uninformative prior)
 
-pr = struct;
-pr.MU = [];
-pr.b  = [];
-pr.V  = [];
-pr.n  = [];
+MU = [];
+b  = [];
+V  = [];
+n  = [];
 if isempty(pr0)
     return
 end
 
 % -------------------------------------------------------------------------
 % Mean
-pr.MU = pr0{1};
-if ~isempty(pr.MU)
-    P = size(pr.MU, 1);
-    K = size(pr.MU, 2);
+if numel(pr0) > 0
+    MU = pr0{1};
 end
 % -------------------------------------------------------------------------
 % Mean df
 if numel(pr0) > 1
-    pr.b = pr0{2};
+    b = pr0{2};
 end
 % -------------------------------------------------------------------------
 % Mean df [default]
-if ~isempty(pr.MU) && isempty(pr.b)
-    pr.b = eps;
+if ~isempty(MU) && isempty(b)
+    b = eps;
 end
-if ~isempty(pr.b)
-    pr.b = pr.b(:)';
-    if numel(pr.b) < K
-        pr.b = padarray(pr.b, [0 K - numel(pr.b)], 'replicate', 'post');
+if ~isempty(b)
+    b = b(:)';
+    if numel(b) < K
+        b = padarray(b, [0 K - numel(b)], 'replicate', 'post');
     end
 end
 % -------------------------------------------------------------------------
 % Scale
 if numel(pr0) > 2
-    pr.V = pr0{3};
+    V = pr0{3};
 end
 % -------------------------------------------------------------------------
 % Scale df
 if numel(pr0) > 3
-    pr.n = pr0{4};
+    n = pr0{4};
 end
 % -------------------------------------------------------------------------
 % Scale df [default]
-if ~isempty(pr.V) && isempty(pr.n)
-    pr.n = P;
+if ~isempty(V) && isempty(n)
+    n = P;
 end
-if ~isempty(pr.n)
-    pr.n = pr.n(:)';
-    if numel(pr.n) < K
-        pr.n = padarray(pr.n, [0 K - numel(pr.n)], 'replicate', 'post');
+if ~isempty(n)
+    n = n(:)';
+    if numel(n) < K
+        n = padarray(n, [0 K - numel(n)], 'replicate', 'post');
     end
 end
 % -------------------------------------------------------------------------
 % Scale [default]
-if ~isempty(pr.V)
-    if size(pr.V,3) < K
-        pr.V = padarray(pr.V, [0 0 K - size(pr.V,3) ], 'replicate', 'post');
+if ~isempty(V)
+    if size(V,3) < K
+        V = padarray(V, [0 0 K - size(V,3) ], 'replicate', 'post');
     end
-    if size(pr.V,1) == 1
-        pr.V = bsxfun(@times, pr.V, eye(P));
+    if size(V,1) == 1
+        V = bsxfun(@times, V, eye(P));
     end
 end
 
-% =========================================================================
-function code = obs2code(X)
-% FORMAT code = obs2code(X)
-%
-% Compute a "missing code" image for the input observation matrix.
 
-code = double2int(sum(bsxfun(@times, ~isnan(X), 2.^(0:size(X,2)-1)), 2));
 
-% =========================================================================
-function bin = code2bin(code, C)
-    bin = dec2bin(code,C) == '1';
-    bin = bin(end:-1:1);
-
-% =========================================================================
-function L = double2int(L)
-% FORMAT L = double2int(L)
-%
-% Find the best suited integer type to convert L, based on min and max
-% values
-
-minval = min(L(:));
-maxval = max(L(:));
-type   = range2int(maxval,minval);
-func   = str2func(type);
-L      = func(L);
-
-% =========================================================================
-function type = range2int(maxval,minval)
-% FORMAT type = range2int(maxval,minval)
-%
-% Find the best suited integer type to store integer values in the range
-% [minval,maxval]
-
-if nargin < 2
-    minval = 0;
-end
-
-type     = 'int';
-unsigned = minval >= 0;
-if unsigned
-    type   = ['u' type];
-    minval = 0;
-else
-    minval = numel(dec2base(-minval,2));
-end
-maxval = numel(dec2base(maxval,2));
-nbits  = max(minval,maxval);
-if unsigned
-    nbits = nbits + 1;
-end
-if nbits <= 8
-    type = [type '8'];
-elseif nbits <= 16
-    type = [type '16'];
-elseif nbits <= 32
-    type = [type '32'];
-elseif nbits <= 64
-    type = [type '54'];
-else
-    type = 'double';
-end

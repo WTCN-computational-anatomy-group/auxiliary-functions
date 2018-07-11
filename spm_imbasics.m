@@ -336,7 +336,7 @@ return
 %==========================================================================
 
 %==========================================================================
-function [V,W,C] = hist(X,varargin)
+function [V,W,C,BW] = hist(X,varargin)
 % _________________________________________________________________________
 %
 % Compute the (joint) histogram of a (multidimensional) dataset
@@ -365,9 +365,10 @@ function [V,W,C] = hist(X,varargin)
 %
 % OUTPUT
 % ------
-% V - prod(Bp) x P matrix of multidimensional values (bin centres)
-% W - prod(Bp) x 1 vector of weights (bin counts)
-% C - 1xP cell of Bx1 bin centres
+% V  - prod(Bp) x P matrix of multidimensional values (bin centres)
+% W  - prod(Bp) x 1 vector of weights (bin counts)
+% C  - 1xP cell of Bx1 bin centres
+% BW - 1xP bin widths
 %
 % (B can be smaller that the specified number of bins if KeepZero = false)
 %__________________________________________________________________________
@@ -396,7 +397,7 @@ if ~p.Results.Missing
 end
 
 % -------------------------------------------------------------------------
-% Compute bin centres
+% Compute bin centres / edges
 P      = size(X,2); % Number of channels
 N      = size(X,1); % Number of observations
 minval = min(X, [], 1, 'omitnan'); % Min value / channel
@@ -405,9 +406,10 @@ if ~iscell(B) && size(B,1) == 1
 % Number of bins provided
     E = B;
     if numel(B) < P
-        E = padarray(E, P-numel(B), 'replicate', 'post');
+        E = padarray(E, [0, P-numel(B)], 'replicate', 'post');
     end
-    E = num2cell(E);
+    BW = (maxval - minval)./B;
+    E  = num2cell(E);
 else
 % Bin centres provided
     if ~iscell(B)
@@ -417,18 +419,20 @@ else
         B = num2cell(B, 1);
     end
         
-    E = cell(1,P);
+    E  = cell(1,P);
+    BW = cell(1,P);
     for c=1:P
-        E{c} = (B{c}(2:end) + B{c}(1:end-1))/2;
-        E{c} = [minval(c); E{c}; maxval(c)];
+        E{c}  = (B{c}(2:end) + B{c}(1:end-1))/2;
+        E{c}  = [minval(c); E{c}; maxval(c)];
+        BW{c} = E{c}(2:end) - E{c}(1:end-1);
     end
 end
 clear B
 
 % -------------------------------------------------------------------------
 % Discretize data
-I = cell(1,P);
-V = cell(1,P);
+I  = cell(1,P);
+V  = cell(1,P);
 dim = zeros(1,P);
 hasnan = zeros(1,P,'logical');
 for c=1:P
