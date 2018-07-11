@@ -768,7 +768,11 @@ for s=1:J
     if ~strcmp(ix1,filesep)
         ix1 = '';
     end
-    nval        = fullfile([ix1 npth],[nam ext]);
+    if isempty(npth)
+        nval = fullfile(npth,[nam ext]);
+    else
+        nval = fullfile([ix1 npth],[nam ext]);
+    end
     a.(field)   = nval;
     a           = orderfields(a);
     spm_jsonwrite(pth_json,a);
