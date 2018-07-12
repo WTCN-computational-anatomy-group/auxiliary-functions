@@ -538,10 +538,20 @@ elseif axis_2d==3
     bb = [-inf inf;-inf inf;d1 d1];
 end                
 
+% Crop according to bounding-box
 spm_impreproc('subvol',V,bb','2d_');      
 [pth,nam,ext] = fileparts(nfname);   
 nfname1       = fullfile(pth,['2d_' nam ext]);   
 delete(nfname);
+
+% Make sure 'removed' dimension has vx=1
+n  = nifti(nfname1);
+M0 = n.mat;
+d  = [1 1 M0(3,3)];
+D  = diag([d, 1]);                     
+M1 = M0/D;    
+    
+spm_get_space(nfname1,M1);
 
 spm_impreproc('reset_origin',nfname1);
 %==========================================================================
