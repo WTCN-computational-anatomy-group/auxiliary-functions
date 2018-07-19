@@ -855,7 +855,7 @@ if verbose >= 1
     elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
     else,                               incr = '(=)';
     end
-    fprintf('%3d | lb = %10.6g | gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
+    fprintf('%3d | lb = %10.6g |ï¿½gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
 end
 lb.last = lb.sum(end);
 
@@ -1143,7 +1143,7 @@ switch method{1}
         if numel(method) == 1
             % Compute precision from intra-class sample variance
             % 1) SuffStat2 = sum_i { Wi * (Xi-MU)*(Xi-MU)' }
-            X2 = X - reshape(MU, [1 P K]);
+            X2 = bsxfun(@minus,X,reshape(MU, [1 P K]));
             A  = zeros(N,P,P,K);
             for c1=1:P
                 A(:,c1,c1,:) = reshape(X2(:,c1,:).^2, [N 1 1 K]);

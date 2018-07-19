@@ -161,8 +161,10 @@ mat_files = [];
 mat_idx   = zeros(1,numel(input), 'logical');
 for i=1:numel(input)
     if numel(input{i}) >= 5 && strcmpi(input{i}(end-3:end), '.mat')
-        mat_files  = [mat_files ; dir(input{i})];
-        mat_idx(i) = true;
+        mat_files          = [mat_files ; dir(input{i})];
+        folder             = fileparts(input{i});
+        [mat_files.folder] = deal(folder);
+        mat_idx(i)         = true;
     end
 end
 for j=1:numel(mat_files)
@@ -204,12 +206,12 @@ J = numel(json_files);
 if J > 0
     base10 = floor(log10(J)) + 1;
     str    = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
-    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
-    tic;
+    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);    
 end
 
 % -------------------------------------------------------------------------
 % Loop over files
+tic;
 for j=1:J
     
     % ---------------------------------------------------------------------
@@ -766,7 +768,11 @@ for s=1:J
     if ~strcmp(ix1,filesep)
         ix1 = '';
     end
-    nval        = fullfile([ix1 npth],[nam ext]);
+    if isempty(npth)
+        nval = fullfile(npth,[nam ext]);
+    else
+        nval = fullfile([ix1 npth],[nam ext]);
+    end
     a.(field)   = nval;
     a           = orderfields(a);
     spm_jsonwrite(pth_json,a);

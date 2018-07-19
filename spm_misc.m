@@ -3,7 +3,7 @@ function varargout = spm_misc(varargin)
 % Collection of miscellaneous functions.
 %
 % FORMAT [M_avg,d] = compute_avg_mat(Mat0,dims)
-% FORMAT create_nii(pth,dat,mat,dtype,descrip)
+% FORMAT Nii = create_nii(pth,dat,mat,dtype,descrip,scl)
 % FORMAT y = linspace_vec(x1,x2,n)
 % FORMAT manage_parpool(num_workers)
 % FORMAT nw = nbr_parfor_workers
@@ -51,16 +51,20 @@ end
 %==========================================================================
 
 %==========================================================================
-function create_nii(pth,dat,mat,dtype,descrip)
+function Nii = create_nii(pth,dat,mat,dtype,descrip,offset,scl_slope,scl_inter)
 % Create a NIfTI file
-% FORMAT create_nii(pth,dat,mat,dtype,descrip)
+% FORMAT Nii = create_nii(pth,dat,mat,dtype,descrip,scl)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+if nargin<6, offset    = 0; end
+if nargin<7, scl_slope = 1; end
+if nargin<8, scl_inter = 0; end
+
 if exist(pth,'file')==2, delete(pth); end
 
 Nii         = nifti;
 dm          = size(dat);
-Nii.dat     = file_array(pth,dm,dtype,0,1,0);
+Nii.dat     = file_array(pth,dm,dtype,offset,scl_slope,scl_inter);
 Nii.mat     = mat;
 Nii.mat0    = mat;
 Nii.descrip = descrip;
@@ -269,11 +273,8 @@ function msk = msk_modality(f,modality)
 if strcmpi(modality,'mri'),    
     msk = isfinite(f) & (f~=0);
 elseif strcmp(modality,'CT'), 
-    msk = isfinite(f) & (f~=0) & (f>=-1000) & (f<=3000);       
-%     msk = imfill(msk,'holes'); % Because there might be 0 values voxels within the brain that gets masked out above
-%     msk = msk & isfinite(f);
+    msk = isfinite(f) & (f~=max(f(:))) & (f~=min(f(:))) & (f~=0);
 end
-% msk = true(size(f));
 %==========================================================================
 
 %==========================================================================

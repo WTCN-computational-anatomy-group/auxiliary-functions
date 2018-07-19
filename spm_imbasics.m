@@ -8,6 +8,7 @@ function varargout = spm_imbasics(varargin)
 % FORMAT spm_imbasics('smooth_img_in_mem',img,fwhm) 
 % FORMAT [mg,mn,vr] = spm_imbasics('fit_gmm2hist',c,x,K,verbose)
 % FORMAT [a,m,b,n,W,mg,lb] = spm_imbasics('fit_vbgmm2hist',c,x,K,stop_early,tol,verbose)
+% FORMAT nfname1 = spm_imbasics('create_2d_slice',fname,axis_2d)
 %
 % FORMAT help spm_imbasics>function
 % Returns the help file of the selected function.
@@ -31,7 +32,9 @@ switch lower(id)
     case 'fit_gmm2hist'
         [varargout{1:nargout}] = fit_gmm2hist(varargin{:});                 
     case 'fit_vbgmm2hist'
-        [varargout{1:nargout}] = fit_vbgmm2hist(varargin{:});                 
+        [varargout{1:nargout}] = fit_vbgmm2hist(varargin{:});    
+    case 'create_2d_slice'
+        [varargout{1:nargout}] = create_2d_slice(varargin{:});        
     otherwise
         help spm_imcalc
         error('Unknown function %s. Type ''help spm_imcalc'' for help.', id)
@@ -499,6 +502,59 @@ if ~p.Results.KeepZero
     W     = W(~empty);
     V     = V(~empty,:);
 end
+%==========================================================================
+
+%==========================================================================
+function nfname1 = create_2d_slice(fname,axis_2d)
+% Extract the central 2D slice from a 3D volume.
+% FORMAT nfname1 = create_2d_slice(fname,axis_2d)
+% fname   - Input filename
+% axis_2d - Axis to extract along [axis_2d=3]
+% nfname1 - Filename of 2d image
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
+
+if nargin<2, axis_2d = 3; end
+
+V  = spm_vol(fname);
+vx = spm_misc('vxsize',V.mat);
+
+spm_impreproc('nm_reorient',fname,vx,1,'ro_');          
+[pth,nam,ext] = fileparts(fname);
+nfname        = fullfile(pth,['ro_' nam ext]);
+delete(fname);
+
+V  = spm_vol(nfname);
+dm = V.dim;
+
+if axis_2d==1
+    d1 = floor(dm(1)/2) + 1;
+    bb = [d1 d1;-inf inf;-inf inf];
+elseif axis_2d==2
+    d1 = floor(dm(2)/2) + 1;
+    bb = [-inf inf;d1 d1;-inf inf];
+elseif axis_2d==3 
+    d1 = floor(dm(3)/2) + 1;
+    bb = [-inf inf;-inf inf;d1 d1];
+end                
+
+% Crop according to bounding-box
+spm_impreproc('subvol',V,bb','2d_');      
+[pth,nam,ext] = fileparts(nfname);   
+nfname1       = fullfile(pth,['2d_' nam ext]);   
+delete(nfname);
+
+% Make sure 'removed' dimension has vx=1
+n  = nifti(nfname1);
+M0 = n.mat;
+d  = [1 1 M0(3,3)];
+D  = diag([d, 1]);                     
+M1 = M0/D;    
+    
+spm_get_space(nfname1,M1);
+
+spm_impreproc('reset_origin',nfname1);
+%==========================================================================
 
 %==========================================================================
 % HELPER FUNCTIONS

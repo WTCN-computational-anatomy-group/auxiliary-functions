@@ -2,12 +2,14 @@ function varargout = spm_impreproc(varargin)
 %__________________________________________________________________________
 % Collection of tools for image pre-processing.
 %
-% FORMAT [Affine,bb] = atlas_crop(P,Affine,prefix,rem_neck)
-% FORMAT nm_reorient(Vin,vx,type)
-% FORMAT reset_origin(P)
-% FORMAT R = rigid_align(P)
-% FORMAT V = reg_and_reslice(V)
-% FORMAT subvol(V,bb,prefix)
+% FORMAT [Affine,bb] = spm_impreproc('atlas_crop',P,Affine,prefix,rem_neck)
+% FORMAT spm_impreproc('nm_reorient',Vin,vx,type)
+% FORMAT spm_impreproc('reset_origin',P)
+% FORMAT R = spm_impreproc('rigid_align',P)
+% FORMAT V = spm_impreproc('reg_and_reslice',V)
+% FORMAT spm_impreproc('subvol',V,bb,prefix)
+% FORMAT nfname = spm_impreproc('downsample_inplane',fname)
+% FORMAT nfname = spm_impreproc('downsample_throughplane',fname)
 %
 % FORMAT help spm_impreproc>function
 % Returns the help file of the selected function.
@@ -33,7 +35,11 @@ switch lower(id)
     case 'rigid_align'
         [varargout{1:nargout}] = rigid_align(varargin{:});                  
     case 'subvol'
-        [varargout{1:nargout}] = subvol(varargin{:});                
+        [varargout{1:nargout}] = subvol(varargin{:});    
+    case 'downsample_inplane'
+        [varargout{1:nargout}] = downsample_inplane(varargin{:});      
+    case 'downsample_throughplane'
+        [varargout{1:nargout}] = downsample_throughplane(varargin{:});              
     otherwise
         help spm_impreproc
         error('Unknown function %s. Type ''help spm_impreproc'' for help.', id)
@@ -325,15 +331,25 @@ if N==1
     return;
 end
 
+% Get image with smallest voxel size and pick this image as reference
+prod_vx = zeros(1,N);
+for n=1:N
+    vx         = spm_misc('vxsize',V(n).mat);
+    prod_vx(n) = prod(vx);
+end
+[~,ref_ix] = min(prod_vx);
+
 % Set options
-matlabbatch{1}.spm.spatial.coreg.estimate.ref               = {V(1).fname};
+matlabbatch{1}.spm.spatial.coreg.estimate.ref               = {V(ref_ix).fname};
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.cost_fun = 'nmi';
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.sep      = [4 2];
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.tol      = [0.02 0.02 0.02 0.001 0.001 0.001 0.01 0.01 0.01 0.001 0.001 0.001];
 matlabbatch{1}.spm.spatial.coreg.estimate.eoptions.fwhm     = [7 7];
 
 % Co-register
-for n=2:N
+ixs       = 1:N;
+source_ix = ixs(ixs~=ref_ix);
+for n=source_ix
     matlabbatch{1}.spm.spatial.coreg.estimate.source = {V(n).fname};         
 
     spm_jobman('run',matlabbatch);
@@ -341,14 +357,15 @@ end
 %==========================================================================
 
 %==========================================================================
-function V = reslice(V)
+function V = reslice(V,ref_ix)
 % Re-slice images
 % FORMAT V = reslice(V)
 % V - SPM volume object that can contain N different modalities (e.g. T1- 
 % and T2-weighted MRIs.
+% ref_ix - index of reference image in V
 %
 % Takes medical images of the same subject and re-slices the images to the
-% same dimensions. The image with the largest field of view is chosen as
+% same dimensions. If no reference index is given, the image with the largest field of view is chosen as
 % reference for the re-slicing. First order interpolation is used not to
 % introduce any negative values.
 %
@@ -360,15 +377,17 @@ if N==1
     return;
 end
 
-% Get image with largest volume (for reslicing using this image as
-% reference)
-vol = zeros(N,3);
-for n=1:N
-    vx       = sqrt(sum(V(n).mat(1:3,1:3).^2));
-    vol(n,:) = vx.*V(n).dim;
+if nargin<2
+    % Get image with largest volume (for reslicing using this image as
+    % reference)
+    vol = zeros(N,3);
+    for n=1:N
+        vx       = spm_misc('vxsize',V(n).mat);
+        vol(n,:) = vx.*V(n).dim;
+    end
+    vol        = prod(vol,2);
+    [~,ref_ix] = max(vol);
 end
-vol        = prod(vol,2);
-[~,ref_ix] = max(vol);
 
 % Set options
 matlabbatch{1}.spm.spatial.coreg.write.ref             = {V(ref_ix).fname};
@@ -426,6 +445,94 @@ end
 %==========================================================================
 
 %==========================================================================
+function nfname = downsample_inplane(fname)
+% Down-sample a NIfTI image in the high-resolution plane
+% FORMAT nfname = downsample_inplane(fname)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging  
+% Get image data
+
+Nii = nifti(fname);
+M0  = Nii.mat;             
+X   = Nii.dat(:,:,:);  
+dm0 = size(X);                                                   
+vx0 = spm_misc('vxsize',M0);
+
+% Get down-sampling factor
+d = vx0(1:2);
+if d(1)>=1, d(1) = 1; end
+if d(2)>=1, d(2) = 1; end
+d(3) = 1;
+
+if round(d(1),3)<1 || round(d(2),3)<1        
+    % NN downsampling    
+    D = diag([d, 1]);          
+           
+    dm1 = floor(D(1:3,1:3)*dm0')';
+    M1  = M0/D;       
+    
+    T = M0\M1;
+    y = make_deformation(T,dm1);
+                   
+    X = spm_bsplins(X,y(:,:,:,1),y(:,:,:,2),y(:,:,:,3),[0 0 0 0 0 0]);
+    clear y
+
+    X(~isfinite(X)) = 0;
+else
+    M1 = M0;
+end
+
+fname         = Nii.dat.fname;
+[pth,nam,ext] = fileparts(fname);
+nfname        = fullfile(pth,['ds_' nam ext]);
+        
+spm_misc('create_nii',nfname,X,M1,Nii.dat.dtype,Nii.descrip,Nii.dat.offset,Nii.dat.scl_slope,Nii.dat.scl_inter);
+%==========================================================================
+
+%==========================================================================
+function nfname = downsample_throughplane(fname)
+% Down-sample a NIfTI image in the through-plane to 1 mm voxel size
+% FORMAT nfname = downsample_throughplane(fname)
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging  
+
+% Get image data
+Nii = nifti(fname);
+M0  = Nii.mat;             
+X   = Nii.dat(:,:,:);  
+dm0 = size(X);                                                   
+vx0 = spm_misc('vxsize',M0);
+
+% Get down-sampling factor
+d = vx0(3);
+
+if round(d,3)<1
+    % NN downsampling
+    d = [1 1 d];
+    D = diag([d, 1]);          
+           
+    dm1 = floor(D(1:3,1:3)*dm0')';
+    M1  = M0/D;       
+    
+    T = M0\M1;
+    y = make_deformation(T,dm1);
+                   
+    X = spm_bsplins(X,y(:,:,:,1),y(:,:,:,2),y(:,:,:,3),[0 0 0 0 0 0]);
+    clear y
+
+    X(~isfinite(X)) = 0;
+else
+    M1 = M0;
+end
+
+fname         = Nii.dat.fname;
+[pth,nam,ext] = fileparts(fname);
+nfname        = fullfile(pth,['dsz_' nam ext]);
+        
+spm_misc('create_nii',nfname,X,M1,Nii.dat.dtype,Nii.descrip,Nii.dat.offset,Nii.dat.scl_slope,Nii.dat.scl_inter);
+%==========================================================================
+
+%==========================================================================
 % HELPER FUNCTIONS
 %==========================================================================
 
@@ -447,3 +554,13 @@ for d=1:3,
     y1(:,:,:,d) = y0(:,:,:,1)*M(d,1) + y0(:,:,:,2)*M(d,2) + y0(:,:,:,3)*M(d,3) + M(d,4);
 end
 %==========================================================================
+
+%==========================================================================
+function y = make_deformation(M,dm)
+[x0,y0,z0] = ndgrid(1:dm(1),...
+                    1:dm(2),...
+                    1:dm(3));
+y          = cat(4,M(1,1)*x0 + M(1,2)*y0 + M(1,3)*z0 + M(1,4), ...
+                   M(2,1)*x0 + M(2,2)*y0 + M(2,3)*z0 + M(2,4), ...
+                   M(3,1)*x0 + M(3,2)*y0 + M(3,3)*z0 + M(3,4));
+%==========================================================================  
