@@ -329,8 +329,15 @@ for j=1:J
         % -----------------------------------------------------------------
         if ~isempty(metadata.rater)
             
-            rater     = metadata.rater;
+            rater    = metadata.rater;
             protocol = metadata.protocol;
+            nam_modality = metadata.nam_modality; % Modality of segmented image (modality{1..M})
+            if isfield(metadata,'nam_channel')
+                nam_channel  = metadata.nam_channel;  % Channel of segmented image (channel{1..C})            
+            else
+                nam_channel  = '';
+            end
+            ix_img      = metadata.ix_img;      % Index of segmented image (nii(1..N))
             
             % -------------------------------------------------------------
             % Get path to image and read
@@ -362,9 +369,11 @@ for j=1:J
             end
             dat{s}.label{r}.nii(N+1)      = Nii;
             dat{s}.label{r}.json(N+1).pth = pth_json;
-            dat{s}.label{r}.protocol     = protocol;
+            dat{s}.label{r}.protocol      = protocol;            
+            dat{s}.label{r}.nam_modality  = nam_modality;
+            dat{s}.label{r}.nam_channel   = nam_channel;
+            dat{s}.label{r}.ix_img        = ix_img;
         end
-
         
         % -----------------------------------------------------------------
         % Process segmentation data
