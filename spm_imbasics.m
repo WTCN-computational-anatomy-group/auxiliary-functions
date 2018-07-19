@@ -519,7 +519,7 @@ if nargin<2, axis_2d = 3; end
 V  = spm_vol(fname);
 vx = spm_misc('vxsize',V.mat);
 
-spm_impreproc('nm_reorient',fname,vx,1,'ro_');          
+spm_impreproc('nm_reorient',fname,vx,'ro_');          
 [pth,nam,ext] = fileparts(fname);
 nfname        = fullfile(pth,['ro_' nam ext]);
 delete(fname);

@@ -3,7 +3,7 @@ function varargout = spm_impreproc(varargin)
 % Collection of tools for image pre-processing.
 %
 % FORMAT [Affine,bb] = spm_impreproc('atlas_crop',P,Affine,prefix,rem_neck)
-% FORMAT spm_impreproc('nm_reorient',Vin,vx,type)
+% FORMAT spm_impreproc('nm_reorient',Vin,vx)
 % FORMAT spm_impreproc('reset_origin',P)
 % FORMAT R = spm_impreproc('rigid_align',P)
 % FORMAT V = spm_impreproc('reg_and_reslice',V)
@@ -127,7 +127,7 @@ spm_impreproc('subvol',Vin,bb,prefix);
 %==========================================================================
 
 %==========================================================================
-function nm_reorient(Vin,vx,type,prefix)
+function nm_reorient(Vin,vx,prefix)
 % Re-orient images
 % FORMAT nm_reorient(Vin,vx,type)
 % Vin  - SPM volume objects
@@ -145,7 +145,7 @@ spm('defaults', 'FMRI');
 if length(vx)<3
     vx=[vx vx vx];
 end
-if nargin<4, prefix = 'ro_'; end
+if nargin<3, prefix = 'ro_'; end
 
 % If no arguments, then prompt for images
 %PP = spm_get([1 Inf],'*.img','Select files to reorient');
@@ -209,7 +209,7 @@ for V=VV', % Loop over images
         M   = inv(spm_matrix([0 0 -i])*inv(VO.mat)*V.mat);
 
         % Extract this slice according to the mapping
-        img = spm_slice_vol(V,M,dim(1:2),type);
+        img = spm_slice_vol(V,M,dim(1:2),0);
 
         % Write this slice to output image
         spm_write_plane(VO,img,i);
@@ -357,7 +357,7 @@ end
 %==========================================================================
 
 %==========================================================================
-function V = reslice(V,ref_ix)
+function [V,ref_ix] = reslice(V,ref_ix,interp)
 % Re-slice images
 % FORMAT V = reslice(V)
 % V - SPM volume object that can contain N different modalities (e.g. T1- 
@@ -372,6 +372,9 @@ function V = reslice(V,ref_ix)
 % WARNING: This function overwrites the input data!
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+
+if nargin<3, interp = 0; end
+
 N = numel(V);
 if N==1
     return;
@@ -391,7 +394,7 @@ end
 
 % Set options
 matlabbatch{1}.spm.spatial.coreg.write.ref             = {V(ref_ix).fname};
-matlabbatch{1}.spm.spatial.coreg.write.roptions.interp = 1;
+matlabbatch{1}.spm.spatial.coreg.write.roptions.interp = interp;
 matlabbatch{1}.spm.spatial.coreg.write.roptions.wrap   = [0 0 0];
 matlabbatch{1}.spm.spatial.coreg.write.roptions.mask   = 0;
 matlabbatch{1}.spm.spatial.coreg.write.roptions.prefix = 'res_';        
