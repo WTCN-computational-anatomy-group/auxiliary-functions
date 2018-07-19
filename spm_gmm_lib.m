@@ -233,7 +233,7 @@ for i=1:numel(L)
 
     % ---------------------------------------------------------------------
     % Compute posterior mean (expected value)
-    % 1) t = sum_k { z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
+    % 1) t = sum_k {ï¿½z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
     for k=1:K
         X1k = 0;
         X1k = X1k + MU(missing,k).';
@@ -1107,7 +1107,7 @@ function klZ = kl_categorical(Z, W, logPI)
 klZ = 0;
 
 % E[ln p(Z|PI)] (prior ~ responsibilities)
-klZ = klZ + sum(sum(Z .* logPI, 2) .* W, 1);
+klZ = klZ + sum(sum(bsxfun(@times,Z,logPI), 2) .* W, 1);
 
 % -E[ln q(Z)] (posterior ~ responsibilities))
 klZ = klZ - sum(sum(Z .* log(max(Z,eps)), 2) .* W, 1);
