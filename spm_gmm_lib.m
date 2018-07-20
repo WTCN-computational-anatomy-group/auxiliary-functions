@@ -35,7 +35,8 @@ function varargout = spm_gmm_lib(varargin)
 % Update functions
 % ----------------
 %
-% logp = spm_gmm_lib('Marginal', {X,S}, {MU,A}, const, {C, L}, E)
+% logp = spm_gmm_lib('Marginal', X, {MU,A},   const, {C, L}, E)
+% logp = spm_gmm_lib('Marginal', X, {MU,V,n}, const, {C, L}, E)
 % > Observation's marginal log probability within each cluster
 %
 % const = spm_gmm_lib('Const',  MU,     A,    (L))
