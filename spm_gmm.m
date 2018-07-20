@@ -1,4 +1,4 @@
-function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, varargin)
+function varargout = spm_gmm(X, varargin)
 %__________________________________________________________________________
 %
 % Fit a [Bayesian] Gaussian mixture model to observed [weighted] data.
@@ -31,7 +31,7 @@ function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, varargin)
 % Tolerance  - Convergence criterion (~ lower bound gain) [1e-4]
 % BinWidth   - 1x[P] Bin width (histogram mode: add bits of variance) [0]
 % InputDim   - Input space dimension [0=try to guess]
-% Verbose    - Verbosity level: [0]=quiet, 1=write, 2=plot
+% Verbose    - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more
 %
 % OUTPUT
 % ------
@@ -48,8 +48,13 @@ function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, varargin)
 %
 % Use a learned mixture to segment an image.
 %
-% FORMAT [Z, X] = spm_gmm(X,{MU,A},{PI},...)     > Classical
-% FORMAT [Z, X] = spm_gmm(X,{MU,b,V,n},{a},...)  > Bayesian
+% FORMAT [Z, X] = spm_gmm('apply',X,MU,A,PI,...)         > Classical
+% FORMAT [Z, X] = spm_gmm('apply',X,{MU,b},{V,n},a,...)  > Bayesian
+%
+% KEYWORD
+% -------
+% Missing    - Infer missing data: ['infer']/'remove'
+% BinWidth   - 1x[P] Bin width (histogram mode: add bits of variance) [0]
 %__________________________________________________________________________
 %
 % help spm_gmm>Options
@@ -58,9 +63,7 @@ function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, varargin)
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
 % TODO
-% - Code the "apply" mode
-% - Which default missing mode?
-% - Check Start from Kmeans with missing data -> unstable?
+% - Recheck the different Start options
 
 % Convention:
 % N: Number of observations
@@ -71,15 +74,8 @@ function [Z,MU,A,PI,b,V,n,a,X] = spm_gmm(X, varargin)
 % -------------------------------------------------------------------------
 % Special case: Apply model
 % > Here, we use a learned GMM to segment an image
-if nargin > 1 ...
-        && iscell(varargin{2})    ...
-        && ~isempty(varargin{2})  ...
-        && ~ischar(varargin{2}{1})
-    if nargout > 1
-        [Z,MU]  = gmm_apply(X, varargin{:}); % (MU actually contains X)
-    else
-        Z       = gmm_apply(X, varargin{:});
-    end
+if ischar(X) && strcmpi(X, 'apply')
+    [varargout{1:nargout}] = gmm_apply(varargin{:});
     return
 end
 
@@ -436,6 +432,187 @@ if nargout >= 9
     X = reshape(X, [latX P]);
 end
 
+% -------------------------------------------------------------------------
+% Push results in output object
+if nargout >= 1, varargout{1} = Z;
+if nargout >= 2, varargout{2} = MU;
+if nargout >= 3, varargout{3} = A;
+if nargout >= 4, varargout{4} = PI;
+if nargout >= 5, varargout{5} = b;
+if nargout >= 6, varargout{6} = V;
+if nargout >= 7, varargout{7} = n;
+if nargout >= 8, varargout{8} = a;
+if nargout >= 9, varargout{9} = X;
+end;end;end;end;end;end;end;end;end
+
+
+% =========================================================================
+function [Z,X] = gmm_apply(X, mean, prec, prop, varargin)
+% FORMAT [Z,X] = gmm_apply(X, MU, A, PI, ...)
+% FORMAT [Z,X] = gmm_apply(X, {MU,b}, {V,n}, a, ...)
+
+% -------------------------------------------------------------------------
+% Parse inputs
+p = inputParser;
+p.FunctionName = 'gmm_apply';
+p.addRequired('X',                    @isnumeric);
+p.addRequired('mean',                 @(X) isnumeric(X) || iscell(X));
+p.addRequired('precision',            @(X) isnumeric(X) || iscell(X));
+p.addRequired('prop',                 @(X) isnumeric(X) || iscell(X));
+p.addParameter('Missing',    'infer', @ischar);
+p.addParameter('BinWidth',   0,       @isnumeric);
+p.parse(X, mean, prec, prop, varargin{:});
+E          = p.Results.BinWidth;
+Missing    = p.Results.Missing;
+
+MU = [];
+b  = [];
+A  = [];
+V  = [];
+N  = [];
+PI = [];
+a  = [];
+logPI = [];
+
+% -------------------------------------------------------------------------
+% Read arguments
+if ~iscell(mean)
+    MU = mean;
+elseif ~isempty(mean)
+    MU = mean{1};
+    if numel(mean) > 1
+        b = mean{2};
+    end
+end
+if ~iscell(prec)
+    A = prec;
+elseif ~isempty(prec)
+    A = prec{1};
+    if numel(prec) > 1
+        n = prec{2};
+        if sum(b) > 0
+            V = A;
+            A = bsxfun(@times, V, reshape(n,1,1,[]));
+            prec = {V n};
+        end
+    end
+end
+if ~iscell(prop)
+    PI = prop;
+elseif ~isempty(prop)
+    PI = prop{1};
+end
+
+% -------------------------------------------------------------------------
+% Dimensions
+P = size(MU,1);
+K = size(MU,2);
+
+% -------------------------------------------------------------------------
+% Proportions/Dirichlet
+if numel(PI) <= K
+    PI = PI(:)';
+    PI = padarray(PI, [0 K - numel(PI)], 'replicate', 'post');
+    
+    if abs(sum(PI)-1) > eps('single')
+        % Dirichlet prior
+        a     = PI;
+        logPI = psi(a) - psi(sum(a));
+    else
+        logPI = log(max(PI,eps));
+    end
+else
+    logPI = log(max(PI,eps));
+end
+clear PI
+
+% -------------------------------------------------------------------------
+% Reshape X (observations)
+dimX = size(X);
+if P == 1
+    latX = dimX;
+else
+    latX = dimX(1:end-1);
+end
+X = double(reshape(X, [], P));
+N  = size(X, 1); % Number of observations
+N0 = N;          % Original number of observations
+
+% -------------------------------------------------------------------------
+% Prepare missing data stuff (code image, mask, ...)
+if ~any(any(isnan(X)))
+    Missing = 'remove';
+end
+if strcmpi(Missing, 'infer')
+    % Deal with missing data
+    code      = spm_gmm_lib('obs2code', X);     % Code image
+    code_list = unique(code);                   % List of codes
+    missmsk   = [];
+else
+    % Compute mask of removed rows
+    missmsk   = any(isnan(X),2);
+    code      = spm_gmm_lib('double2int', (2^P-1) * ones(sum(~missmsk),1));
+    code_list = 2^P-1;
+end
+% Discard rows with missing values
+if ~isempty(missmsk)
+    X         = X(~missmsk,:);
+    if size(logPI,1) > 1
+        logPI = logPI(~missmsk,:);
+    end
+    N         = sum(~missmsk);
+end
+missmsk = find(missmsk); % saves a bit of memory
+
+% -------------------------------------------------------------------------
+% "Bin" variance
+% > When we work with histograms, a bit of variance is lost due to the
+% binning. Here, we assume some kind of uniform distribution inside the bin
+% and consequently add the corresponding variance to the 2nd order moment.
+if numel(E) < P
+    E = padarray(E, [0 P - numel(E)], 'replicate', 'post');
+end
+E = (E.^2)/12;
+
+% -------------------------------------------------------------------------
+% Compute marginal log-likelihood
+if strcmpi(Missing, 'infer')
+    const = spm_gmm_lib('Const', mean, prec, code_list);
+else
+    const  = spm_gmm_lib('Const', mean, prec);
+end
+logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
+
+% -------------------------------------------------------------------------
+% Compute responsibilities
+ Z = spm_gmm_lib('Responsibility', logpX, logPI);
+ clear logpX logPI
+ 
+% -------------------------------------------------------------------------
+% Infer missing values
+if nargout >= 2 && strcmpi(Missing, 'infer')
+    X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {code,code_list});
+end
+ 
+% -------------------------------------------------------------------------
+% Replace discarded missing values
+if sum(missmsk) > 0
+    present = ones(N0, 1, 'logical');
+    present(missmsk) = false;
+    clear missing
+    
+    Z = expand(Z, present, N0, K, 0);
+    if nargout >= 2
+        X = expand(X, present, N0, P, NaN);
+    end
+end
+    
+% -------------------------------------------------------------------------
+% Reshape everything (use input lattice)
+Z = reshape(Z, [latX K]);
+if nargout >= 2
+    X = reshape(X, [latX P]);
+end
 
 % =========================================================================
 function TellMeMore
