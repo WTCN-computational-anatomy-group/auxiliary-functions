@@ -237,8 +237,8 @@ for i=1:numel(L)
     % 1) t = sum_k {�z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
     for k=1:K
         X1k = 0;
-        X1k = X1k + MU(missing,k).';
-        X1k = X1k + bsxfun(@minus, MU(observed,k).', X(msk,observed)) * (A(observed,missing,k) / A(missing,missing,k));
+        X1k = bsxfun(@plus,X1k,MU(missing,k).');
+        X1k = bsxfun(@plus,X1k,bsxfun(@minus, MU(observed,k).', X(msk,observed)) * (A(observed,missing,k) / A(missing,missing,k)));
         X(msk,missing) = X(msk,missing) + bsxfun(@times, X1k, Z(msk,k));
     end
                     
