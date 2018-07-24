@@ -24,8 +24,10 @@ function varargout = spm_gmm(X, varargin)
 %              [0=no pruning]
 % Missing    - Infer missing data: ['infer']/'remove'
 % Start      - Starting method: METHOD or {METHOD, PRECISION} with
-%   METHOD    = ['kmeans'],'linspace','prior','sample','uniform',MU(PxK)
-%   PRECISION = A([PxP]x[K]) [default: diag(a) with a = (range/(2K))^(-2)]
+%   METHOD    = ['kmeans'],'linspace','prior','sample','uniform',
+%               or provided: MU(PxK) or {MU(PxK),b}
+%   PRECISION = [kmeans2gmm or diag(a) with a = (range/(2K))^(-2)],
+%               or provided: A([PxP]x[K]) or {V([PxP]x[K]),n}
 % KMeans     - Cell of KMeans options [{}].
 % IterMax    - Maximum number of EM iterations [1000]
 % Tolerance  - Convergence criterion (~ lower bound gain) [1e-4]
@@ -138,7 +140,7 @@ if size(PropPrior, 1) > 1
     % Class probability map (fixed proportions)
     PI              = reshape(PropPrior, [], K);
     logPI           = log(max(PI,eps));
-    a0              = zeros(1,K);
+    a0              = zeros(1,K, 'like', PI);
 else
     % Dirichlet prior
     a0              = PropPrior(:)';
@@ -157,14 +159,14 @@ if dimX(1) == 1 && numel(dimX) == 2
 else
     latX = dimX(1:end-1);
 end
-X = double(reshape(X, [], P));
+X  = reshape(X, [], P);
 N  = size(X, 1); % Number of observations
 N0 = N;          % Original number of observations
 
 
 % -------------------------------------------------------------------------
 % Reshape W (weights)
-W = double(W(:));
+W = W(:);
 
 % -------------------------------------------------------------------------
 % Prepare missing data stuff (code image, mask, ...)
@@ -213,7 +215,7 @@ pr = struct('MU', MU0, 'b', b0, 'V', V0, 'n', n0);
     
 % -------------------------------------------------------------------------
 % Initialise mixture
-[~, MU, A, PI00,logPI00] = start(Start, X, W, K, a0, pr, KMeans);
+[~, MU, b, A, V, n, PI00,logPI00] = start(Start, X, W, K, a0, pr, KMeans);
 if isempty(PI)
     PI    = PI00;
     logPI = logPI00;
@@ -225,18 +227,26 @@ end
 
 % -------------------------------------------------------------------------
 % Default prior mean/precision if needed
-if isempty(MU0) && ~isempty(b0)
+if isempty(MU0) && sum(b0) > 0
     MU0 = MU;
 end
-if isempty(V0) && ~isempty(n0)
-    V0 = bsxfun(@rdivide, A, reshape(n0, [1 1 K]));
+if isempty(V0) && sum(n0) > 0
+    if sum(n) > 0
+        V0 = V;
+    else
+        V0 = bsxfun(@rdivide, A, reshape(n0, [1 1 K]));
+    end
 end
 
 % -------------------------------------------------------------------------
 % Initialise posterior
-b = b0;
-n = n0;
-if sum(n) > 0, V    = bsxfun(@rdivide,A,reshape(n,[1 1 K])); end
+if sum(b) == 0
+    b = b0;
+end
+if sum(n) == 0
+    n = n0;
+    if sum(n) > 0, V = bsxfun(@rdivide,A,reshape(n,[1 1 K])); end
+end
 if sum(b) > 0, mean = {MU, b};
 else,          mean = MU;        end
 if sum(n) > 0, prec = {V, b};
@@ -269,7 +279,7 @@ for em=1:p.Results.IterMax
     % ---------------------------------------------------------------------
     % Compute sufficient statistics (bin uncertainty part)
     if sum(E) > 0
-    	SS2b = spm_gmm_lib('SuffStat', 'bin', E, Z, W, {code, code_list});
+    	SS2b = spm_gmm_lib('SuffStat', 'bin', E, Z, W, 1, {code, code_list});
     else
         SS2b = 0;
     end
@@ -534,7 +544,7 @@ if P == 1
 else
     latX = dimX(1:end-1);
 end
-X = double(reshape(X, [], P));
+X = reshape(X, [], P);
 N  = size(X, 1); % Number of observations
 N0 = N;          % Original number of observations
 
@@ -1088,7 +1098,7 @@ end
 X(msk,:) = X1; clear X1
 
 % =========================================================================
-function [Z,MU,A,PI,logPI] = start(method, X, W, K, a0, pr, kmeans)
+function [Z,MU,b,A,V,n,PI,logPI] = start(method, X, W, K, a0, pr, kmeans)
 % FORMAT C = start(method, X, W, K, a0, pr, kmeans)
 %
 % method - Method to use to select starting centroids
@@ -1109,6 +1119,10 @@ function [Z,MU,A,PI,logPI] = start(method, X, W, K, a0, pr, kmeans)
 if ~iscell(method)
     method = {method};
 end
+
+b = [];
+n = [];
+V = [];
 
 switch method{1}
     
@@ -1181,7 +1195,10 @@ switch method{1}
             error('To initialise from prior, a full prior must be provided')
         end
         MU = pr.MU;
-        A  = bsxfun(@times, pr.V, reshape(pr.n, [1 1 K]));
+        b  = pr.b;
+        V  = pr.V;
+        n  = pr.n;
+        A  = bsxfun(@times, V, reshape(n, [1 1 K]));
         
     case 'sample'
     % Sample uniform
@@ -1221,7 +1238,16 @@ switch method{1}
         
     otherwise
     % Provided
-        MU = method{1};
+        if ~iscell(method{1})
+            MU = method{1};
+        else
+            if numel(method{1}) >= 1
+                MU = method{1}{1};
+                if numel(method{1}) >= 2
+                    b = method{1}{2};
+                end
+            end
+        end
 end
 
 % Precision matrix
@@ -1232,8 +1258,19 @@ end
 %   precision matrices.
 % - If matrices are provided, we just copy them.
 if numel(method) >= 2 || ~any(strcmpi(method{1}, {'kmeans','prior'}))
-    if numel(method) > 1
-        A = method{2};
+    if numel(method) >= 2 && (~iscell(method{2}) || numel(method{2}) >= 1)
+        if ~iscell(method{2})
+            A = method{2};
+        else
+            A = method{2}{1};
+            if numel(method{2}) >= 2
+                n = method{2}{2};
+                if sum(n) > 0
+                    V = A;
+                    A = bsxfun(@rdivide, V, n);
+                end
+            end
+        end
     else
         minval = min(X, [], 1, 'omitnan');
         maxval = max(X, [], 1, 'omitnan');

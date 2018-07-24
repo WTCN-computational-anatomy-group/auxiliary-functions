@@ -236,7 +236,7 @@ for i=1:numel(L)
     % Compute posterior mean (expected value)
     % 1) t = sum_k {�z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
     for k=1:K
-        X1k = 0;
+        X1k = zeros(1, 'like', X);
         X1k = bsxfun(@plus,X1k,MU(missing,k).');
         X1k = bsxfun(@plus,X1k,bsxfun(@minus, MU(observed,k).', X(msk,observed)) * (A(observed,missing,k) / A(missing,missing,k)));
         X(msk,missing) = X(msk,missing) + bsxfun(@times, X1k, Z(msk,k));
@@ -314,7 +314,7 @@ if size(const, 1) == 1
     const = repmat(const, [numel(L) 1]);
 end
 
-logpX  = zeros([N K]);
+logpX  = zeros([N K], 'like', X);
 
 % -------------------------------------------------------------------------
 % For each combination of missing voxels
@@ -326,7 +326,7 @@ for i=1:numel(L)
     observed = code2bin(c, P);
     Po       = sum(observed);
     if Po == 0, continue; end
-    if isempty(C) && (c == 2^P-1),  msk = ones(N,1);
+    if isempty(C) && (c == 2^P-1),  msk = ones(N,1, 'logical');
     else,                           msk = (C == c);   end
     missing  = ~observed;
     Pm       = P-Po;
@@ -465,7 +465,7 @@ SS1 = reshape(SS1, [P K]);
 
 %--------------------------------------------------------------------------
 % 1nd order
-SS2 = zeros(P,P,K);
+SS2 = zeros(P,P,K, 'like', Z);
 for i=1:P
     SS2(i,i,:) = reshape(sum(bsxfun(@times, Z, X(:,i).^2),1,'omitnan'), [1 1 K]);
     for j=i+1:P
@@ -549,7 +549,7 @@ for i=1:numel(L)
 
     % ---------------------------------------------------------------------
     % 2nd order moment
-    SS2{i} = zeros(Po,Po,K);
+    SS2{i} = zeros(Po,Po,K, 'like', Z);
     for k=1:Po
         SS2{i}(k,k,:) = reshape(sum(bsxfun(@times, Z1, X1(:,k).^2),1), [1 1 K]);
         for j=k+1:Po
@@ -562,7 +562,7 @@ end
 
 % =========================================================================
 function [SS0,SS1,SS2] = suffstat_infer(lSS0, lSS1, lSS2, cluster, L)
-% FORMAT [SS0,SS1,SS2,logpX] = suffstat_fast(SS0, SS1, SS2, {MU,A}, L)
+% FORMAT [SS0,SS1,SS2] = suffstat_fast(SS0, SS1, SS2, {MU,A}, L)
 %
 % lSS0 - List of sufficient statistics for each pattern of missing data
 % lSS1 - List of sufficient statistics for each pattern of missing data
@@ -599,14 +599,11 @@ end
 P = size(MU,1);
 K = size(MU,2);
 
-SS0 = zeros(1,K);
+SS0 = zeros(1,K, 'like', lSS0{1});
 if nargout > 1
-    SS1 = zeros(P,K);
+    SS1 = zeros(P,K, 'like', lSS1{1});
     if nargout > 2
-        SS2 = zeros(P,P,K);
-        if nargout > 3
-            logpX = 0;
-        end
+        SS2 = zeros(P,P,K, 'like', lSS2{1});
     end
 end
 
@@ -614,7 +611,6 @@ for i=1:numel(L)
     c        = L(i);
     observed = code2bin(c, P);
     missing  = ~observed;
-    Pm       = sum(missing);
     
     for k=1:K
         % -----------------------------------------------------------------
@@ -670,12 +666,13 @@ end
 
 
 % =========================================================================
-function SS2 = suffstat_bin(E, Z, W, codes)
-% FORMAT SS2 = suffstat_bin(E, Z, W, {C,L})
+function SS2 = suffstat_bin(E, Z, W, B, codes)
+% FORMAT SS2 = suffstat_bin(E, Z, W, B, {C,L})
 %
 % E - Variance in each modality due to binning
 % Z - Responisbilities
 % W - Observation weights
+% B - Bias field
 % C - Missing code image
 % L - List of unique codes
 % P - Observed space dimension
@@ -685,13 +682,16 @@ function SS2 = suffstat_bin(E, Z, W, codes)
 
 C  = [];
 L  = [];
-if nargin < 3
-    W = 1;
+if nargin < 4
+    B = 1;
+    if nargin < 3
+        W = 1;
+    end
 end
 
 %--------------------------------------------------------------------------
 % Read input arguments
-if nargin >= 4
+if nargin >= 5
     if ~iscell(codes)
         C = codes;
     else
@@ -714,14 +714,14 @@ N = size(Z,1);
 K = size(Z,2);
 P = numel(E);
 if sum(E) == 0
-    SS2 = zeros(P,P,size(Z,2));
+    SS2 = zeros(P,P,size(Z,2), 'like', Z);
     return
 end
 if isempty(L)
     L = 2^P - 1; % None missing
 end
-Z = bsxfun(@times, Z, W); % Multiply resp with observation count
-SS2 = zeros(P,P,K);
+Z   = bsxfun(@times, Z, W); % Multiply resp with observation count
+SS2 = zeros(P,P,K, 'like', Z);
 
 % -------------------------------------------------------------------------
 % 2nd order moment: uncertainty ~ binning
@@ -731,13 +731,23 @@ for i=1:numel(L)
     Pp       = sum(observed);
     if Pp == 0, continue; end
     
-    if isempty(C) && (c == 2^P-1),  msk = ones(N,1);
+    if isempty(C) && (c == 2^P-1),  msk = ones(N,1,'logical');
     else,                           msk = (C == c);  end
     Nm = sum(msk);
     if Nm == 0, continue; end
     
-    SS2(observed,observed,:) = SS2(observed,observed,:) ...
-        + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), diag(E(observed)));
+    
+    list_p = 1:P;
+    list_p = list_p(observed);
+    for p=list_p
+        if numel(B) > 1
+            B1 = B(msk,p);
+        else
+            B1 = B;
+        end
+        SS2(p,p,:) = SS2(p,p,:) ...
+            + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p)*B1);
+    end
 end
 
 % =========================================================================
@@ -1105,7 +1115,7 @@ end
 function klZ = kl_categorical(Z, W, logPI)
 
 % Initialise
-klZ = 0;
+klZ = zeros(1, 'like', Z);
 
 % E[ln p(Z|PI)] (prior ~ responsibilities)
 klZ = klZ + sum(sum(bsxfun(@times,Z,logPI), 2) .* W, 1);
@@ -1116,7 +1126,7 @@ klZ = klZ - sum(sum(Z .* log(max(Z,eps)), 2) .* W, 1);
 % =========================================================================
 function klP = kl_dirichlet(a, a0)
 
-klP = 0;
+klP = zeros(1, 'like', a);
 K   = numel(a);
 if sum(a0) > 0
     % prior
@@ -1190,7 +1200,7 @@ end
 % Read input arguments
 P = size(MU,1);
 K = size(MU,2);
-LogDetA = zeros(1,K);
+LogDetA = zeros(1,K, 'like', V);
 if sum(n) > 0
     A = bsxfun(@times, V, reshape(n, [1 1 K]));
     for k=1:K
@@ -1204,8 +1214,8 @@ else
 end
 
 % Lower bound
-klMU = 0;
-klA  = 0;
+klMU = zeros(1, 'like', MU);
+klA  = zeros(1, 'like', A);
 for k=1:K
     % + prior
     if sum(b0) > 0
