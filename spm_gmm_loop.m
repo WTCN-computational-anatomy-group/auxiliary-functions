@@ -246,7 +246,7 @@ for em=1:IterMax
         [lSS0,lSS1,lSS2] = spm_gmm_lib('SuffStat', 'base', X, Z, W, {C,L});
         
         LB = NaN(1,SubIterMax);
-        for i=SubIterMax
+        for i=1:SubIterMax
             % -------------------------------------------------------------
             % Infer missing suffstat
             % sum{E[z]}, sum{E[z*x]}, sum{E[z*xx']}
