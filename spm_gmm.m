@@ -246,7 +246,7 @@ if sum(n) == 0
 end
 if sum(b) > 0, mean = {MU, b};
 else,          mean = MU;        end
-if sum(n) > 0, prec = {V, b};
+if sum(n) > 0, prec = {V, n};
 else,          prec = {A};       end
 
 % -------------------------------------------------------------------------
