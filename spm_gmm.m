@@ -91,7 +91,7 @@ p.addOptional('W',           1,             @isnumeric);
 p.addParameter('PropPrior',  0,             @isnumeric);
 p.addParameter('GaussPrior', {},            @iscell);
 p.addParameter('Prune',      0,             @(X) isscalar(X) && isnumeric(X));
-p.addParameter('Missing',    'infer',       @ischar);
+p.addParameter('Missing',    true,          @islogical);
 p.addParameter('Start',      'kmeans',      @(X) ischar(X) || isnumeric(X));
 p.addParameter('KMeans',     {},            @iscell);
 p.addParameter('IterMax',    1000,          @(X) isscalar(X) && isnumeric(X));
@@ -171,9 +171,9 @@ W = W(:);
 % -------------------------------------------------------------------------
 % Prepare missing data stuff (code image, mask, ...)
 if ~any(any(isnan(X)))
-    Missing = 'remove';
+    Missing = false;
 end
-if strcmpi(Missing, 'infer')
+if Missing
     % Deal with missing data
     code      = spm_gmm_lib('obs2code', X);     % Code image
     code_list = unique(code);                   % List of codes
@@ -221,9 +221,6 @@ if isempty(PI)
     logPI = logPI00;
 end
 clear PI00 logPI00
-if size(PI, 1) > 1,     Z = PI;
-else,                   Z = repmat(PI, [N 1]);
-end
 
 % -------------------------------------------------------------------------
 % Default prior mean/precision if needed
@@ -251,162 +248,34 @@ if sum(b) > 0, mean = {MU, b};
 else,          mean = MU;        end
 if sum(n) > 0, prec = {V, b};
 else,          prec = {A};       end
-if strcmpi(Missing, 'infer')
-    const = spm_gmm_lib('Const', mean, prec, code_list);
-else
-    const  = spm_gmm_lib('Const', mean, prec);
-end
-
-          
-% -------------------------------------------------------------------------
-% Lower bound structure
-lb  = struct('sum', [], 'last', NaN, ...
-             'X', [], 'Z', [], 'P', [], 'MU', [], 'A', []);
-         
-% -------------------------------------------------------------------------
-% Initialise marginal log-likelihood
-logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
 
 % -------------------------------------------------------------------------
-% EM loop
-for em=1:p.Results.IterMax
+% MAIN LOOP
+[Z,cluster,prop] = spm_gmm_loop({X,W}, {mean,prec}, ...
+    {'LogProp', logPI, 'Prop', PI}, ...
+    'GaussPrior',     {MU0, b0, V0, n0}, ...
+    'PropPrior',      a0, ...
+    'Missing',        Missing, ...
+    'MissingCode',    {code,code_list}, ...
+    'IterMax',        p.Results.IterMax, ...
+    'Tolerance',      p.Results.Tolerance, ...
+    'SubIterMax',     p.Results.IterMax, ...
+    'SubTolerance',   p.Results.Tolerance, ...
+    'BinUncertainty', E, ...
+    'Verbose',        p.Results.Verbose);
 
-    % ---------------------------------------------------------------------
-    % Compute responsibilities
-    Z = spm_gmm_lib('Responsibility', logpX, logPI);
-    clear logpX
-    
-    % ---------------------------------------------------------------------
-    % Compute sufficient statistics (bin uncertainty part)
-    if sum(E) > 0
-    	SS2b = spm_gmm_lib('SuffStat', 'bin', E, Z, W, 1, {code, code_list});
-    else
-        SS2b = 0;
-    end
-    
-    if strcmpi(Missing, 'infer')
-    % ---------------------------------------------------------------------
-    % sub-EM algorithm to update Mean/Precision with missing data
-    % . Responsibilities (E[z]) are kept fixed
-    % . Missing values (E[z*h], E[z*hh']) are updated
-    % . Cluster parameters (MU,b,A/V,n) are updated
-    
-        % -----------------------------------------------------------------
-        % Compute fast sufficient statistics:
-        % > sum{E[z]}, sum{E[z]*g}, sum{E[z]*gg'}
-        %   for each configuration of missing data
-        [lSS0,lSS1,lSS2] = spm_gmm_lib('SuffStat', 'base', X, Z, W, {code, code_list});
-        
-        L = NaN;
-        for i=1:1024
-            % -------------------------------------------------------------
-            % Infer missing suffstat
-            % sum{E[z]}, sum{E[z*x]}, sum{E[z*xx']}
-            [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', 'infer', lSS0, lSS1, lSS2, {MU,A}, code_list);
-            SS2 = SS2 + SS2b;
-
-            % -------------------------------------------------------------
-            % Update GMM
-            [MU,A1,b,V1,n] = spm_gmm_lib('UpdateClusters', ...
-                                       SS0, SS1, SS2, {MU0,b0,V0,n0});
-            for k=1:K
-                [~,cholp] = chol(A1(:,:,k));
-                if cholp == 0
-                    A(:,:,k) = A1(:,:,k);
-                    if sum(n) > 0
-                        V(:,:,k) = V1(:,:,k);
-                    end
-                end
-            end
-            mean = {MU,b};
-            if ~sum(n), prec = {A};
-            else,       prec = {V,n};   end
-            
-            % -------------------------------------------------------------
-            % Marginal / Objective function
-            [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, code_list, SS2b);
-            L          = [L L1+L2+L3];
-            subgain    = abs(L(end)-L(end-1))/(max(L,[],'omitnan')-min(L,[],'omitnan'));
-            if p.Results.Verbose > 0
-                fprintf('sub | %4d | lb = %6.10f | gain = %6.10f\n', i, L(end), subgain);
-            end
-            if subgain < p.Results.Tolerance
-                break
-            end
-        end
-        
-    else
-    % ---------------------------------------------------------------------
-    % Classical M-step
-    
-        % -----------------------------------------------------------------
-        % Compute sufficient statistics
-        [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', X, Z, W);
-        SS2 = SS2 + SS2b;
-        
-        % -------------------------------------------------------------
-        % Update GMM
-        [MU,A1,b,V1,n] = spm_gmm_lib('UpdateClusters', ...
-                                   SS0, SS1, SS2, {MU0,b0,V0,n0});
-        for k=1:K
-            [~,cholp] = chol(A1(:,:,k));
-            if cholp == 0
-                A(:,:,k) = A1(:,:,k);
-                if sum(n) > 0
-                    V(:,:,k) = V1(:,:,k);
-                end
-            end
-        end
-        mean = {MU,b};
-        if ~sum(n), prec =  {A};
-        else,       prec = {V,n};   end
-        const = spm_gmm_lib('const', mean, prec, code_list);
-        
-    end
-                 
-    % ---------------------------------------------------------------------
-    % Update Proportions
-    if size(PI,1) == 1
-        [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0);
-    end
-        
-    % ---------------------------------------------------------------------
-    % Plot GMM
-    if p.Results.Verbose >= 3
-        spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI)
-    end
-    
-    % ---------------------------------------------------------------------
-    % Marginal / Objective function
-    logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
-    
-    % ---------------------------------------------------------------------
-    % Compute lower bound
-    lb.P(end+1) = spm_gmm_lib('KL', 'Dirichlet', a, a0);
-    lb.Z(end+1) = spm_gmm_lib('KL', 'Categorical', Z, W, logPI);
-    if ~strcmpi(Missing, 'infer')
-        [lb.MU(end+1),lb.A(end+1)] = spm_gmm_lib('KL', 'GaussWishart', ...
-            {MU,b}, prec, {MU0,b0}, {V0,n0});
-        lb.X(end+1) = sum(sum(bsxfun(@times, logpX, bsxfun(@times, Z, W)),'omitnan'),'omitnan');
-    else
-        lb.MU(end+1) = L1;
-        lb.A(end+1)  = L2;
-        lb.X(end+1)  = L3;
-    end
-
-    % ---------------------------------------------------------------------
-    % Check convergence
-    [lb,gain] = check_convergence(lb, em, p.Results.Verbose);
-    if gain < p.Results.Tolerance
-        break;
-    end
-    
-end
+MU = cluster.MU;
+b  = cluster.b;
+A  = cluster.A;
+V  = cluster.V;
+n  = cluster.n;
+PI = prop.Prop;
+a  = prop.Dir;
+% -------------------------------------------------------------------------
 
 % -------------------------------------------------------------------------
 % Infer missing values
-if nargout >= 9 && strcmpi(Missing, 'infer')
+if nargout >= 9 && Missing
     X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {code,code_list});
 end
 
@@ -469,7 +338,7 @@ p.addRequired('X',                    @isnumeric);
 p.addRequired('mean',                 @(X) isnumeric(X) || iscell(X));
 p.addRequired('precision',            @(X) isnumeric(X) || iscell(X));
 p.addRequired('prop',                 @(X) isnumeric(X) || iscell(X));
-p.addParameter('Missing',    'infer', @ischar);
+p.addParameter('Missing',    true,    @islogical);
 p.addParameter('BinWidth',   0,       @isnumeric);
 p.parse(X, mean, prec, prop, varargin{:});
 E          = p.Results.BinWidth;
@@ -551,9 +420,9 @@ N0 = N;          % Original number of observations
 % -------------------------------------------------------------------------
 % Prepare missing data stuff (code image, mask, ...)
 if ~any(any(isnan(X)))
-    Missing = 'remove';
+    Missing = false;
 end
-if strcmpi(Missing, 'infer')
+if Missing
     % Deal with missing data
     code      = spm_gmm_lib('obs2code', X);     % Code image
     code_list = unique(code);                   % List of codes
@@ -586,7 +455,7 @@ E = (E.^2)/12;
 
 % -------------------------------------------------------------------------
 % Compute marginal log-likelihood
-if strcmpi(Missing, 'infer')
+if Missing
     const = spm_gmm_lib('Const', mean, prec, code_list);
 else
     const  = spm_gmm_lib('Const', mean, prec);
@@ -600,7 +469,7 @@ logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
  
 % -------------------------------------------------------------------------
 % Infer missing values
-if nargout >= 2 && strcmpi(Missing, 'infer')
+if nargout >= 2 && Missing
     X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {code,code_list});
 end
  
@@ -843,31 +712,6 @@ function Options
 %               only be used for education or debugging purpose.
 % _________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-
-% =========================================================================
-function [lb,gain] = check_convergence(lb, em, verbose)
-% FORMAT [lb,gain] = check_convergence(lb, em, verbose)
-% lb      - Lower bound structure with fields X, Z, P, MU, A, sum, last
-% em      - EM iteration
-% verbose - Verbosity level (>= 0)
-%
-% Compute lower bound (by summing its parts) and its gain
-% + print info
-
-lb.sum(end+1) = lb.X(end) + lb.Z(end) + lb.P(end) + lb.MU(end) + lb.A(end);
-if verbose >= 2
-    spm_gmm_lib('plot', 'LB', lb)
-end
-gain = abs((lb.last - lb.sum(end))/(max(lb.sum(:))-min(lb.sum(:))));
-if verbose >= 1
-    if     numel(lb.sum) < 2,           incr = '';
-    elseif lb.sum(end) > lb.sum(end-1), incr = '(+)';
-    elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
-    else,                               incr = '(=)';
-    end
-    fprintf('%3d | lb = %10.6g |�gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
-end
-lb.last = lb.sum(end);
 
 % =========================================================================
 function [K,P,Start] = dimFromStart(K, P, Start)
