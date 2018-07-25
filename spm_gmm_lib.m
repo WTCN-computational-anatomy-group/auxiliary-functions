@@ -339,7 +339,7 @@ for i=1:numel(L)
     
     % ---------------------------------------------------------------------
     % Non constant terms
-    X1 = X(msk,:)';
+    X1 = X(msk,observed)';
     for k=1:K
         
         % /!\ Sub-covariance is different from the inverse sub-precision
@@ -355,8 +355,8 @@ for i=1:numel(L)
         end
         
         % Quadratic term in observed values: (obs-mean) x (obs-mean)
-        l = Ao * bsxfun(@minus, X1(observed,:), 2*MU(observed,k));
-        l = -0.5 * dot(l, X1(observed,:), 1);
+        l = Ao * bsxfun(@minus, X1, 2*MU(observed,k));
+        l = -0.5 * dot(l, X1, 1);
         
         % Binning uncertainty
         if any(any(E))
@@ -365,7 +365,6 @@ for i=1:numel(L)
         
         % Reshape as a column vector
         logpX(msk,k) = logpX(msk,k) + l';
-        clear l
     end
         
 end
@@ -615,51 +614,56 @@ for i=1:numel(L)
     for k=1:K
         % -----------------------------------------------------------------
         % 0th order moment
-        SS0(k) = SS0(k) + lSS0{i}(k);
+        SS0k   = lSS0{i}(k);
+        SS0(k) = SS0(k) + SS0k;
         
         if nargout > 1
         % -----------------------------------------------------------------
         % 1st order moment
-        
+            SS1k = lSS1{i}(:,k);
+            MUo  = MU(observed,k);
+            MUm  = MU(missing,k);
+            SA   = A(missing,missing,k) \ A(missing,observed,k);
+            
             % 1) observed
-            SS1(observed,k) = SS1(observed,k) + lSS1{i}(:,k);
+            SS1(observed,k) = SS1(observed,k) + SS1k;
         
             % 2) missing
             % > t = mu(m) + A(m,m) \ A(m,o) * (mu(o) - g)
-            SA = A(missing,missing,k) \ A(missing,observed,k);
-            SS1(missing,k) = SS1(missing,k) + lSS0{i}(k) * MU(missing,k);
-            SS1(missing,k) = SS1(missing,k) + SA * (lSS0{i}(k) * MU(observed,k) - lSS1{i}(:,k));
+            SS1(missing,k) = SS1(missing,k) + SS0k * MUm;
+            SS1(missing,k) = SS1(missing,k) + SA * (SS0k * MUo - SS1k);
         end
         
         if nargout > 2
         % -----------------------------------------------------------------
         % 2nd order moment: quadratic terms
+            SS2k = lSS2{i}(:,:,k);
         
             % 0) precompute stuff
-            MUMUm = lSS0{i}(k) * MU(missing,k) * MU(missing,k).';
-            MUMUo = lSS0{i}(k) * MU(observed,k) * MU(observed,k).';
-            GMUo  = lSS1{i}(:,k) * MU(observed,k).';
-            GMUm  = lSS1{i}(:,k) * MU(missing,k).';
+            MUMUm = SS0k * (MUm * MUm.');
+            MUMUo = SS0k * (MUo * MUo.');
+            GMUo  = SS1k * MUo.';
+            GMUm  = SS1k * MUm.';
         
             % 1) observed x observed
-            SS2(observed,observed,k) = SS2(observed,observed,k) + lSS2{i}(:,:,k);
+            SS2(observed,observed,k) = SS2(observed,observed,k) + SS2k;
             
             % 2) missing x observed
-            tmp = GMUm.' + SA * (GMUo.' - lSS2{i}(:,:,k));
+            tmp = GMUm.' + SA * (GMUo.' - SS2k);
             SS2(missing,observed,k) = SS2(missing,observed,k) + tmp;
             SS2(observed,missing,k) = SS2(observed,missing,k) + tmp.';
             
             % 3) missing x missing
             SS2(missing,missing,k) = SS2(missing,missing,k) + MUMUm;
-            tmp = SA * (lSS0{i}(k) * MU(observed,k) - lSS1{i}(:,k)) * MU(missing,k).';
+            tmp = SA * (SS0k * MUo - SS1k) * MUm.';
             SS2(missing,missing,k) = SS2(missing,missing,k) + tmp + tmp';
-            clear tmp
             SS2(missing,missing,k) = SS2(missing,missing,k) ...
-                + SA * (lSS2{i}(:,:,k) + MUMUo - GMUo.' - GMUo) * SA.';
+                + SA * (SS2k + MUMUo - GMUo.' - GMUo) * SA.';
     
             % 4) uncertainty ~ missing
             SS2(missing,missing,k) = SS2(missing,missing,k) ...
-                + lSS0{i}(k) * spm_matcomp('inv', A(missing,missing,k));
+                + SS0k * inv(A(missing,missing,k));
+%                 + SS0k * spm_matcomp('inv', A(missing,missing,k));
         end
     end
 end

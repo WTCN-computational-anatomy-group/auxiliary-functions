@@ -9,8 +9,9 @@ function varargout = spm_bias_lib(varargin)
 % Basis functions
 % ---------------
 %
+% nbcmp = spm_bias_lib('fwhm2nbcomp', lattice, voxel_size, fwhm)
 % basis = spm_bias_lib('dcbasis',     lattice, nb_components)
-% prec  = spm_bias_lib('regulariser', mode, lattice, nb_components)
+% prec  = spm_bias_lib('regulariser', mode, lattice, nb_components, voxel_size)
 % field = spm_bias_lib('reconstruct', basis, coefficients, ['mult']/'add')
 % [TODO] coeff = spm_bias_lib('rescale',     coeff, centre)
 %
@@ -18,10 +19,16 @@ function varargout = spm_bias_lib(varargin)
 % Optimisation
 % ------------
 %
-% [g,H] = spm_bias_lib('derivatives', p, obs, basis, resp, cluster, codes)
-% ll    = spm_bias_lib('objective',   obs, resp, bias, mean, prec, codes, binvar)
+% [g,H]     = spm_bias_lib('derivatives', p, obs, basis, resp, cluster, codes, binvar)
+% [ll,bias] = spm_bias_lib('objective',   obs, resp, bias, mean, prec, codes, binvar)
 % [TODO] ll    = spm_bias_lib('prior',       coeff, precision)
 % 
+%--------------------------------------------------------------------------
+% Visualisation
+% -------------
+%
+% spm_bias_lib('Plot', 'LB',  lb)
+% spm_bias_lib('Plot', 'Bias', X, B)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -32,6 +39,8 @@ end
 id = varargin{1};
 varargin = varargin(2:end);
 switch lower(id)
+    case 'fwhm2nbcomp'
+        [varargout{1:nargout}] = fwhm2nbcomp(varargin{:}); 
     case 'dcbasis'
         [varargout{1:nargout}] = dcbasis(varargin{:});   
     case 'reconstruct'
@@ -48,44 +57,59 @@ switch lower(id)
 end
 
 % =========================================================================
-function varargout = dcbasis(lattice, varargin)
-% FORMAT [Bx,By,Bz,...] = dcbasis(lattice, nb_component)
-% FORMAT [Bx,By,Bz,...] = dcbasis(lattice, voxel_size, fwhm)
+function nbcmp = fwhm2nbcomp(lattice, vs, fwhm)
+% FORMAT nbcmp = spm_bias_lib('fwhm2nbcomp', lattice, voxel_size, fwhm)
 %
 % lattice      - Dimensions of the lattice [dx dy ...]
-% nb_component - Number of basis functions along each dimension [nx ny ...]
 % voxel_size   - Voxel size of the lattice [vx vy ...]
 % fwhm         - Full-width half-max of the highest frequency basis (mm)
 %
-% If voxel_size and fwhm are provided, the number of components is chosen
-% so that the full-width half-max of the highest frequency basis function 
-% is smaller than fwhm. The bias field cannot model effects whose spatial
-% frequency is higher than this value.
+% The number of components is chosen so that the full-width half-max of 
+% the highest frequency basis function is smaller than fwhm. The bias 
+% field cannot model effects whose spatial frequency is higher than this 
+% value.
 %
-% If only one value is provided for nb_component, voxel_size or fwhm, the
-% same value is used along all dimensions.
+% If only one value is provided for voxel_size or fwhm, the same value is
+% used along all dimensions.
+
+% -------------------------------------------------------------------------
+% Preprocess input arguments
+ndim = numel(lattice);
+vs = reshape(vs, 1, []);
+if numel(vs) < ndim
+    vs = padarray(vs, [0 ndim-numel(vs)], 'replicate', 'post');
+end
+fwhm = reshape(fwhm, 1, []);
+if numel(fwhm) < ndim
+    fwhm = padarray(fwhm, [0 ndim-numel(fwhm)], 'replicate', 'post');
+end
+
+% -------------------------------------------------------------------------
+% Compute number of components per direction
+nbcmp = ceil(2 * vs .* lattice ./ fwhm);
+nbcmp = max(nbcmp, 1);
+
+
+% =========================================================================
+function varargout = dcbasis(lattice, nb_component)
+% FORMAT [Bx,By,Bz,...] = spm_bias_lib('dcbasis', lattice, nb_component)
+%
+% lattice      - Dimensions of the lattice [dx dy ...]
+% nb_component - Number of basis functions along each dimension [nx ny ...]
+%
+% Bx - Smooth basis along the x dimension [dx*nx] 
+% By - Smooth basis along the y dimension [dy*ny]
+% ...
+%
+% There are as many basis objects as elements in `lattice`
 
 ndim = numel(lattice);
 
 % -------------------------------------------------------------------------
-% Compute number of components per direction
-switch numel(varargin)
-    case 1
-        nb_component = reshape(varargin{1}, 1, []);
-        if numel(nb_component) < ndim
-            nb_component = padarray(nb_component, [0 ndim-numel(nb_component)], 'replicate', 'post');
-        end
-    case 2
-        vs = reshape(varargin{1}, 1, []);
-        if numel(vs) < ndim
-            vs = padarray(vs, [0 ndim-numel(vs)], 'replicate', 'post');
-        end
-        fwhm = reshape(varargin{2}, 1, []);
-        if numel(fwhm) < ndim
-            fwhm = padarray(fwhm, [0 ndim-numel(fwhm)], 'replicate', 'post');
-        end
-        nb_component = ceil(2 * vs .* lattice ./ fwhm);
-        nb_component = max(nb_component, 1);
+% Preprocess input arguments
+nb_component = reshape(nb_component, 1, []);
+if numel(nb_component) < ndim
+    nb_component = padarray(nb_component, [0 ndim-numel(nb_component)], 'replicate', 'post');
 end
 
 % -------------------------------------------------------------------------
@@ -96,19 +120,17 @@ for d=1:min(ndim, nargout)
 end
 
 % =========================================================================
-function L = regulariser(mode, lattice, varargin)
-% FORMAT L = regulariser(param, lattice, nb_component)
-% FORMAT L = regulariser(param, lattice, voxel_size, fwhm)
-%
-% FORMAT L = regulariser(mode,  lattice, nb_component)
-% FORMAT L = regulariser(mode,  lattice, voxel_size, fwhm)
+function L = regulariser(mode, lattice, nb_component, vs)
+% FORMAT L = regulariser(param, lattice, nb_component, voxel_size)
+% FORMAT L = regulariser(mode,  lattice, nb_component, voxel_size)
 %
 % param        - Parameters for absolute, membrane and bending energies
 % mode         - Name of a single energy ('absolute'/'membrane'/'bending')
 % lattice      - Dimensions of the lattice [dx dy ...]
 % nb_component - Number of basis functions along each dimension [nx ny ...]
 % voxel_size   - Voxel size of the lattice [vx vy ...]
-% fwhm         - Full-width half-max of the highest frequency basis (mm)
+%
+% L            - Precision matrix [(nx*ny*...)^2]
 %
 % If numerical parameters are provided, a weighted combination of the  
 % three types of regularisation is returned.
@@ -116,12 +138,7 @@ function L = regulariser(mode, lattice, varargin)
 % returned (without weighting: the regularisation parameter should be 
 % multiplied with this matrix)
 %
-% If voxel_size and fwhm are provided, the number of components is chosen
-% so that the full-width half-max of the highest frequency basis function 
-% is smaller than fwhm. The bias field cannot model effects whose spatial
-% frequency is higher than this value.
-%
-% If only one value is provided for nb_component, voxel_size or fwhm, the
+% If only one value is provided for nb_component or voxel_size, the
 % same value is used along all dimensions.
 
 % -------------------------------------------------------------------------
@@ -147,25 +164,18 @@ end
 
 
 % -------------------------------------------------------------------------
-% Compute number of components per direction
+% Preprocess input arguments
 ndim = numel(lattice);
-switch numel(varargin)
-    case 1
-        nb_component = reshape(varargin{1}, 1, []);
-        if numel(nb_component) < ndim
-            nb_component = padarray(nb_component, [0 ndim-numel(nb_component)], 'replicate', 'post');
-        end
-    case 2
-        vs = reshape(varargin{1}, 1, []);
-        if numel(vs) < ndim
-            vs = padarray(vs, [0 ndim-numel(vs)], 'replicate', 'post');
-        end
-        fwhm = reshape(varargin{2}, 1, []);
-        if numel(fwhm) < ndim
-            fwhm = padarray(fwhm, [0 ndim-numel(fwhm)], 'replicate', 'post');
-        end
-        nb_component = ceil(2 * vs .* lattice ./ fwhm);
-        nb_component = max(nb_component, 1);
+nb_component = reshape(nb_component, 1, []);
+if numel(nb_component) < ndim
+    nb_component = padarray(nb_component, [0 ndim-numel(nb_component)], 'replicate', 'post');
+end
+if nargin < 4
+    vs = 1;
+end
+vs = reshape(vs, 1, []);
+if numel(vs) < ndim
+    vs = padarray(vs, [0 ndim-numel(vs)], 'replicate', 'post');
 end
 
 % -------------------------------------------------------------------------
@@ -190,9 +200,9 @@ for d=1:ndim
             case 0
                 basis{d,diff+1} = spm_dctmtx(lattice(d),nb_component(d));
             case 1
-                basis{d,diff+1} = spm_dctmtx(lattice(d),nb_component(d),'diff');
+                basis{d,diff+1} = spm_dctmtx(lattice(d),nb_component(d),'diff') / vs(d);
             case 2
-                basis{d,diff+1} = spm_dctmtx(lattice(d),nb_component(d),'diff2');
+                basis{d,diff+1} = spm_dctmtx(lattice(d),nb_component(d),'diff2') / vs(d)^2;
         end
         basis{d,diff+1} = basis{d,diff+1}.' * basis{d,diff+1};
     end
@@ -526,8 +536,8 @@ end
 
 
 % =========================================================================
-function lb = objective(X, Z, B, mean, prec, codes, binvar)
-% FORMAT lb = spm_bias_lib('objective', obs, resp, bias, mean, prec, codes, binvar)
+function [lb,B] = objective(X, Z, B, mean, prec, codes, binvar)
+% FORMAT [lb,B] = spm_bias_lib('objective', obs, resp, bias, mean, prec, codes, binvar)
 %
 % MANDATORY
 % ---------
