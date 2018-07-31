@@ -410,6 +410,9 @@ clear PI
 dimX = size(X);
 if P == 1
     latX = dimX;
+    if latX(2)==1
+        latX = latX(1);
+    end
 else
     latX = dimX(1:end-1);
 end
