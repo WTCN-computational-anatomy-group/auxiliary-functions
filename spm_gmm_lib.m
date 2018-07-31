@@ -875,6 +875,8 @@ function [MU,A,b,V,n] = updateclusters(SS0,SS1,SS2,pr)
 %
 % Compute posterior GMM parameters from suff stats.
 
+if nargin<4, pr =[]; end
+
 K  = numel(SS0);
 MU0 = [];
 b0  = [];
