@@ -49,7 +49,10 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 % SubTolerance   - Sub-EM gain tolerance (Missing == true) [1e-4]
 % BinUncertainty - 1xP Binning uncertainty
 %                  NxP Bias-modulated binning uncertainty
-% Verbose        - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more
+% Verbose        - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more,
+%                                   4=plot more more
+% dm             - Original image dimensions (2d or 3d), necessary when
+%                  Verbose=4 [[]]
 % 
 % OUTPUT
 % ------
@@ -81,6 +84,7 @@ p.addParameter('SubIterMax',     1024,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubTolerance',   1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinUncertainty', 0,     @isnumeric);
 p.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('dm',             [],    @isnumeric);
 p.parse(varargin{:});
 lb = p.Results.LowerBound;
 Z  = p.Results.Resp;
@@ -94,6 +98,7 @@ Tolerance    = p.Results.Tolerance;
 SubIterMax   = p.Results.SubIterMax;
 SubTolerance = p.Results.SubTolerance;
 Verbose      = p.Results.Verbose;
+dm           = p.Results.dm;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -356,6 +361,11 @@ for em=1:IterMax
     clear logpX
 end
 
+% ---------------------------------------------------------------------
+% Plot ML of responsibilities and template
+if p.Results.Verbose >= 4 && ~isempty(dm)
+    spm_gmm_lib('Plot', 'ml', dm, Z, Template);
+end
 
 % -------------------------------------------------------------------------
 % Format output
