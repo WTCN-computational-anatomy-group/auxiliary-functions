@@ -379,7 +379,7 @@ function [V,W,C,BW] = hist(X,varargin)
 p = inputParser;
 p.FunctionName = 'spm_imbasics(''hist'')';
 p.addRequired('X',                  @isnumeric);
-p.addOptional('B',           64,    @isnumeric);
+p.addOptional('B',           64,    @(X) isnumeric(X) || iscell(X));
 p.addParameter('KeepZero',   true,  @isscalar);
 p.addParameter('Missing',    false, @isscalar);
 p.addParameter('Reshape',    false, @isscalar);
@@ -414,7 +414,7 @@ else
 % Bin centres provided
     if ~iscell(B)
         if size(B,2) == 1
-            B = repmat(B(:), P);
+            B = repmat(B(:),1,P);
         end
         B = num2cell(B, 1);
     end
@@ -423,7 +423,7 @@ else
     BW = cell(1,P);
     for c=1:P
         E{c}  = (B{c}(2:end) + B{c}(1:end-1))/2;
-        E{c}  = [minval(c); E{c}; maxval(c)];
+        E{c}  = [minval(c); E{c}; maxval(c)]';
         BW{c} = E{c}(2:end) - E{c}(1:end-1);
     end
 end
@@ -436,7 +436,7 @@ V  = cell(1,P);
 dim = zeros(1,P);
 hasnan = zeros(1,P,'logical');
 for c=1:P
-    [I{c},V{c}]       = discretize(X(:,c),E{c});
+    [I{c},V{c}]       = discretize(X(:,c),E{c});    
     I{c}(isnan(I{c})) = numel(V{c});
     V{c} = (V{c}(2:end) + V{c}(1:end-1))/2;
     hasnan(c) = any(isnan(X(:,c)));
@@ -450,7 +450,11 @@ clear X
 
 % -------------------------------------------------------------------------
 % Count
-linI = sub2ind(dim, I{:}); clear I
+if numel(dim) == 1
+    linI = [I{:}]; clear I
+else
+    linI = sub2ind(dim, I{:}); clear I
+end
 W    = histcounts(linI, 1:prod(dim)+1); clear linI
 C    = V;
 V    = combvec(V{:});
@@ -514,7 +518,7 @@ function nfname1 = create_2d_slice(fname,axis_2d,clean_up)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
 
-if nargin<2, axis_2d = 3; end
+if nargin<2, axis_2d  = 3;    end
 if nargin<3, clean_up = true; end
 
 V  = spm_vol(fname);
@@ -524,7 +528,7 @@ spm_impreproc('nm_reorient',fname,vx,'ro_');
 [pth,nam,ext] = fileparts(fname);
 nfname        = fullfile(pth,['ro_' nam ext]);
 if clean_up
-delete(fname);
+    delete(fname);
 end
 
 V  = spm_vol(nfname);
