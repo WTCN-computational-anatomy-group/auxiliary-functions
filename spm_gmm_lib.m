@@ -1321,6 +1321,9 @@ function varargout = gmmplot(varargin)
 %
 % spm_gmm_lib('plot', 'gmm', {X,W}, {MU,A}, PI, (wintitle))
 % > Plot mixture fit
+%
+% spm_gmm_lib('plot', 'ml', Z, dm, (wintitle))
+% > Plot ML responsibilities
 
 if nargin == 0
     help spm_gmm_lib>plot
@@ -1332,7 +1335,9 @@ switch lower(id)
     case {'lowerbound','lb'}
         [varargout{1:nargout}] = plot_lowerbound(varargin{:});
     case {'gmm'}
-        [varargout{1:nargout}] = plot_gmm(varargin{:});             
+        [varargout{1:nargout}] = plot_gmm(varargin{:});     
+    case {'ml'}
+        [varargout{1:nargout}] = plot_ml(varargin{:});           
     otherwise
         help spm_gmm_lib>plot
         error('Unknown function %s. Type ''help spm_gmm_lib>plot'' for help.', id)
@@ -1374,6 +1379,55 @@ subplot(2, 3, 6);
 plot(lb.A)
 title('Precisions (KL)')
 drawnow
+
+% =========================================================================
+function plot_ml(dm,Z,tpm,figname)
+
+% ---------------------------------------------------------------------
+% Get figure (create if it does not exist)
+if nargin<4
+    figname = '(SPM) Plot GMM ML';
+end
+f = findobj('Type', 'Figure', 'Name', figname);
+if isempty(f)
+    f = figure('Name', figname, 'NumberTitle', 'off');
+end
+set(0, 'CurrentFigure', f);   
+clf(f);
+
+K      = size(Z,2);
+colors = hsv(K);
+
+% ---------------------------------------------------------------------
+% Plots
+if isequal(size(Z),size(tpm))
+    subplot(121)
+end
+[~,ml] = max(Z,[],2);
+ml     = reshape(ml,dm);
+imagesc(ml'); axis xy image off;
+title('Z')
+
+colormap(colors);
+cb = colorbar;
+set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
+
+drawnow
+
+if isequal(size(Z),size(tpm))
+    subplot(122)
+    [~,ml] = max(tpm,[],2);
+    ml     = reshape(ml,dm);
+    imagesc(ml'); axis xy image off;    
+    title('Template')
+    
+    colormap(colors);
+    cb = colorbar;
+    set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
+    
+    drawnow
+end
+% =========================================================================
 
 % =========================================================================
 function plot_gmm(obs, cluster, PI, figname)
