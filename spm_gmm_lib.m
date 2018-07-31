@@ -561,7 +561,7 @@ end
 
 % =========================================================================
 function [SS0,SS1,SS2] = suffstat_infer(lSS0, lSS1, lSS2, cluster, L)
-% FORMAT [SS0,SS1,SS2] = suffstat_fast(SS0, SS1, SS2, {MU,A}, L)
+% FORMAT [SS0,SS1,SS2] = suffstat_infer(SS0, SS1, SS2, {MU,A}, L)
 %
 % lSS0 - List of sufficient statistics for each pattern of missing data
 % lSS1 - List of sufficient statistics for each pattern of missing data
