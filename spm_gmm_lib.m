@@ -1750,38 +1750,49 @@ end
 set(0, 'CurrentFigure', f);   
 clf(f);
 
-K      = size(Z,2);
-colors = hsv(K);
+K        = size(Z,2);
+colors   = hsv(K);
+z        = floor(dm(3)/2) + 1;
+do_subpl = isequal(size(Z),size(Template));
 
 % ---------------------------------------------------------------------
 % Plots
-if isequal(size(Z),size(Template))
+if do_subpl
     subplot(121)
 end
-[~,ml] = max(Z,[],2);
-ml     = reshape(ml,dm);
-imagesc(ml'); axis xy image off;
+
+Z = reshape(Z,[dm K]);
+
+c = spm_gmm_lib('plot', 'cat2rgb', Z, colors);
+c = squeeze(c(:,:,z,:));
+c = permute(c,[2 1 3]);
+imagesc(c); axis image off xy;   
 title('Z')
 
 colormap(colors);
 cb = colorbar;
+set(gca, 'clim', [0.5 K+0.5]);
 set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
 
-drawnow
-
-if isequal(size(Z),size(Template))
+if do_subpl
     subplot(122)
-    [~,ml] = max(Template,[],2);
-    ml     = reshape(ml,dm);
-    imagesc(ml'); axis xy image off;    
+    
+    Template = reshape(Template,[dm K]);
+    
+    c = spm_gmm_lib('plot', 'cat2rgb', Template, colors);
+    c = squeeze(c(:,:,z,:));
+    c = permute(c,[2 1 3]);
+    imagesc(c); axis image off xy;   
+    
     title('Template')
     
     colormap(colors);
     cb = colorbar;
-    set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
-    
-    drawnow
+    set(gca, 'clim', [0.5 K+0.5]);
+    set(cb, 'ticks', 1:K, 'ticklabels', {1:K});     
 end
+
+drawnow
 % =========================================================================
 
 % =========================================================================
