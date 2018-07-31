@@ -114,6 +114,16 @@ function varargout = spm_gmm_lib(varargin)
 %
 % spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI)
 % > Plot mixture fit
+%
+% spm_gmm_lib('plot', 'cat', dm, Z, Template, (wintitle))
+% > Plot (categorical) responsibilities and template (if available)
+%
+% spm_gmm_lib('plot', 'gaussprior', GaussPrior, (wintitle))
+% > Plot VB-GMM hyper-parameters
+%
+% c = spm_gmm_lib('plot', 'cat2rgb', f, pal)
+% > Generate an RGB volume from a categorical (e.g. responsibilities) volume.
+%
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -1666,8 +1676,8 @@ function varargout = gmmplot(varargin)
 % spm_gmm_lib('plot', 'gmm', {X,W}, {MU,A}, PI, (wintitle))
 % > Plot mixture fit
 %
-% spm_gmm_lib('plot', 'ml', dm, Z, Template, (wintitle))
-% > Plot ML responsibilities and template (if available)
+% spm_gmm_lib('plot', 'cat', dm, Z, Template, (wintitle))
+% > Plot (categorical) responsibilities and template (if available)
 %
 % spm_gmm_lib('plot', 'gaussprior', GaussPrior, (wintitle))
 % > Plot VB-GMM hyper-parameters
@@ -1687,8 +1697,8 @@ switch lower(id)
         [varargout{1:nargout}] = plot_lowerbound(varargin{:});
     case {'gmm'}
         [varargout{1:nargout}] = plot_gmm(varargin{:});     
-    case {'ml'}
-        [varargout{1:nargout}] = plot_ml(varargin{:});           
+    case {'cat'}
+        [varargout{1:nargout}] = plot_cat(varargin{:});           
     case {'gaussprior'}
         [varargout{1:nargout}] = plot_GaussPrior(varargin{:});              
     case {'cat2rgb'}
@@ -1736,7 +1746,7 @@ title('Precisions (KL)')
 drawnow
 
 % =========================================================================
-function plot_ml(dm,Z,Template,figname)
+function plot_cat(dm,Z,Template,figname)
 
 % ---------------------------------------------------------------------
 % Get figure (create if it does not exist)

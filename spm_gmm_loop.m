@@ -389,7 +389,7 @@ end
 % ---------------------------------------------------------------------
 % Plot ML of responsibilities and template
 if p.Results.Verbose >= 4 && ~isempty(dm)
-    spm_gmm_lib('Plot', 'ml', dm, Z, Template);
+    spm_gmm_lib('Plot', 'cat', dm, Z, Template);
 end
 
 % -------------------------------------------------------------------------
