@@ -54,6 +54,8 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 % dm             - Original image dimensions (2d or 3d), necessary when
 %                  Verbose=4 [[]]
 % Template       - [NxK] Voxel-vise probabalistic template [[]]
+% PropReg        - Adds a bit of regularisation to the prop updates when 
+%                  using a template [[0]]
 % 
 % OUTPUT
 % ------
@@ -87,6 +89,7 @@ p.addParameter('BinUncertainty', 0,     @isnumeric);
 p.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
 p.addParameter('dm',             [],    @isnumeric);
 p.addParameter('Template',       [],    @isnumeric);
+p.addParameter('PropReg',        0,    @isnumeric);
 p.parse(varargin{:});
 lb = p.Results.LowerBound;
 Z  = p.Results.Resp;
@@ -102,6 +105,7 @@ SubTolerance = p.Results.SubTolerance;
 Verbose      = p.Results.Verbose;
 dm           = p.Results.dm;
 Template     = p.Results.Template;
+PropReg0     = p.Results.PropReg;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -205,7 +209,10 @@ mean = {MU,b};
 prec = {V,n};
 
 if ~isempty(Template)
-    % Compute logPI by combining Template and [1xK] proportions in PI
+    % Compute logPI by combining Template and [1xK] proportions in PI, as
+    % in:
+    % Ashburner J & Friston KJ. "Unified segmentation".
+    % NeuroImage 26(3):839-851 (2005).
     logPI = bsxfun(@times,Template,PI);    
     logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));
 end
@@ -334,15 +341,26 @@ for em=1:IterMax
     % Update Proportions
     if ~isempty(Template)
         % Update proportions when a template is given
+        % The update equation is from:
+        % Ashburner J & Friston KJ. "Unified segmentation".
+        % NeuroImage 26(3):839-851 (2005).
         logPI = bsxfun(@times,Template,PI);    
         logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));    
         
         mgm = 1./(Template*PI');
         mgm = mgm'*Template;                
         
+        % Set regularisation
+        if PropReg0==0
+            PropReg = 1;
+        else
+            I       = size(logPI,1);
+            PropReg = PropReg0*I;
+        end
+        
         PI = zeros(1,K);
         for k=1:K                     
-            PI(k) = (SS0(k) + 1)/(mgm(k) + K);
+            PI(k) = (SS0(k) + PropReg)/(mgm(k) + PropReg*K);
         end
         PI = PI/sum(PI);
     elseif size(PI,1) == 1
