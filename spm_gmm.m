@@ -37,6 +37,7 @@ function varargout = spm_gmm(X, varargin)
 %                                   4=plot more more 
 % dm         - Original image dimensions (2d or 3d), necessary when
 %                  Verbose=4 [[]]
+% Template   - [NxK] Voxel-vise probabalistic template [[]]
 %
 % OUTPUT
 % ------
@@ -102,6 +103,7 @@ p.addParameter('Tolerance',  1e-4,          @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinWidth',   0,             @isnumeric);
 p.addParameter('InputDim',   0,             @(X) isscalar(X) && isnumeric(X));
 p.addParameter('Verbose',    0,             @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('Template',   [],            @isnumeric);
 p.addParameter('dm',         [],            @isnumeric);
 p.parse(X, varargin{:});
 W          = p.Results.W;
@@ -114,6 +116,7 @@ PropPrior  = p.Results.PropPrior;
 GaussPrior = p.Results.GaussPrior;
 Prune      = p.Results.Prune;
 Missing    = p.Results.Missing;
+Template   = p.Results.Template;
 dm         = p.Results.dm;
 
 % -------------------------------------------------------------------------
@@ -268,6 +271,7 @@ else,          prec = {A};       end
     'SubTolerance',   p.Results.Tolerance, ...
     'BinUncertainty', E, ...
     'Verbose',        p.Results.Verbose, ...
+    'Template',       Template, ...
     'dm',             dm);
 
 MU = cluster.MU;

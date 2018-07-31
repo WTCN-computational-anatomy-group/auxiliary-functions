@@ -30,7 +30,7 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 %   Pi    - NxK Fixed voxel-wise proportions
 %           1xK Pre-computed Pi or E[Pi]
 %   a     - 1xK Posterior concentration parameter (Dirichlet)
-%       
+%
 % KEYWORD
 % -------
 %
@@ -53,6 +53,7 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 %                                   4=plot more more
 % dm             - Original image dimensions (2d or 3d), necessary when
 %                  Verbose=4 [[]]
+% Template       - [NxK] Voxel-vise probabalistic template [[]]
 % 
 % OUTPUT
 % ------
@@ -85,6 +86,7 @@ p.addParameter('SubTolerance',   1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinUncertainty', 0,     @isnumeric);
 p.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
 p.addParameter('dm',             [],    @isnumeric);
+p.addParameter('Template',       [],    @isnumeric);
 p.parse(varargin{:});
 lb = p.Results.LowerBound;
 Z  = p.Results.Resp;
@@ -99,6 +101,7 @@ SubIterMax   = p.Results.SubIterMax;
 SubTolerance = p.Results.SubTolerance;
 Verbose      = p.Results.Verbose;
 dm           = p.Results.dm;
+Template     = p.Results.Template;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -162,6 +165,8 @@ else
         end
     end
 end
+
+% Prepare proportions
 if ~iscell(prop)
     logPI = prop;
 else
@@ -199,6 +204,12 @@ end
 mean = {MU,b};
 prec = {V,n};
 
+if ~isempty(Template)
+    % Compute logPI by combining Template and [1xK] proportions in PI
+    logPI = bsxfun(@times,Template,PI);    
+    logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));
+end
+
 % -------------------------------------------------------------------------
 % Compute log-prop if needed
 if isempty(logPI)
@@ -227,6 +238,7 @@ end
 
 % -------------------------------------------------------------------------
 % EM loop
+K = size(logPI,2); % Number of classes
 for em=1:IterMax
     
     % ---------------------------------------------------------------------
@@ -320,16 +332,29 @@ for em=1:IterMax
                  
     % ---------------------------------------------------------------------
     % Update Proportions
-    if size(PI,1) == 1
-        [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0);
-    end
+    if ~isempty(Template)
+        % Update proportions when a template is given
+        logPI = bsxfun(@times,Template,PI);    
+        logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));    
         
+        mgm = 1./(Template*PI');
+        mgm = mgm'*Template;                
+        
+        PI = zeros(1,K);
+        for k=1:K                     
+            PI(k) = (SS0(k) + 1)/(mgm(k) + K);
+        end
+        PI = PI/sum(PI);
+    elseif size(PI,1) == 1
+        [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0);
+    end        
+
     % ---------------------------------------------------------------------
     % Plot GMM
     if p.Results.Verbose >= 3
-        spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI)
+        spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI);
     end
-    
+   
     % ---------------------------------------------------------------------
     % Marginal / Objective function
     logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, E);
