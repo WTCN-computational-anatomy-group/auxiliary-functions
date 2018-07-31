@@ -1666,8 +1666,8 @@ function varargout = gmmplot(varargin)
 % spm_gmm_lib('plot', 'gmm', {X,W}, {MU,A}, PI, (wintitle))
 % > Plot mixture fit
 %
-% spm_gmm_lib('plot', 'ml', Z, dm, (wintitle))
-% > Plot ML responsibilities
+% spm_gmm_lib('plot', 'ml', dm, Z, Template, (wintitle))
+% > Plot ML responsibilities and template (if available)
 %
 % spm_gmm_lib('plot', 'gaussprior', GaussPrior, (wintitle))
 % > Plot VB-GMM hyper-parameters
@@ -1730,7 +1730,7 @@ title('Precisions (KL)')
 drawnow
 
 % =========================================================================
-function plot_ml(dm,Z,tpm,figname)
+function plot_ml(dm,Z,Template,figname)
 
 % ---------------------------------------------------------------------
 % Get figure (create if it does not exist)
@@ -1749,7 +1749,7 @@ colors = hsv(K);
 
 % ---------------------------------------------------------------------
 % Plots
-if isequal(size(Z),size(tpm))
+if isequal(size(Z),size(Template))
     subplot(121)
 end
 [~,ml] = max(Z,[],2);
@@ -1763,9 +1763,9 @@ set(cb, 'ticks', 1:K, 'ticklabels', {1:K});
 
 drawnow
 
-if isequal(size(Z),size(tpm))
+if isequal(size(Z),size(Template))
     subplot(122)
-    [~,ml] = max(tpm,[],2);
+    [~,ml] = max(Template,[],2);
     ml     = reshape(ml,dm);
     imagesc(ml'); axis xy image off;    
     title('Template')
