@@ -205,8 +205,8 @@ if numel(GaussPrior) >= 1
     end
 end
 
-mean = {MU,b};
-prec = {V,n};
+mean1 = {MU,b};
+prec  = {V,n};
 
 if ~isempty(Template)
     % Compute logPI by combining Template and [1xK] proportions in PI, as
@@ -235,8 +235,8 @@ end
 % -------------------------------------------------------------------------
 % Choose how to start
 if isempty(Z)
-    if Missing, const = spm_gmm_lib('Const', mean, prec, L);
-    else,       const = spm_gmm_lib('Const', mean, prec);
+    if Missing, const = spm_gmm_lib('Const', mean1, prec, L);
+    else,       const = spm_gmm_lib('Const', mean1, prec);
     end
     logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, E);
     Z     = spm_gmm_lib('Responsibility', logpX, logPI);
@@ -290,14 +290,14 @@ for em=1:IterMax
                     end
                 end
             end
-            mean = {MU,b};
+            mean1 = {MU,b};
             if ~sum(n), prec = {A};
             else,       prec = {V,n};   end
             
             % -------------------------------------------------------------
             % Marginal / Objective function
             [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
+            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean1, prec, L, SS2b);
             LB(i+1)    = L1+L2+L3;
             subgain    = abs(LB(i+1)-LB(i))/(max(LB(2:i+1))-min(LB(2:i+1)));
             if Verbose > 0
@@ -330,10 +330,10 @@ for em=1:IterMax
                 end
             end
         end
-        mean = {MU,b};
+        mean1 = {MU,b};
         if ~sum(n), prec =  {A};
         else,       prec = {V,n};   end
-        const = spm_gmm_lib('const', mean, prec, L);
+        const = spm_gmm_lib('const', mean1, prec, L);
         
     end
                  
