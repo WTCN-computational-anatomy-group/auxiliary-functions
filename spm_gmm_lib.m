@@ -1671,6 +1671,10 @@ function varargout = gmmplot(varargin)
 %
 % spm_gmm_lib('plot', 'gaussprior', GaussPrior, (wintitle))
 % > Plot VB-GMM hyper-parameters
+%
+% c = spm_gmm_lib('plot', 'cat2rgb', f, pal)
+% > Generate an RGB volume from a categorical (e.g. responsibilities) volume.
+%
 
 if nargin == 0
     help spm_gmm_lib>plot
@@ -1687,6 +1691,8 @@ switch lower(id)
         [varargout{1:nargout}] = plot_ml(varargin{:});           
     case {'gaussprior'}
         [varargout{1:nargout}] = plot_GaussPrior(varargin{:});              
+    case {'cat2rgb'}
+        [varargout{1:nargout}] = cat2rgb(varargin{:});         
     otherwise
         help spm_gmm_lib>plot
         error('Unknown function %s. Type ''help spm_gmm_lib>plot'' for help.', id)
@@ -1981,6 +1987,48 @@ for p=1:P
 end
 
 drawnow
+%==========================================================================
+
+%==========================================================================
+function c = cat2rgb(f, pal)
+% FORMAT c = cat2rgb(f, pal)
+% f   - categorical (4D) image.
+% pal - palette (Mx3 array or handle to palette function) [hsv]
+%
+% Generate an RGB volume from a categorical (e.g. responsibilities) volume.
+
+if nargin < 2
+    pal = @hsv;
+end
+
+tri = false;
+if numel(size(f)) == 4 && size(f, 3) == 1
+    tri = true;
+    dim = [size(f) 1 1];
+    f = reshape(f, [dim(1:2) dim(4)]);
+end
+if isa(pal, 'function_handle')
+    pal = pal(size(f,3));
+end
+
+dim = [size(f) 1 1];
+c   = zeros([dim(1:2) 3]); % output RGB image
+s   = zeros(dim(1:2));     % normalising term
+
+for k=1:dim(3)
+    s = s + f(:,:,k);
+    color = reshape(pal(k,:), [1 1 3]);
+    c = c + bsxfun(@times, f(:,:,k), color);
+end
+if dim(3) == 1
+    c = c / max(1, max(s(:)));
+else
+    c = bsxfun(@rdivide, c, s);
+end
+
+if tri
+    c = reshape(c, [size(c, 1) size(c, 2) 1 size(c, 3)]);
+end
 %==========================================================================
 
 %==========================================================================
