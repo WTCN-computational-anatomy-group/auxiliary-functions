@@ -1762,7 +1762,6 @@ clf(f);
 
 K        = size(Z,2);
 colors   = hsv(K);
-z        = floor(dm(3)/2) + 1;
 do_subpl = isequal(size(Z),size(Template));
 
 % ---------------------------------------------------------------------
@@ -1774,7 +1773,7 @@ end
 Z = reshape(Z,[dm K]);
 
 c = spm_gmm_lib('plot', 'cat2rgb', Z, colors);
-c = squeeze(c(:,:,z,:));
+c = squeeze(c(:,:,:,:));
 c = permute(c,[2 1 3]);
 imagesc(c); axis image off xy;   
 title('Z')
@@ -1790,7 +1789,7 @@ if do_subpl
     Template = reshape(Template,[dm K]);
     
     c = spm_gmm_lib('plot', 'cat2rgb', Template, colors);
-    c = squeeze(c(:,:,z,:));
+    c = squeeze(c(:,:,:,:));
     c = permute(c,[2 1 3]);
     imagesc(c); axis image off xy;   
     
@@ -2022,26 +2021,31 @@ if nargin < 2
     pal = @hsv;
 end
 
+if size(f,3)>1
+    z = floor(size(f,3)/2) + 1;
+    f = f(:,:,z,:);
+end
+
 tri = false;
 if numel(size(f)) == 4 && size(f, 3) == 1
     tri = true;
-    dim = [size(f) 1 1];
-    f = reshape(f, [dim(1:2) dim(4)]);
+    dm  = [size(f) 1 1];
+    f   = reshape(f, [dm(1:2) dm(4)]);
 end
 if isa(pal, 'function_handle')
     pal = pal(size(f,3));
 end
 
-dim = [size(f) 1 1];
-c   = zeros([dim(1:2) 3]); % output RGB image
-s   = zeros(dim(1:2));     % normalising term
+dm = [size(f) 1 1];
+c   = zeros([dm(1:2) 3]); % output RGB image
+s   = zeros(dm(1:2));     % normalising term
 
-for k=1:dim(3)
+for k=1:dm(3)
     s = s + f(:,:,k);
     color = reshape(pal(k,:), [1 1 3]);
     c = c + bsxfun(@times, f(:,:,k), color);
 end
-if dim(3) == 1
+if dm(3) == 1
     c = c / max(1, max(s(:)));
 else
     c = bsxfun(@rdivide, c, s);
