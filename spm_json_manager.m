@@ -7,6 +7,8 @@ function varargout = spm_json_manager(varargin)
 % FORMAT spm_json_manager('modify_json_field',pth_json,field,val)
 % FORMAT spm_json_manager('modify_pth_in_population',dir_population,field,npth)
 % FORMAT spm_json_manager('make_pth_relative',input)
+% FORMAT populations = spm_json_manager('get_populations',dat)
+% FORMAT dat = spm_json_manager('set_subjects',dat,S)
 %
 % FORMAT help spm_json_manager>function
 % Returns the help file of the selected function.
@@ -29,6 +31,10 @@ switch lower(id)
         [varargout{1:nargout}] = modify_pth_in_population(varargin{:});    
     case 'make_pth_relative'
         [varargout{1:nargout}] = make_pth_relative(varargin{:});              
+    case 'get_populations'
+        [varargout{1:nargout}] = get_populations(varargin{:});          
+    case 'set_subjects'
+        [varargout{1:nargout}] = set_subjects(varargin{:});          
     otherwise
         help spm_json_manager
         error('Unknown function %s. Type ''help spm_json_manager'' for help.', id)
@@ -855,12 +861,105 @@ for j=1:J
 end
 %==========================================================================
 
+%==========================================================================
+function populations = get_populations(dat)
+% FORMAT populations = get_populations(dat)
+%
+% dat         - A hierarchical object (cell of structs) representing all input
+%               files and metadata
+% populations - A struct containing names of the populations in dat, and number
+%               of channels of each population
+%
+% Get population names from the dat struct.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 
+S0          = numel(dat);
+populations = {};
+names       = {};
+cnt         = 1;
+for s=1:S0
+    population = dat{s}.population;
+    
+    if ~any(strcmp(names,population))
+        if isfield(dat{s}.modality{1},'channel')
+            C = numel(dat{s}.modality{1}.channel);
+        else
+            C = 1;
+        end
+        
+        names{end + 1} = population;
+        
+        populations{cnt}.name = dat{s}.population;
+        populations{cnt}.C    = C;
+        
+        cnt = cnt + 1;
+    end
+end
+%==========================================================================
+
+%==========================================================================
+function dat = set_subjects(dat,S)
+% FORMAT populations = get_populations(dat)
+%
+% dat - A hierarchical object (cell of structs) representing all input
+%       files and metadata
+% S   - Scalar or containers.Map deciding how many subjects should be used from
+%       each population
+%
+% Change the number of subjects in a dat cell-array. This is because
+% sometimes one might want to test something on a smaller subset of the
+% population.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+
+S0          = numel(dat);
+populations = spm_json_manager('get_populations',dat);
+P           = numel(populations);
+
+if isnumeric(S)
+    % Create dictionary, if not given
+    S1 = containers.Map;
+    for p=1:P
+        population0 = populations{p}.name;
+        
+        S1(population0) = S;
+    end
+    S = S1;
+end
+
+% Pick subjects from dat into a new, temporary dat cell-array
+ndat = {};
+cnt  = 1;
+for p=1:P
+    Sp          = 0;
+    population0 = populations{p}.name;
+    
+    for s=1:S0
+        population = dat{s}.population;    
+        
+        if strcmpi(population0,population)
+            ndat{cnt} = dat{s};
+            
+            cnt = cnt + 1;
+            Sp  = Sp  + 1;
+            
+            if Sp>=S(population0)
+                break
+            end
+        end
+    end
+end
+
+% Return new dat object
+dat = ndat;
+
+fprintf('spm_json_manager(''set_subjects'') | Total number of subjects changed from %i to %i.\n',S0,numel(dat));
+%==========================================================================
 
 %==========================================================================
 % HELPER FUNCTIONS
 %==========================================================================
-
 
 %==========================================================================
 function files = rdir(pop_dir, pattern)
@@ -1032,15 +1131,5 @@ if ~isfield(metadata,'pth')
     metadata.pth = '';
 else
     metadata.pth = strtrim(metadata.pth);
-end
-%==========================================================================
-
-%==========================================================================
-function ndat = get_population(dat,population)
-ndat = {};
-for s=1:numel(dat)
-    if strcmpi(dat{s}.population,population)
-        ndat{end + 1} = dat{s};
-    end
 end
 %==========================================================================

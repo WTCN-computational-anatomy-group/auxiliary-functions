@@ -33,7 +33,11 @@ function varargout = spm_gmm(X, varargin)
 % Tolerance  - Convergence criterion (~ lower bound gain) [1e-4]
 % BinWidth   - 1x[P] Bin width (histogram mode: add bits of variance) [0]
 % InputDim   - Input space dimension [0=try to guess]
-% Verbose    - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more
+% Verbose    - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more,
+%                                   4=plot more more 
+% dm         - Original image dimensions (2d or 3d), necessary when
+%                  Verbose=4 [[]]
+% Template   - [NxK] Voxel-vise probabalistic template [[]]
 %
 % OUTPUT
 % ------
@@ -99,6 +103,8 @@ p.addParameter('Tolerance',  1e-4,          @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinWidth',   0,             @isnumeric);
 p.addParameter('InputDim',   0,             @(X) isscalar(X) && isnumeric(X));
 p.addParameter('Verbose',    0,             @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('Template',   [],            @isnumeric);
+p.addParameter('dm',         [],            @isnumeric);
 p.parse(X, varargin{:});
 W          = p.Results.W;
 K          = p.Results.K;
@@ -110,6 +116,8 @@ PropPrior  = p.Results.PropPrior;
 GaussPrior = p.Results.GaussPrior;
 Prune      = p.Results.Prune;
 Missing    = p.Results.Missing;
+Template   = p.Results.Template;
+dm         = p.Results.dm;
 
 % -------------------------------------------------------------------------
 % A bit of formatting
@@ -246,7 +254,7 @@ if sum(n) == 0
 end
 if sum(b) > 0, mean = {MU, b};
 else,          mean = MU;        end
-if sum(n) > 0, prec = {V, b};
+if sum(n) > 0, prec = {V, n};
 else,          prec = {A};       end
 
 % -------------------------------------------------------------------------
@@ -262,7 +270,9 @@ else,          prec = {A};       end
     'SubIterMax',     p.Results.IterMax, ...
     'SubTolerance',   p.Results.Tolerance, ...
     'BinUncertainty', E, ...
-    'Verbose',        p.Results.Verbose);
+    'Verbose',        p.Results.Verbose, ...
+    'Template',       Template, ...
+    'dm',             dm);
 
 MU = cluster.MU;
 b  = cluster.b;
@@ -410,6 +420,9 @@ clear PI
 dimX = size(X);
 if P == 1
     latX = dimX;
+    if latX(2)==1
+        latX = latX(1);
+    end
 else
     latX = dimX(1:end-1);
 end

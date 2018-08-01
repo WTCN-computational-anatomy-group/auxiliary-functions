@@ -30,7 +30,7 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 %   Pi    - NxK Fixed voxel-wise proportions
 %           1xK Pre-computed Pi or E[Pi]
 %   a     - 1xK Posterior concentration parameter (Dirichlet)
-%       
+%
 % KEYWORD
 % -------
 %
@@ -49,7 +49,13 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 % SubTolerance   - Sub-EM gain tolerance (Missing == true) [1e-4]
 % BinUncertainty - 1xP Binning uncertainty
 %                  NxP Bias-modulated binning uncertainty
-% Verbose        - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more
+% Verbose        - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more,
+%                                   4=plot more more
+% dm             - Original image dimensions (2d or 3d), necessary when
+%                  Verbose=4 [[]]
+% Template       - [NxK] Voxel-vise probabalistic template [[]]
+% PropReg        - Adds a bit of regularisation to the prop updates when 
+%                  using a template [[0]]
 % 
 % OUTPUT
 % ------
@@ -74,13 +80,16 @@ p.addParameter('Resp',           [],    @isnumeric);
 p.addParameter('GaussPrior',     {},    @iscell);
 p.addParameter('PropPrior',      0,     @isnumeric);
 p.addParameter('Missing',        true,  @islogical);
-p.addParameter('MissingCode',    [],    @(X) isnumeric(X) || iscell(X));
+p.addParameter('MissingCode',    {},    @(X) isnumeric(X) || iscell(X));
 p.addParameter('IterMax',        1024,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('Tolerance',      1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubIterMax',     1024,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubTolerance',   1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinUncertainty', 0,     @isnumeric);
 p.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('dm',             [],    @isnumeric);
+p.addParameter('Template',       [],    @isnumeric);
+p.addParameter('PropReg',        0,    @isnumeric);
 p.parse(varargin{:});
 lb = p.Results.LowerBound;
 Z  = p.Results.Resp;
@@ -94,6 +103,9 @@ Tolerance    = p.Results.Tolerance;
 SubIterMax   = p.Results.SubIterMax;
 SubTolerance = p.Results.SubTolerance;
 Verbose      = p.Results.Verbose;
+dm           = p.Results.dm;
+Template     = p.Results.Template;
+PropReg0     = p.Results.PropReg;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -105,6 +117,7 @@ b0  = 0;  % Mean degrees of freedom (prior)
 n0  = 0;  % Precision degrees of freedom (prior)
 MU0 = []; % Mean (prior)
 V0  = []; % Scale matrix (prior)
+C   = []; % Image of missing codes
 L   = []; % List of unique codes
 logPI = []; % [expected] log-proportions
 PI    = []; % [expected] proportions
@@ -156,6 +169,8 @@ else
         end
     end
 end
+
+% Prepare proportions
 if ~iscell(prop)
     logPI = prop;
 else
@@ -190,8 +205,17 @@ if numel(GaussPrior) >= 1
     end
 end
 
-mean = {MU,b};
-prec = {V,n};
+mean1 = {MU,b};
+prec  = {V,n};
+
+if ~isempty(Template)
+    % Compute logPI by combining Template and [1xK] proportions in PI, as
+    % in:
+    % Ashburner J & Friston KJ. "Unified segmentation".
+    % NeuroImage 26(3):839-851 (2005).
+    logPI = bsxfun(@times,Template,PI);    
+    logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));
+end
 
 % -------------------------------------------------------------------------
 % Compute log-prop if needed
@@ -211,8 +235,8 @@ end
 % -------------------------------------------------------------------------
 % Choose how to start
 if isempty(Z)
-    if Missing, const = spm_gmm_lib('Const', mean, prec, L);
-    else,       const = spm_gmm_lib('Const', mean, prec);
+    if Missing, const = spm_gmm_lib('Const', mean1, prec, L);
+    else,       const = spm_gmm_lib('Const', mean1, prec);
     end
     logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, E);
     Z     = spm_gmm_lib('Responsibility', logpX, logPI);
@@ -221,6 +245,7 @@ end
 
 % -------------------------------------------------------------------------
 % EM loop
+K = size(logPI,2); % Number of classes
 for em=1:IterMax
     
     % ---------------------------------------------------------------------
@@ -244,8 +269,8 @@ for em=1:IterMax
         %   for each configuration of missing data
         [lSS0,lSS1,lSS2] = spm_gmm_lib('SuffStat', 'base', X, Z, W, {C,L});
         
-        LB = NaN(1,SubIterMax+1);
-        for i=SubIterMax
+        LB = NaN(1,SubIterMax);
+        for i=1:SubIterMax
             % -------------------------------------------------------------
             % Infer missing suffstat
             % sum{E[z]}, sum{E[z*x]}, sum{E[z*xx']}
@@ -265,14 +290,14 @@ for em=1:IterMax
                     end
                 end
             end
-            mean = {MU,b};
+            mean1 = {MU,b};
             if ~sum(n), prec = {A};
             else,       prec = {V,n};   end
             
             % -------------------------------------------------------------
             % Marginal / Objective function
             [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
+            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean1, prec, L, SS2b);
             LB(i+1)    = L1+L2+L3;
             subgain    = abs(LB(i+1)-LB(i))/(max(LB(2:i+1))-min(LB(2:i+1)));
             if Verbose > 0
@@ -305,25 +330,49 @@ for em=1:IterMax
                 end
             end
         end
-        mean = {MU,b};
+        mean1 = {MU,b};
         if ~sum(n), prec =  {A};
         else,       prec = {V,n};   end
-        const = spm_gmm_lib('const', mean, prec, L);
+        const = spm_gmm_lib('const', mean1, prec, L);
         
     end
                  
     % ---------------------------------------------------------------------
     % Update Proportions
-    if size(PI,1) == 1
-        [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0);
-    end
+    if ~isempty(Template)
+        % Update proportions when a template is given
+        % The update equation is from:
+        % Ashburner J & Friston KJ. "Unified segmentation".
+        % NeuroImage 26(3):839-851 (2005).
+        logPI = bsxfun(@times,Template,PI);    
+        logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));    
         
+        mgm = 1./(Template*PI');
+        mgm = mgm'*Template;                
+        
+        % Set regularisation
+        if PropReg0==0
+            PropReg = 1;
+        else
+            I       = size(logPI,1);
+            PropReg = PropReg0*I;
+        end
+        
+        PI = zeros(1,K);
+        for k=1:K                     
+            PI(k) = (SS0(k) + PropReg)/(mgm(k) + PropReg*K);
+        end
+        PI = PI/sum(PI);
+    elseif size(PI,1) == 1
+        [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0);
+    end        
+
     % ---------------------------------------------------------------------
     % Plot GMM
     if p.Results.Verbose >= 3
-        spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI)
+        spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI);
     end
-    
+   
     % ---------------------------------------------------------------------
     % Marginal / Objective function
     logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, E);
@@ -355,6 +404,11 @@ for em=1:IterMax
     clear logpX
 end
 
+% ---------------------------------------------------------------------
+% Plot ML of responsibilities and template
+if p.Results.Verbose >= 4 && ~isempty(dm)
+    spm_gmm_lib('Plot', 'cat', dm, Z, Template);
+end
 
 % -------------------------------------------------------------------------
 % Format output
@@ -382,6 +436,6 @@ if verbose >= 1
     elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
     else,                               incr = '(=)';
     end
-    fprintf('%3d | lb = %10.6g | gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
+    fprintf('%3d | lb = %10.6g |�gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
 end
 lb.last = lb.sum(end);

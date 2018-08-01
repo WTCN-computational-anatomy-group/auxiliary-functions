@@ -64,6 +64,9 @@ function varargout = spm_gmm_lib(varargin)
 % [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0)
 % > Update cluster proportions
 %
+% [GaussPrior,extras] = spm_gmm_lib('updatehyperpars',cluster,GaussPrior,varargin)
+% > Update VB-GMM hyper-parameters (MU,b,V,n)
+%
 % X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {C,L})
 % > Infer missing values (this should only be done once, at the end)
 %
@@ -111,6 +114,16 @@ function varargout = spm_gmm_lib(varargin)
 %
 % spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI)
 % > Plot mixture fit
+%
+% spm_gmm_lib('plot', 'cat', dm, Z, Template, (wintitle))
+% > Plot (categorical) responsibilities and template (if available)
+%
+% spm_gmm_lib('plot', 'gaussprior', GaussPrior, (wintitle))
+% > Plot VB-GMM hyper-parameters
+%
+% c = spm_gmm_lib('plot', 'cat2rgb', f, pal)
+% > Generate an RGB volume from a categorical (e.g. responsibilities) volume.
+%
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -135,6 +148,8 @@ switch lower(id)
         [varargout{1:nargout}] = updateclusters(varargin{:});   
     case 'updateproportions'
         [varargout{1:nargout}] = updateproportions(varargin{:});  
+    case 'updatehyperpars'
+        [varargout{1:nargout}] = updatehyperpars(varargin{:});           
     case 'marginalsum'
         [varargout{1:nargout}] = marginalsum(varargin{:});
     case 'kl'
@@ -148,7 +163,7 @@ switch lower(id)
     case 'double2int'
         [varargout{1:nargout}] = double2int(varargin{:});  
     case 'plot'
-        [varargout{1:nargout}] = gmmplot(varargin{:});              
+        [varargout{1:nargout}] = gmmplot(varargin{:});       
     otherwise
         help spm_gmm_lib
         error('Unknown function %s. Type ''help spm_gmm_lib'' for help.', id)
@@ -561,7 +576,7 @@ end
 
 % =========================================================================
 function [SS0,SS1,SS2] = suffstat_infer(lSS0, lSS1, lSS2, cluster, L)
-% FORMAT [SS0,SS1,SS2] = suffstat_fast(SS0, SS1, SS2, {MU,A}, L)
+% FORMAT [SS0,SS1,SS2] = suffstat_infer(SS0, SS1, SS2, {MU,A}, L)
 %
 % lSS0 - List of sufficient statistics for each pattern of missing data
 % lSS1 - List of sufficient statistics for each pattern of missing data
@@ -875,6 +890,8 @@ function [MU,A,b,V,n] = updateclusters(SS0,SS1,SS2,pr)
 %
 % Compute posterior GMM parameters from suff stats.
 
+if nargin<4, pr =[]; end
+
 K  = numel(SS0);
 MU0 = [];
 b0  = [];
@@ -963,6 +980,345 @@ else
     PI    = a ./ sum(a(:));
     logPI = log(PI);
 end
+% =========================================================================
+
+% =========================================================================
+function [GaussPrior,extras] = updatehyperpars(cluster,GaussPrior,varargin)
+% FORMAT [GaussPrior,extras] = updatehyperpars(cluster,GaussPrior,varargin)
+%
+% REQUIRED
+% cluster    - 1xS cell array where cluster{s} = {{MU,b},{V,n}}
+% GaussPrior - {MU0,b0,V0,n0}
+%
+% OPTIONAL
+% constrained - Optimise hierarchical prior on V [false]
+% figname     - Postfix added to figure name ['']
+% verbose     - Verbosity level: [false]=quiet, true=display
+%
+% OUTPUT
+% GaussPrior - New {MU0,b0,V0,n0}
+% extras     - Struct with lower bound information, etc.
+%
+% Update of VB-GMM hyper-parameters (m,b,W,n).
+
+% Parse optional arguments
+%--------------------------------------------------------------------------
+p = inputParser;
+p.FunctionName = 'updatehyperpars';
+p.addParameter('constrained',0,@islogical);
+p.addParameter('figname','',@ischar);
+p.addParameter('verbose',0,@islogical);
+p.parse(varargin{:});
+constrained = p.Results.constrained;
+figname     = p.Results.figname;
+verbose     = p.Results.verbose;
+
+% Parameters
+S = numel(cluster); % Number of posteriors
+
+m0 = GaussPrior{1};
+b0 = GaussPrior{2};
+W0 = GaussPrior{3};
+n0 = GaussPrior{4};
+
+N = size(m0,1);
+K = size(m0,2);
+
+% pre-allocate
+LogDetW0  = zeros(size(n0));
+V         = zeros(size(W0));
+p         = zeros(size(n0));
+p0        = 0;
+
+% -------------------------------------------------------------------------
+%   Gauss-Wishart "mean" parameters
+% -------------------------------------------------------------------------
+
+for k=1:K
+    
+    % ---------------------------------------------------------------------
+    % Update m0 (mode, closed-form)
+    
+    Lambda   = 0;
+    LambdaMu = 0;
+    for s=1:S
+        [m,~,W,n] = get_posteriors(cluster,s);
+        Lambda    = Lambda   + n(k)*W(:,:,k);
+        LambdaMu  = LambdaMu + n(k)*W(:,:,k)*m(:,k);
+    end
+    m0(:,k) = Lambda \ LambdaMu;
+    
+    % ---------------------------------------------------------------------
+
+    
+    % ---------------------------------------------------------------------
+    % Update b0 (mode, closed-form)
+
+    b0(k)= 0;
+    for s=1:S
+        [m,b,W,n] = get_posteriors(cluster,s);
+        m1 = m(:,k) - m0(:,k);
+        b0(k) = b0(k) + m1.' * (n(k)*W(:,:,k)) * m1 + N/b(k);
+    end
+    b0(k) = N*S/b0(k);
+    
+    % ---------------------------------------------------------------------
+
+end
+
+
+% =========================================================================
+% NOT CONSTRAINED
+if ~constrained
+    
+    % ---------------------------------------------------------------------
+    %   Gauss-Wishart "precision" parameters
+    % ---------------------------------------------------------------------
+
+    for k=1:K
+        
+        % ---
+        % Set up some constants
+        sumLogDet = 0;
+        sumPsi    = 0;
+        Wn        = 0;
+        for s=1:S
+            [~,~,W,n] = get_posteriors(cluster,s);
+            sumLogDet = sumLogDet + spm_matcomp('LogDet', W(:,:,k));
+            sumPsi    = sumPsi    + spm_prob('DiGamma', n(k)/2, N);
+            Wn        = Wn        + n(k)*W(:,:,k);
+        end
+        sumLogDet = sumLogDet/S;
+        sumPsi    = sumPsi/S;
+        Wn        = Wn/S;
+            
+        % -----------------------------------------------------------------
+        % Update n0 (mode, Gauss-Newton [convex])
+        E = inf;
+        for gniter=1:1000
+            
+            % -------------------------------------------------------------
+            % Update W0 (mode, closed-form)
+            W0(:,:,k)   = Wn/n0(k);
+            LogDetW0(k) = spm_matcomp('LogDet', W0(:,:,k));
+            % -------------------------------------------------------------
+            
+            % ---
+            % Objective function
+            Eprev = E;
+            E = 0.5*S*n0(k)*( LogDetW0(k) - sumLogDet - sumPsi ) ...
+                + S*spm_prob('LogGamma', n0(k)/2, N);
+            
+            if E == Eprev
+                break;
+            end
+
+            % ---
+            % Gradient & Hessian
+            g = 0.5*S*( LogDetW0(k) - sumLogDet - sumPsi ...
+                         + spm_prob('DiGamma', n0(k)/2, N) );
+            H = S/4*spm_prob('DiGamma', n0(k)/2, N, 1);
+
+            % ---
+            % Update
+            n0(k) = max(n0(k) - H\g, N-1+2*eps);
+            
+        end
+        % -----------------------------------------------------------------
+    
+    end
+    
+    % ---------------------------------------------------------------------
+    %   Save results
+    % ---------------------------------------------------------------------
+    extras.b   = b0;
+    extras.m   = m0;
+    extras.n   = n0;
+    extras.W   = W0;
+    extras.ldW = LogDetW0;
+    extras.lb  = 0;
+    
+    GaussPrior{1} = m0;
+    GaussPrior{2} = b0;
+    GaussPrior{3} = W0;
+    GaussPrior{4} = n0;
+    
+% =========================================================================
+% CONSTRAINED
+else
+
+    lb = -inf;
+    for em=1:100
+
+        % ---
+        % Starting estimate
+        if p0 == 0
+            p0 = 0;
+            V0 = 0;
+            for k=1:K
+                p0 = p0 + S*n0(k);
+                for s=1:S
+                    [~,~,W,n] = get_posteriors(cluster,s);
+                    V0 = V0 + spm_matcomp('Inv', n(k)*W(:,:,k));
+                end
+            end
+            p0 = p0/K;
+            V0 = V0/K;
+        end
+
+        % -----------------------------------------------------------------
+        %   Gauss-Wishart "precision" parameters
+        % -----------------------------------------------------------------
+
+        for k=1:K
+
+            % ---
+            % Set up some constants
+            % > compute sum E[logdet W] and sum psi(nu/2)
+            logDetW  = 0;
+            psiN     = 0;
+            Lambda   = 0;
+            for s=1:S
+                [~,~,W,n] = get_posteriors(cluster,s);
+                logDetW = logDetW  + spm_matcomp('Logdet', W(:,:,k));
+                psiN    = psiN     + spm_prob('DiGamma', n(k)/2, N);
+                Lambda  = Lambda   + n(k)*W(:,:,k);
+            end
+            logDetW  = logDetW/S;
+            psiN = psiN/S;
+
+
+            % -------------------------------------------------------------
+            % Update n0 (mode, Gauss-Newton [convex])
+            E = inf;
+            for gniter=1:1000
+
+                % ---------------------------------------------------------
+                % Update {p,V} for W0 (posterior, closed form)
+                p(k)       = p0 + S*n0(k);
+                V(:,:,k)   = spm_matcomp('Inv', spm_matcomp('Inv', V0) + Lambda);
+                % Useful values
+                W0(:,:,k)   = spm_matcomp('Inv', spm_prob('W', 'E', V(:,:,k), p(k)));
+                LogDetW0(k) = -spm_prob('W', 'Elogdet', V(:,:,k), p(k));
+                % ---------------------------------------------------------
+
+                % ---
+                % Objective function
+                Eprev = E;
+                E = S*n0(k)/2 * (LogDetW0(k) - logDetW - psiN) ...
+                    + S*spm_prob('LogGamma', n0(k)/2, N);
+                if E == Eprev
+                    break;
+                end
+
+                % ---
+                % Gradient & Hessian
+                g = S/2*(LogDetW0(k) - logDetW - psiN + spm_prob('DiGamma', n0(k)/2, N));
+                H = S/4 * spm_prob('DiGamma', n0(k)/2, N, 1);
+
+                % ---
+                % Update
+                n0(k) = max(n0(k) - H\g, N-1+2*eps);
+            end
+            % ------------------------------------------------------------
+
+        end
+
+
+        % -----------------------------------------------------------------
+        %   Inverse-Wishart parameters
+        % -----------------------------------------------------------------
+
+        % ---
+        % Set up some constants
+        % > compute sum Logdet(psi) and sum psi(m/2)
+        sumlogV = 0;
+        sumPsi  = 0;
+        pV      = 0;
+        for k=1:K
+            sumlogV = sumlogV + spm_matcomp('LogDet', V(:,:,k));
+            sumPsi  = sumPsi  + spm_prob('DiGamma', p(k)/2, N);
+            pV      = pV      + p(k)*V(:,:,k);
+        end
+        sumlogV = sumlogV/K;
+        sumPsi  = sumPsi/K;
+        pV      = pV/K;
+
+
+        % -----------------------------------------------------------------
+        % Update p0 (mode, Gauss-Newton [convex])
+        E = inf;
+        for gniter=1:1000
+
+            % -------------------------------------------------------------
+            % Update V0 (closed-form)
+            V0 = pV/p0;
+            LogDetV0 = spm_matcomp('LogDet', V0);
+            % -------------------------------------------------------------
+
+            % ---
+            % Objective function
+            Eprev = E;
+            E = p0*K/2*( N*LogDetV0 - sumlogV - sumPsi ) + K*spm_prob('LogGamma', p0/2, N);
+            if E == Eprev
+                break;
+            end
+
+            % ---
+            % Gradient & Hessian
+            g = K/2*( LogDetV0 - sumlogV - sumPsi + spm_prob('DiGamma', p0/2, N) );
+            H = K/4*spm_prob('DiGamma', p0/2, N, 1);
+
+            % ---
+            % Update
+            p0 = max(p0 - H\g, N-1+2*eps);
+
+        end
+        % -----------------------------------------------------------------
+    
+        
+        % ---
+        % Objective function
+        lb_prev = lb;
+        lb  = 0;
+        for k=1:K
+            lb  = lb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
+        end
+        if abs(lb_prev-lb) < 2*eps
+            break;
+        end
+        % ---
+        
+    end % < "EM" loop
+
+    % ---------------------------------------------------------------------
+    %   Save results
+    % ---------------------------------------------------------------------
+    extras.b   = b0;
+    extras.m   = m0;
+    extras.n   = n0;
+    extras.W   = W0;
+    extras.ldW = LogDetW0;
+    extras.V   = V;
+    extras.p   = p;
+    extras.V0  = V0;
+    extras.p0  = p0;
+    extras.lb  = 0;
+    for k=1:K
+        extras.lb  = extras.lb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
+    end  
+    
+    GaussPrior{1} = m0;
+    GaussPrior{2} = b0;
+    GaussPrior{3} = W0;
+    GaussPrior{4} = n0;
+end
+
+if verbose
+    % Visualise results
+    spm_gmm_lib('plot','gaussprior',GaussPrior,figname);
+end
+% =========================================================================
 
 %--------------------------------------------------------------------------
 % Lower bound 
@@ -1319,6 +1675,16 @@ function varargout = gmmplot(varargin)
 %
 % spm_gmm_lib('plot', 'gmm', {X,W}, {MU,A}, PI, (wintitle))
 % > Plot mixture fit
+%
+% spm_gmm_lib('plot', 'cat', dm, Z, Template, (wintitle))
+% > Plot (categorical) responsibilities and template (if available)
+%
+% spm_gmm_lib('plot', 'gaussprior', GaussPrior, (wintitle))
+% > Plot VB-GMM hyper-parameters
+%
+% c = spm_gmm_lib('plot', 'cat2rgb', f, pal)
+% > Generate an RGB volume from a categorical (e.g. responsibilities) volume.
+%
 
 if nargin == 0
     help spm_gmm_lib>plot
@@ -1330,7 +1696,13 @@ switch lower(id)
     case {'lowerbound','lb'}
         [varargout{1:nargout}] = plot_lowerbound(varargin{:});
     case {'gmm'}
-        [varargout{1:nargout}] = plot_gmm(varargin{:});             
+        [varargout{1:nargout}] = plot_gmm(varargin{:});     
+    case {'cat'}
+        [varargout{1:nargout}] = plot_cat(varargin{:});           
+    case {'gaussprior'}
+        [varargout{1:nargout}] = plot_GaussPrior(varargin{:});              
+    case {'cat2rgb'}
+        [varargout{1:nargout}] = cat2rgb(varargin{:});         
     otherwise
         help spm_gmm_lib>plot
         error('Unknown function %s. Type ''help spm_gmm_lib>plot'' for help.', id)
@@ -1372,6 +1744,66 @@ subplot(2, 3, 6);
 plot(lb.A)
 title('Precisions (KL)')
 drawnow
+
+% =========================================================================
+function plot_cat(dm,Z,Template,figname)
+
+% ---------------------------------------------------------------------
+% Get figure (create if it does not exist)
+if nargin<4
+    figname = '(SPM) Plot GMM Categorical';
+end
+f = findobj('Type', 'Figure', 'Name', figname);
+if isempty(f)
+    f = figure('Name', figname, 'NumberTitle', 'off');
+end
+set(0, 'CurrentFigure', f);   
+clf(f);
+
+K        = size(Z,2);
+colors   = hsv(K);
+z        = floor(dm(3)/2) + 1;
+do_subpl = isequal(size(Z),size(Template));
+
+% ---------------------------------------------------------------------
+% Plots
+if do_subpl
+    subplot(121)
+end
+
+Z = reshape(Z,[dm K]);
+
+c = spm_gmm_lib('plot', 'cat2rgb', Z, colors);
+c = squeeze(c(:,:,z,:));
+c = permute(c,[2 1 3]);
+imagesc(c); axis image off xy;   
+title('Z')
+
+colormap(colors);
+cb = colorbar;
+set(gca, 'clim', [0.5 K+0.5]);
+set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
+
+if do_subpl
+    subplot(122)
+    
+    Template = reshape(Template,[dm K]);
+    
+    c = spm_gmm_lib('plot', 'cat2rgb', Template, colors);
+    c = squeeze(c(:,:,z,:));
+    c = permute(c,[2 1 3]);
+    imagesc(c); axis image off xy;   
+    
+    title('Template')
+    
+    colormap(colors);
+    cb = colorbar;
+    set(gca, 'clim', [0.5 K+0.5]);
+    set(cb, 'ticks', 1:K, 'ticklabels', {1:K});     
+end
+
+drawnow
+% =========================================================================
 
 % =========================================================================
 function plot_gmm(obs, cluster, PI, figname)
@@ -1498,3 +1930,136 @@ ylabel('proportion')
 box on
 hold off
 drawnow
+% =========================================================================
+
+% =========================================================================
+function plot_GaussPrior(GaussPrior,figname)
+
+figname0 = '(SPM) GaussPrior';
+if nargin==2
+    figname0 = [figname0 ' ' figname];
+end
+
+% ---------------------------------------------------------------------
+% Get figure (create if it does not exist)
+f = findobj('Type', 'Figure', 'Name', figname0);
+if isempty(f)
+    f = figure('Name', figname0, 'NumberTitle', 'off');
+end
+set(0, 'CurrentFigure', f);   
+clf(f);
+
+m0 = GaussPrior{1};
+W0 = GaussPrior{3};
+n0 = GaussPrior{4};
+    
+P      = size(m0,1);
+K      = size(m0,2);
+colors = hsv(K);
+
+MU = m0;
+A  = bsxfun(@times,W0,reshape(n0,[1 1 K]));
+
+% ---------------------------------------------------------------------
+% For each input dimension
+for p=1:P
+    % -----------------------------------------------------------------
+    % Plot histogram and marginal density
+    if P>1
+        subplot(2, P, p)
+    end
+    hold on
+
+    xlims = [inf -inf];
+    % -----------
+    % GMM Density
+    for k=1:K
+        x = linspace(MU(p,k)-3*A(p,p,k)^(-0.5),MU(p,k)+3*A(p,p,k)^(-0.5),100);
+        y = normpdf(x, MU(p,k), A(p,p,k)^(-0.5));
+        plot(x, y, 'Color', colors(k,:), 'LineWidth', 1)
+        xlims = [min([xlims(1) x]) max([xlims(2) x])];
+    end
+    xlabel(sprintf('x%d',p))
+    ylabel('density')
+    xlim(xlims);
+    box on
+    hold off
+
+    % -----------------------------------------------------------------
+    % Plot joint density (X1 vs Xj)
+    if p > 1
+        subplot(2, P, P+p)
+        hold on
+        for k=1:K
+            Mu1     = MU([1 p],k);
+            Sigma2  = spm_matcomp('Inv', A([1 p],[1 p],k));
+            Sigma   = sqrt(Sigma2);
+            [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
+                               linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');
+            y = mvnpdf([x1(:) x2(:)],Mu1',Sigma2);
+            contour(x2, x1, reshape(y, [100 100])', 1, 'color', colors(k,:), 'LineWidth', 1);
+        end
+        xlabel(sprintf('x%d',p))
+        ylabel('x1')
+        xlim(xlims); % use same scale as histogram plot for comparison
+        box on
+        hold off
+    end
+end
+
+drawnow
+%==========================================================================
+
+%==========================================================================
+function c = cat2rgb(f, pal)
+% FORMAT c = cat2rgb(f, pal)
+% f   - categorical (4D) image.
+% pal - palette (Mx3 array or handle to palette function) [hsv]
+%
+% Generate an RGB volume from a categorical (e.g. responsibilities) volume.
+
+if nargin < 2
+    pal = @hsv;
+end
+
+tri = false;
+if numel(size(f)) == 4 && size(f, 3) == 1
+    tri = true;
+    dim = [size(f) 1 1];
+    f = reshape(f, [dim(1:2) dim(4)]);
+end
+if isa(pal, 'function_handle')
+    pal = pal(size(f,3));
+end
+
+dim = [size(f) 1 1];
+c   = zeros([dim(1:2) 3]); % output RGB image
+s   = zeros(dim(1:2));     % normalising term
+
+for k=1:dim(3)
+    s = s + f(:,:,k);
+    color = reshape(pal(k,:), [1 1 3]);
+    c = c + bsxfun(@times, f(:,:,k), color);
+end
+if dim(3) == 1
+    c = c / max(1, max(s(:)));
+else
+    c = bsxfun(@rdivide, c, s);
+end
+
+if tri
+    c = reshape(c, [size(c, 1) size(c, 2) 1 size(c, 3)]);
+end
+%==========================================================================
+
+%==========================================================================
+% HELPER FUNCTIONS
+%==========================================================================
+
+%==========================================================================
+function [m,b,W,n] = get_posteriors(cluster,s)
+m = cluster{s}{1}{1};
+b = cluster{s}{1}{2};
+W = cluster{s}{2}{1};
+n = cluster{s}{2}{2};
+%==========================================================================
