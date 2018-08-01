@@ -74,7 +74,7 @@ p.addParameter('Resp',           [],    @isnumeric);
 p.addParameter('GaussPrior',     {},    @iscell);
 p.addParameter('PropPrior',      0,     @isnumeric);
 p.addParameter('Missing',        true,  @islogical);
-p.addParameter('MissingCode',    {},    @(X) isnumeric(X) || iscell(X));
+p.addParameter('MissingCode',    [],    @(X) isnumeric(X) || iscell(X));
 p.addParameter('IterMax',        1024,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('Tolerance',      1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubIterMax',     1024,  @(X) isscalar(X) && isnumeric(X));
@@ -105,7 +105,6 @@ b0  = 0;  % Mean degrees of freedom (prior)
 n0  = 0;  % Precision degrees of freedom (prior)
 MU0 = []; % Mean (prior)
 V0  = []; % Scale matrix (prior)
-C   = []; % Image of missing codes
 L   = []; % List of unique codes
 logPI = []; % [expected] log-proportions
 PI    = []; % [expected] proportions
@@ -245,7 +244,7 @@ for em=1:IterMax
         %   for each configuration of missing data
         [lSS0,lSS1,lSS2] = spm_gmm_lib('SuffStat', 'base', X, Z, W, {C,L});
         
-        LB = NaN(1,SubIterMax);
+        LB = NaN(1,SubIterMax+1);
         for i=SubIterMax
             % -------------------------------------------------------------
             % Infer missing suffstat
@@ -383,6 +382,6 @@ if verbose >= 1
     elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
     else,                               incr = '(=)';
     end
-    fprintf('%3d | lb = %10.6g |�gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
+    fprintf('%3d | lb = %10.6g | gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
 end
 lb.last = lb.sum(end);
