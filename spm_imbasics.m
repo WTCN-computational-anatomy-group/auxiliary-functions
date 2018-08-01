@@ -9,6 +9,7 @@ function varargout = spm_imbasics(varargin)
 % FORMAT [mg,mn,vr] = spm_imbasics('fit_gmm2hist',c,x,K,verbose)
 % FORMAT [a,m,b,n,W,mg,lb] = spm_imbasics('fit_vbgmm2hist',c,x,K,stop_early,tol,verbose)
 % FORMAT nfname1 = spm_imbasics('create_2d_slice',fname,axis_2d,clean_up)
+% FORMAT [BB,vx] = spm_imbasics('compute_bb',img,mat,dm,thr,premul)
 %
 % FORMAT help spm_imbasics>function
 % Returns the help file of the selected function.
@@ -35,6 +36,8 @@ switch lower(id)
         [varargout{1:nargout}] = fit_vbgmm2hist(varargin{:});    
     case 'create_2d_slice'
         [varargout{1:nargout}] = create_2d_slice(varargin{:});        
+    case 'compute_bb'
+        [varargout{1:nargout}] = compute_bb(varargin{:});          
     otherwise
         help spm_imcalc
         error('Unknown function %s. Type ''help spm_imcalc'' for help.', id)
@@ -561,6 +564,111 @@ M1 = M0/D;
 spm_get_space(nfname1,M1);
 
 spm_impreproc('reset_origin',nfname1);
+%==========================================================================
+
+%==========================================================================
+function [BB,vx] = compute_bb(img,mat,dm,thr,premul)
+% Compute volume's bounding box, for full field of view or object bounds
+% Modified version of Ged's spm_get_bbox.
+% FORMAT [BB,vx] = compute_bb(img,mat,dm,thr,premul)
+% img - image volume
+% mat - orientation matrix
+% dm  - image dimensions
+% thr - threshold, such that BB contains voxels with intensities > thr
+%       or strings 'nz', 'nn', fv', for non-zero, non-NaN, or field of view
+%       where 'fv' (the default) uses only the image's header information.
+%
+% BB  - a [2 x 3] array of the min and max X, Y, and Z coordinates {mm},
+%       i.e. BB = [minX minY minZ; maxX maxY maxZ].
+% vx  - a [1 x 3] vector of voxel dimensions {mm}.
+%__________________________________________________________________________
+% Copyright (C) 2011-2013 Wellcome Trust Centre for Neuroimaging
+
+% Ged Ridgway
+% $Id: spm_get_bbox.m 5398 2013-04-12 12:37:00Z ged $
+
+% Undocumented expert options:
+% V           - can be a 4D @nifti object (but not 5D), image-based BBs
+%               will be computed using "all" along the 4th dimension.
+% thr = 'old' - reproduce spm_write_sn/bbvox_from_V (and elsewhere)
+% premul      - a matrix that premultiplies V.mat, as used in spm_orthviews
+
+%-Compute voxel dimensions (for compatibility with bbvox_from_V)
+%--------------------------------------------------------------------------
+P  = spm_imatrix(mat);
+vx = P(7:9);
+% the above agrees with sqrt(sum(V.mat(1:3,1:3).^2)) for simple rotations,
+% and seems more appropriate if there are reflections and/or skews.
+% Note that spm_imatrix(diag([-1 1 1 1])) is [-1 1 1] as expected.
+
+%-Compute bounding box
+%--------------------------------------------------------------------------
+if nargin < 2 || isempty(thr) || strcmpi(thr, 'fv')
+    % overall field-of-view bounding box from header information
+    corners = [
+        1    1    1    1
+        1    1    dm(3) 1
+        1    dm(2) 1    1
+        1    dm(2) dm(3) 1
+        dm(1) 1    1    1
+        dm(1) 1    dm(3) 1
+        dm(1) dm(2) 1    1
+        dm(1) dm(2) dm(3) 1
+        ]';
+    XYZ = mat(1:3, :) * corners;
+elseif strcmpi(thr, 'old')
+    % code from spm_write_sn/bbvox_from_V (and other places)
+    % NB: main difference is that vx(1)<0 gives descending BB(:,1),
+    % shouldn't be used if V.mat contains rotations or skews.
+    o  = mat\[0 0 0 1]';
+    o  = o(1:3)';
+    BB = [-vx.*(o-1) ; vx.*(dm(1:3)-o)];
+    if exist('premul', 'var')
+        warning('spm_get_bbox:old_and_premul', 'old method ignores premul')
+    end
+else
+    % image-based bounding box using voxel intensities
+    if ischar(thr)
+        switch lower(thr)
+            case 'nn'  % non-NaN, though include +/- Inf in computation
+                img = ~isnan(img);
+            case 'nz'  % special case of non-zero (rather than > 0)
+                img = ~isnan(img) & img ~= 0;
+            otherwise
+                error('Unknown threshold type %s', thr)
+        end
+    else
+        % treat thr as numeric threshold
+        img = img > thr;
+    end
+    if ndims(img) == 4
+        img = all(img, 4);
+    end
+    if nnz(img) == 0
+        warning('spm_get_bbox:nothing', ...
+            'Threshold leaves no voxels, returning full field of view');
+        if exist('premul', 'var')
+            [BB,vx] = compute_bb(img, mat, dm, 'fv', premul);
+        else
+            [BB,vx] = compute_bb(img, mat, dm, 'fv');
+        end
+        return
+    else
+        img     = find(img); % (clears img to save memory)
+        [X Y Z] = ind2sub(dm, img);
+        XYZ     = mat(1:3, :) * [X Y Z ones(size(X))]';
+    end
+end
+
+if ~exist('BB', 'var') % exists already if 'old' case chosen above
+    if exist('premul', 'var')
+        XYZ = premul(1:3, :) * [XYZ; ones(1, size(XYZ, 2))];
+    end
+    BB = [
+        min(XYZ, [], 2)'
+        max(XYZ, [], 2)'
+        ];
+end
 %==========================================================================
 
 %==========================================================================
