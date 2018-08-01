@@ -10,6 +10,7 @@ function varargout = spm_impreproc(varargin)
 % FORMAT spm_impreproc('subvol',V,bb,prefix)
 % FORMAT nfname = spm_impreproc('downsample_inplane',fname)
 % FORMAT nfname = spm_impreproc('downsample_throughplane',fname)
+% FORMAT nii = spm_impreproc('mult_bb_crop',nii,bb,verbose)
 %
 % FORMAT help spm_impreproc>function
 % Returns the help file of the selected function.
@@ -40,6 +41,8 @@ switch lower(id)
         [varargout{1:nargout}] = downsample_inplane(varargin{:});      
     case 'downsample_throughplane'
         [varargout{1:nargout}] = downsample_throughplane(varargin{:});              
+    case 'mult_bb_crop'
+        [varargout{1:nargout}] = mult_bb_crop(varargin{:});    
     otherwise
         help spm_impreproc
         error('Unknown function %s. Type ''help spm_impreproc'' for help.', id)
@@ -533,6 +536,42 @@ fname         = Nii.dat.fname;
 nfname        = fullfile(pth,['dsz_' nam ext]);
         
 spm_misc('create_nii',nfname,X,M1,Nii.dat.dtype,Nii.descrip,Nii.dat.offset,Nii.dat.scl_slope,Nii.dat.scl_inter);
+%==========================================================================
+
+%==========================================================================
+function nii = mult_bb_crop(nii,BB,verbose)
+% Crop image(s) according to a bunch of bounding-boxes.
+% FORMAT nii = mult_bb_crop(nii,bb,verbose)
+%
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+if nargin<3, verbose = true; end
+
+fname = nii.dat.fname;
+
+mn  = min(BB,[],3);
+mx  = max(BB,[],3);
+nbb = [mn(:,1) mx(:,2)];
+
+V0 = spm_vol(fname);
+od = V0(1).dim;
+for k=1:numel(V0)
+    spm_impreproc('subvol',V0(k),nbb','tmp');        
+end
+
+delete(fname);
+[pth,nam,ext] = fileparts(V0(1).fname);
+fname_tmp     = fullfile(pth,['tmp' nam ext]);
+movefile(fname_tmp,fname);
+
+V  = spm_vol(fname);
+nd = V(1).dim;   
+
+nii = nifti(fname);
+
+if verbose
+    fprintf('spm_impreproc(''mult_bb_crop'') | odm = [%d %d %d] | ndm = [%d %d %d]\n',od(1),od(2),od(3),nd(1),nd(2),nd(3));
+end
 %==========================================================================
 
 %==========================================================================
