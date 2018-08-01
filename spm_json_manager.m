@@ -8,6 +8,7 @@ function varargout = spm_json_manager(varargin)
 % FORMAT spm_json_manager('modify_pth_in_population',dir_population,field,npth)
 % FORMAT spm_json_manager('make_pth_relative',input)
 % FORMAT populations = spm_json_manager('get_populations',dat)
+% FORMAT dat = spm_json_manager('set_subjects',dat,S)
 %
 % FORMAT help spm_json_manager>function
 % Returns the help file of the selected function.
@@ -32,6 +33,8 @@ switch lower(id)
         [varargout{1:nargout}] = make_pth_relative(varargin{:});              
     case 'get_populations'
         [varargout{1:nargout}] = get_populations(varargin{:});          
+    case 'set_subjects'
+        [varargout{1:nargout}] = set_subjects(varargin{:});          
     otherwise
         help spm_json_manager
         error('Unknown function %s. Type ''help spm_json_manager'' for help.', id)
@@ -896,9 +899,67 @@ end
 %==========================================================================
 
 %==========================================================================
-% HELPER FUNCTIONS
+function dat = set_subjects(dat,S)
+% FORMAT populations = get_populations(dat)
+%
+% dat - A hierarchical object (cell of structs) representing all input
+%       files and metadata
+% S   - Scalar or containers.Map deciding how many subjects should be used from
+%       each population
+%
+% Change the number of subjects in a dat cell-array. This is because
+% sometimes one might want to test something on a smaller subset of the
+% population.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+
+S0          = numel(dat);
+populations = spm_json_manager('get_populations',dat);
+P           = numel(populations);
+
+if isnumeric(S)
+    % Create dictionary, if not given
+    S1 = containers.Map;
+    for p=1:P
+        population0 = populations{p}.name;
+        
+        S1(population0) = S;
+    end
+    S = S1;
+end
+
+% Pick subjects from dat into a new, temporary dat cell-array
+ndat = {};
+cnt  = 1;
+for p=1:P
+    Sp          = 0;
+    population0 = populations{p}.name;
+    
+    for s=1:S0
+        population = dat{s}.population;    
+        
+        if strcmpi(population0,population)
+            ndat{cnt} = dat{s};
+            
+            cnt = cnt + 1;
+            Sp  = Sp  + 1;
+            
+            if Sp>=S(population0)
+                break
+            end
+        end
+    end
+end
+
+% Return new dat object
+dat = ndat;
+
+fprintf('spm_json_manager(''set_subjects'') | Total number of subjects changed from %i to %i.\n',S0,numel(dat));
 %==========================================================================
 
+%==========================================================================
+% HELPER FUNCTIONS
+%==========================================================================
 
 %==========================================================================
 function files = rdir(pop_dir, pattern)
