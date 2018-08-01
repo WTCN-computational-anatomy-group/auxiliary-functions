@@ -404,9 +404,8 @@ for em=1:IterMax
     clear logpX
 end
 
-% ---------------------------------------------------------------------
-% Plot ML of responsibilities and template
 if p.Results.Verbose >= 4 && ~isempty(dm)
+    % Plot responsibilities and template
     spm_gmm_lib('Plot', 'cat', dm, Z, Template);
 end
 
