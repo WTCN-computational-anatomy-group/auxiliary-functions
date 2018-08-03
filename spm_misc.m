@@ -2,16 +2,17 @@ function varargout = spm_misc(varargin)
 %__________________________________________________________________________
 % Collection of miscellaneous functions.
 %
-% FORMAT [M_avg,d] = compute_avg_mat(Mat0,dims)
-% FORMAT Nii = create_nii(pth,dat,mat,dtype,descrip,scl)
-% FORMAT y = linspace_vec(x1,x2,n)
-% FORMAT manage_parpool(num_workers)
-% FORMAT nw = nbr_parfor_workers
-% FORMAT vx = vxsize(M)
-% FORMAT msk = msk_modality(f,modality)
-% FORMAT browse_subjects(pth,modality)
-% FORMAT mom = mom_John2Bishop(mom)
-% FORMAT mom = mom_Bishop2John(mom)
+% FORMAT [M_avg,d] = spm_misc('compute_avg_mat',Mat0,dims)
+% FORMAT Nii = spm_misc('create_nii',pth,dat,mat,dtype,descrip,scl)
+% FORMAT y = spm_misc('linspace_vec',x1,x2,n)
+% FORMAT spm_misc('manage_parpool',num_workers)
+% FORMAT nw = spm_misc('nbr_parfor_workers')
+% FORMAT vx = spm_misc('vxsize',M)
+% FORMAT msk = spm_misc('msk_modality',f,modality)
+% FORMAT spm_misc('browse_subjects',pth,modality)
+% FORMAT mom = spm_misc('mom_John2Bishop',mom)
+% FORMAT mom = spm_misc('mom_Bishop2John',mom)
+% FORMAT gain = spm_misc('get_gain',vals)
 %
 % FORMAT help spm_parfor>function
 % Returns the help file of the selected function.
@@ -44,6 +45,8 @@ switch lower(id)
         [varargout{1:nargout}] = mom_John2Bishop(varargin{:});           
     case 'mom_bishop2john'
         [varargout{1:nargout}] = mom_Bishop2John(varargin{:});              
+    case 'get_gain'
+        [varargout{1:nargout}] = get_gain(varargin{:});          
     otherwise
         help spm_parfor
         error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
@@ -344,6 +347,22 @@ for i=1:numel(mom)
     mom(i).s1 = s1;
     mom(i).S2 = S2;
 end
+%==========================================================================
+
+%==========================================================================
+function gain = get_gain(vals)
+% FORMAT gain = get_gain(vals)
+%
+% vals - A vector of values
+%
+% gain - Computed gain
+%
+% Compute gain --- usually used to determine a stopping criteria when
+% optimising
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+vals = vals(:);
+gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));   
 %==========================================================================
 
 %==========================================================================
