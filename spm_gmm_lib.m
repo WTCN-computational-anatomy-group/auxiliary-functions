@@ -1979,7 +1979,7 @@ for p=1:P
     % GMM Density
     for k=1:K
         x = linspace(MU(p,k)-3*A(p,p,k)^(-0.5),MU(p,k)+3*A(p,p,k)^(-0.5),100);
-        y = normpdf(x, MU(p,k), A(p,p,k)^(-0.5));
+        y = 1/K*normpdf(x, MU(p,k), A(p,p,k)^(-0.5));
         plot(x, y, 'Color', colors(k,:), 'LineWidth', 1)
         xlims = [min([xlims(1) x]) max([xlims(2) x])];
     end
