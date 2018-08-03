@@ -1148,8 +1148,7 @@ if ~constrained
 else
 
     lb = -inf;
-    for em=1:100
-
+    for em=1:50
         % ---
         % Starting estimate
         if p0 == 0
@@ -1191,7 +1190,7 @@ else
             % -------------------------------------------------------------
             % Update n0 (mode, Gauss-Newton [convex])
             E = inf;
-            for gniter=1:1000
+            for gniter=1:100
 
                 % ---------------------------------------------------------
                 % Update {p,V} for W0 (posterior, closed form)
@@ -1203,12 +1202,15 @@ else
                 % ---------------------------------------------------------
 
                 % ---
-                % Objective function
-                Eprev = E;
-                E = S*n0(k)/2 * (LogDetW0(k) - logDetW - psiN) ...
-                    + S*spm_prob('LogGamma', n0(k)/2, N);
-                if E == Eprev
-                    break;
+                % Objective function                
+                E1 = S*n0(k)/2 * (LogDetW0(k) - logDetW - psiN) ...
+                     + S*spm_prob('LogGamma', n0(k)/2, N);
+                E = [E E1];
+                
+                subgain = spm_misc('get_gain',E);                
+                if subgain < 1e-6
+                    % Finished
+                    break
                 end
 
                 % ---
@@ -1278,16 +1280,19 @@ else
     
         
         % ---
-        % Objective function
-        lb_prev = lb;
-        lb  = 0;
+        % Objective function        
+        nlb  = 0;
         for k=1:K
-            lb  = lb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
+            nlb  = nlb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
         end
-        if abs(lb_prev-lb) < 2*eps
-            break;
+        
+        lb   = [lb nlb];      
+        gain = spm_misc('get_gain',lb);        
+        
+        if gain < 1e-3
+            % Finished
+            break
         end
-        % ---
         
     end % < "EM" loop
 
