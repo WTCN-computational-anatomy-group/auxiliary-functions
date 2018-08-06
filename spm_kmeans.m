@@ -53,6 +53,7 @@ p.addParameter('Missing',    true,          @isscalar);
 p.addParameter('Verbose',    0,             @isscalar);
 p.parse(X, K, varargin{:});
 W = p.Results.W;
+X = single(X);
 
 % -------------------------------------------------------------------------
 % Special case: Apply model
@@ -77,14 +78,13 @@ if row_vector
 end
 dim = size(X);
 X   = reshape(X, [], dim(end));
-X   = double(X);
 
 % -------------------------------------------------------------------------
 % Prepare weights
 if numel(W) == 1
-    W = W * ones(size(X,1),1);
+    W = W * ones([size(X,1) 1],'single');
 end
-W = double(W(:));
+
 if p.Results.Missing % Deal with missing data
     WW = repmat(W, [1 size(X,2)]);
     WW(isnan(X)) = 0;
@@ -98,8 +98,7 @@ end
 
 % -------------------------------------------------------------------------
 % Convert distance function to handle
-dist = str2func(p.Results.Distance);
-
+dist_fun = str2func(p.Results.Distance);
 
 E00 = inf;
 r0  = 0;
@@ -109,7 +108,7 @@ for r=1:p.Results.Replicates
     
     % ---------------------------------------------------------------------
     % Initial centroids
-    C1 = start(p.Results.Start, X, WW, K, dist, r);
+    C1 = start(p.Results.Start, X, WW, K, dist_fun, r);
     
     % ---------------------------------------------------------------------
     % Iterate
@@ -117,11 +116,11 @@ for r=1:p.Results.Replicates
     for i=1:1000
         % -----------------------------------------------------------------
         % Distance to previous centroids
-        D1 = dist(X,C1);
+        D1 = dist_fun(X,C1);
         % -----------------------------------------------------------------
         % Clustering to nearest centroid
         [MinD, L1] = min(D1, [], 2);
-        L1         = double2int(L1);
+        L1         = single2int(L1);
         % -----------------------------------------------------------------
         % Check convergence
         E = sum(MinD.*W);
@@ -137,7 +136,7 @@ for r=1:p.Results.Replicates
         end
     end
     if p.Results.Verbose
-        fprintf('r = %2d | imax = %3d | E = %3g\n', r, i, E);
+        fprintf('r = %2d | imax = %3d |ï¿½E = %3g\n', r, i, E);
     end
     
     % ---------------------------------------------------------------------
@@ -156,7 +155,7 @@ for r=1:p.Results.Replicates
     
 end
 if p.Results.Verbose && p.Results.Replicates > 1
-    fprintf('Best | r = %2d | E = %3g\n', r0, E00);
+    fprintf('Best |ï¿½r = %2d | E = %3g\n', r0, E00);
 end
 
 % -------------------------------------------------------------------------
@@ -167,11 +166,11 @@ end
 % Replace discarded missing values
 if ~p.Results.Missing
     L1            = L;
-    L             = zeros([N0 1], 'like', L1);
+    L             = zeros([N0 1], 'single');
     L(~missing)   = L1;
     clear L1;
     D1            = D;
-    D             = NaN([N0 size(D1, 2)], 'like', D1);
+    D             = NaN([N0 size(D1, 2)], 'single');
     D(~missing,:) = D1;
     clear D1;
 end
@@ -197,13 +196,12 @@ if dim(end) == size(C,2)
     dim = dim(1:end-1);
 end
 X = reshape(X, [], size(C,2));
-X = double(X);
-C = double(C);
+
 % Compute distance
 D = dist(X,C);
 % Get closest centroid
 [~, L] = min(D, [], 2);
-L      = double2int(L);
+L      = single2int(L);
 % Replace missing data
 if ~missing
     msk      = any(isnan(X),2);
@@ -222,7 +220,7 @@ function [L,C,SUMD,D] = order(method,L,C,SUMD,D,W)
 
 switch method
     case 'total'
-        measure = zeros(size(C,1),1);
+        measure = zeros([size(C,1) 1],'single');
         for k=1:size(C,1)
             measure(k) = sum(W(L == k));
         end
@@ -237,7 +235,7 @@ C     = C(I,:);
 SUMD  = SUMD(I);
 D     = D(:,I);
 oldL  = L;
-L     = zeros(size(oldL), 'like', oldL);
+L     = zeros(size(oldL), 'single');
 for k=1:size(C,1)
     L(oldL == I(k)) = k;
 end
@@ -268,7 +266,7 @@ switch method
     % This allows to start with centroids that are reasonably far from one
     % another.
         X = X(~any(WW==0,2),:); % Remove all rows w/ NaNs or w/o obs
-        C = zeros(K, size(X,2));
+        C = zeros([K size(X,2)],'single');
         i = randi(size(X,1));
         C(1,:) = X(i,:);
         for k=2:K
@@ -296,7 +294,7 @@ switch method
     % centroids)
         minval = min(X, [], 1, 'omitnan');
         maxval = max(X, [], 1, 'omitnan');
-        C = rand(K,size(X,2));
+        C = rand([K size(X,2)],'single');
         C = bsxfun(@times, C, maxval - minval) + minval;
         
     otherwise
@@ -358,8 +356,8 @@ D(isnan(D)) = 0;
 D = sum(abs(D), 3);
 
 % =========================================================================
-function L = double2int(L)
-% FORMAT L = double2int(L)
+function L = single2int(L)
+% FORMAT L = single2int(L)
 %
 % Find the best suited integer type to convert L, based on min and max
 % values
@@ -388,7 +386,7 @@ elseif nbits <= 32
 elseif nbits <= 64
     type = [type '54'];
 else
-    type = 'double';
+    type = 'single';
 end
 func = str2func(type);
 L = func(L);
