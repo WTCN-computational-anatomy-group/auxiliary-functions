@@ -406,7 +406,8 @@ end
 
 if p.Results.Verbose >= 4 && ~isempty(dm)
     % Plot responsibilities and template
-    spm_gmm_lib('Plot', 'cat', dm, Z, Template);
+    spm_gmm_lib('Plot', 'cat', reshape(Z(:,:,floor(dm(3)/2) + 1,:),[dm(1:2) 1 K]), ...
+                               reshape(Template(:,:,floor(dm(3)/2) + 1,:),[dm(1:2) 1 K]));
 end
 
 % -------------------------------------------------------------------------

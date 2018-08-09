@@ -1759,7 +1759,7 @@ title('Precisions (KL)')
 drawnow
 
 % =========================================================================
-function plot_cat(dm,Z,Template,figname)
+function plot_cat(Z,Template,figname)
 
 % ---------------------------------------------------------------------
 % Get figure (create if it does not exist)
@@ -1773,7 +1773,7 @@ end
 set(0, 'CurrentFigure', f);   
 clf(f);
 
-K        = size(Z,2);
+K        = size(Z,4);
 colors   = hsv(K);
 do_subpl = isequal(size(Z),size(Template));
 
@@ -1782,8 +1782,6 @@ do_subpl = isequal(size(Z),size(Template));
 if do_subpl
     subplot(121)
 end
-
-Z = reshape(Z,[dm K]);
 
 c = spm_gmm_lib('plot', 'cat2rgb', Z, colors);
 c = squeeze(c(:,:,:,:));
@@ -1797,9 +1795,7 @@ set(gca, 'clim', [0.5 K+0.5]);
 set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
 
 if do_subpl
-    subplot(122)
-    
-    Template = reshape(Template,[dm K]);
+    subplot(122)    
     
     c = spm_gmm_lib('plot', 'cat2rgb', Template, colors);
     c = squeeze(c(:,:,:,:));
