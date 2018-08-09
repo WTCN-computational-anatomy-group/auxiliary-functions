@@ -384,7 +384,11 @@ for i=1:numel(L)
         
         % Binning uncertainty
         if any(any(E))
-            l = l - 0.5 * trace(Ao * diag(E(observed)));
+            if size(E,1)==1
+                l = l - 0.5 * trace(Ao * diag(E(observed)));
+            else
+                l = l - 0.5 * sum(bsxfun(@times,diag(Ao)',E(msk,observed)),2)';
+            end
         end
         
         % Reshape as a column vector
@@ -740,7 +744,7 @@ end
 % Dimensions
 N = size(Z,1);
 K = size(Z,2);
-P = numel(E);
+P = size(E,2);
 if sum(E) == 0
     SS2 = zeros(P,P,size(Z,2), 'like', Z);
     return
@@ -773,8 +777,13 @@ for i=1:numel(L)
         else
             B1 = B;
         end
-        SS2(p,p,:) = SS2(p,p,:) ...
-            + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p)*B1);
+        if size(E,1)==1
+            SS2(p,p,:) = SS2(p,p,:) ...
+                + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p)*B1);
+        else
+            SS2(p,p,:) = SS2(p,p,:) ...
+                + reshape(sum(bsxfun(@times, Z(msk,:),E(msk,p)), 1), [1 1 K]);
+        end
     end
 end
 
