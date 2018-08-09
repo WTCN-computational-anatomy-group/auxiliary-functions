@@ -486,8 +486,8 @@ logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
 
 % -------------------------------------------------------------------------
 % Compute responsibilities
- Z = spm_gmm_lib('Responsibility', logpX, logPI);
- clear logpX logPI
+Z = spm_gmm_lib('Responsibility', logpX, logPI);
+clear logpX logPI
  
 % -------------------------------------------------------------------------
 % Infer missing values
