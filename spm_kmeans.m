@@ -136,7 +136,7 @@ for r=1:p.Results.Replicates
         end
     end
     if p.Results.Verbose
-        fprintf('r = %2d | imax = %3d |�E = %3g\n', r, i, E);
+        fprintf('r = %2d | imax = %3d | E = %3g\n', r, i, E);
     end
     
     % ---------------------------------------------------------------------
@@ -155,7 +155,7 @@ for r=1:p.Results.Replicates
     
 end
 if p.Results.Verbose && p.Results.Replicates > 1
-    fprintf('Best |�r = %2d | E = %3g\n', r0, E00);
+    fprintf('Best | r = %2d | E = %3g\n', r0, E00);
 end
 
 % -------------------------------------------------------------------------

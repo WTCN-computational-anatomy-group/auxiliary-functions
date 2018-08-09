@@ -258,7 +258,7 @@ for i=1:numel(L)
 
     % ---------------------------------------------------------------------
     % Compute posterior mean (expected value)
-    % 1) t = sum_k {�z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
+    % 1) t = sum_k {z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
     for k=1:K
         X1k = zeros(1, 'like', X);
         X1k = bsxfun(@plus,X1k,MU(missing,k).');

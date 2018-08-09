@@ -435,6 +435,6 @@ if verbose >= 1
     elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
     else,                               incr = '(=)';
     end
-    fprintf('%3d | lb = %10.6g |�gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
+    fprintf('%3d | lb = %10.6g | gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
 end
 lb.last = lb.sum(end);
