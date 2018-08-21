@@ -193,10 +193,10 @@ end
 
 % -------------------------------------------------------------------------
 % Compute each basis + square it
-basis = cell(ndim, maxdiff);
+basis = cell(ndim, maxdiff+1);
 for d=1:ndim
     for diff=0:maxdiff
-        switch maxdiff
+        switch diff
             case 0
                 basis{d,diff+1} = spm_dctmtx(lattice(d),nb_component(d));
             case 1
