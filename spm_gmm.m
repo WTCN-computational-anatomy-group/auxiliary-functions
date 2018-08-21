@@ -344,15 +344,17 @@ function [Z,X] = gmm_apply(X, mean, prec, prop, varargin)
 % Parse inputs
 p = inputParser;
 p.FunctionName = 'gmm_apply';
-p.addRequired('X',                    @isnumeric);
-p.addRequired('mean',                 @(X) isnumeric(X) || iscell(X));
-p.addRequired('precision',            @(X) isnumeric(X) || iscell(X));
-p.addRequired('prop',                 @(X) isnumeric(X) || iscell(X));
-p.addParameter('Missing',    true,    @islogical);
-p.addParameter('BinWidth',   0,       @isnumeric);
+p.addRequired('X',                     @isnumeric);
+p.addRequired('mean',                  @(X) isnumeric(X) || iscell(X));
+p.addRequired('precision',             @(X) isnumeric(X) || iscell(X));
+p.addRequired('prop',                  @(X) isnumeric(X) || iscell(X));
+p.addParameter('Missing',        true, @islogical);
+p.addParameter('BinWidth', 0,    @isnumeric);
+p.addParameter('Template',       [],   @isnumeric);
 p.parse(X, mean, prec, prop, varargin{:});
 E          = p.Results.BinWidth;
 Missing    = p.Results.Missing;
+Template   = p.Results.Template;
 
 MU = [];
 b  = [];
@@ -399,7 +401,14 @@ K = size(MU,2);
 
 % -------------------------------------------------------------------------
 % Proportions/Dirichlet
-if numel(PI) <= K
+if ~isempty(Template)
+    % Compute logPI by combining Template and [1xK] proportions in PI, as
+    % in:
+    % Ashburner J & Friston KJ. "Unified segmentation".
+    % NeuroImage 26(3):839-851 (2005).
+    logPI = bsxfun(@times,Template,PI);    
+    logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));    
+elseif numel(PI) <= K
     PI = PI(:)';
     PI = padarray(PI, [0 K - numel(PI)], 'replicate', 'post');
     
@@ -477,8 +486,8 @@ logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
 
 % -------------------------------------------------------------------------
 % Compute responsibilities
- Z = spm_gmm_lib('Responsibility', logpX, logPI);
- clear logpX logPI
+Z = spm_gmm_lib('Responsibility', logpX, logPI);
+clear logpX logPI
  
 % -------------------------------------------------------------------------
 % Infer missing values

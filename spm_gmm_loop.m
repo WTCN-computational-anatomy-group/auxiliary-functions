@@ -404,10 +404,10 @@ for em=1:IterMax
     clear logpX
 end
 
-% ---------------------------------------------------------------------
-% Plot ML of responsibilities and template
 if p.Results.Verbose >= 4 && ~isempty(dm)
-    spm_gmm_lib('Plot', 'cat', dm, Z, Template);
+    % Plot responsibilities and template
+    spm_gmm_lib('Plot', 'cat', reshape(Z(:,:,floor(dm(3)/2) + 1,:),[dm(1:2) 1 K]), ...
+                               reshape(Template(:,:,floor(dm(3)/2) + 1,:),[dm(1:2) 1 K]));
 end
 
 % -------------------------------------------------------------------------
@@ -436,6 +436,6 @@ if verbose >= 1
     elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
     else,                               incr = '(=)';
     end
-    fprintf('%3d | lb = %10.6g |�gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
+    fprintf('%3d | lb = %10.6g | gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
 end
 lb.last = lb.sum(end);

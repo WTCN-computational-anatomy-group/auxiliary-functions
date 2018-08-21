@@ -2,16 +2,14 @@ function varargout = spm_misc(varargin)
 %__________________________________________________________________________
 % Collection of miscellaneous functions.
 %
-% FORMAT [M_avg,d] = compute_avg_mat(Mat0,dims)
-% FORMAT Nii = create_nii(pth,dat,mat,dtype,descrip,scl)
-% FORMAT y = linspace_vec(x1,x2,n)
-% FORMAT manage_parpool(num_workers)
-% FORMAT nw = nbr_parfor_workers
-% FORMAT vx = vxsize(M)
-% FORMAT msk = msk_modality(f,modality)
-% FORMAT browse_subjects(pth,modality)
-% FORMAT mom = mom_John2Bishop(mom)
-% FORMAT mom = mom_Bishop2John(mom)
+% FORMAT [M_avg,d] = spm_misc('compute_avg_mat',Mat0,dims)
+% FORMAT Nii = spm_misc('create_nii',pth,dat,mat,dtype,descrip,scl)
+% FORMAT y = spm_misc('linspace_vec',x1,x2,n)
+% FORMAT spm_misc('manage_parpool',num_workers)
+% FORMAT nw = spm_misc('nbr_parfor_workers')
+% FORMAT vx = spm_misc('vxsize',M)
+% FORMAT msk = spm_misc('msk_modality',f,modality)
+% FORMAT gain = spm_misc('get_gain',vals)
 %
 % FORMAT help spm_parfor>function
 % Returns the help file of the selected function.
@@ -37,13 +35,9 @@ switch lower(id)
     case 'vxsize'
         [varargout{1:nargout}] = vxsize(varargin{:});              
     case 'msk_modality'
-        [varargout{1:nargout}] = msk_modality(varargin{:});          
-    case 'browse_subjects'
-        [varargout{1:nargout}] = browse_subjects(varargin{:});     
-    case 'mom_john2bishop'
-        [varargout{1:nargout}] = mom_John2Bishop(varargin{:});           
-    case 'mom_bishop2john'
-        [varargout{1:nargout}] = mom_Bishop2John(varargin{:});              
+        [varargout{1:nargout}] = msk_modality(varargin{:});                
+    case 'get_gain'
+        [varargout{1:nargout}] = get_gain(varargin{:});          
     otherwise
         help spm_parfor
         error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
@@ -278,72 +272,19 @@ end
 %==========================================================================
 
 %==========================================================================
-function browse_subjects(pth,modality)
-% Displays a populations of images
-% FORMAT browse_subjects(pth,modality)
+function gain = get_gain(vals)
+% FORMAT gain = get_gain(vals)
+%
+% vals - A vector of values
+%
+% gain - Computed gain
+%
+% Compute gain --- usually used to determine a stopping criteria when
+% optimising
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-folder    = dir(pth);
-folder    = folder(3:end);
-dirflag   = [folder.isdir];
-subfolder = folder(dirflag);
-S         = numel(subfolder);
-
-fname = {};
-cnt   = 1;
-for s=1:S
-    dir_scans = fullfile(pth,subfolder(s).name,'scans',modality);        
-
-    scans = dir(fullfile(dir_scans,'*.nii'));
-    if isempty(scans)
-        scans = dir(fullfile(dir_scans,'*.img'));
-    end
-
-    if ~isempty(scans)
-        fname{cnt} = fullfile(dir_scans,scans(1).name);       
-        cnt        = cnt + 1;
-    end
-end 
-
-spm_check_registration(char(fname));
-%==========================================================================
-
-%==========================================================================
-function mom = mom_John2Bishop(mom)
-% Converts JA's representation of moments to Bishops'
-% FORMAT mom = mom_John2Bishop(mom)
-%__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-K = numel(mom(1).s0);
-for i=1:numel(mom) 
-    s1 = zeros(size(mom(i).s1));
-    S2 = zeros(size(mom(i).S2));
-    for k=1:K
-        s1(:,k)   = mom(i).s1(:,k)/mom(i).s0(k);
-        S2(:,:,k) = mom(i).S2(:,:,k)/mom(i).s0(k) - (mom(i).s1(:,k)/mom(i).s0(k))*(mom(i).s1(:,k)/mom(i).s0(k))';
-    end
-    mom(i).s1 = s1;
-    mom(i).S2 = S2;
-end
-%==========================================================================
-
-%==========================================================================
-function mom = mom_Bishop2John(mom)
-% Converts Bishops' representation of moments to JA's
-% FORMAT mom = mom_Bishop2John(mom)
-%__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-K = numel(mom(1).s0);
-for i=1:numel(mom) 
-    s1 = zeros(size(mom(i).s1));
-    S2 = zeros(size(mom(i).S2));
-    for k=1:K
-        s1(:,k)   = mom(i).s0(k)*mom(i).s1(:,k);
-        S2(:,:,k) = mom(i).s0(k)*mom(i).S2(:,:,k) + mom(i).s0(k)*(s1(:,k) /mom(i).s0(k))*(s1(:,k) /mom(i).s0(k))';
-    end
-    mom(i).s1 = s1;
-    mom(i).S2 = S2;
-end
+vals = vals(:);
+gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));   
 %==========================================================================
 
 %==========================================================================

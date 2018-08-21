@@ -156,7 +156,7 @@ if ~ischar(mode)
                 case 3
                     mode = 'bending';
             end
-            L = L + param(i) * regulariser(mode, lattice, varargin{:});
+            L = L + param(i) * regulariser(mode, lattice, nb_component, vs);
         end
     end
     return
@@ -193,7 +193,7 @@ end
 
 % -------------------------------------------------------------------------
 % Compute each basis + square it
-basis = cell(ndim, maxdiff+1);
+basis = cell(ndim, maxdiff + 1);
 for d=1:ndim
     for diff=0:maxdiff
         switch diff

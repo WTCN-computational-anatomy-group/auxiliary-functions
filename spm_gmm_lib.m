@@ -124,6 +124,13 @@ function varargout = spm_gmm_lib(varargin)
 % c = spm_gmm_lib('plot', 'cat2rgb', f, pal)
 % > Generate an RGB volume from a categorical (e.g. responsibilities) volume.
 %
+%--------------------------------------------------------------------------
+% Extras
+% -------------
+%
+% gmm = spm_gmm_lib('extras', 'more_gmms', gmm, part)
+% > A crude heuristic to replace a single Gaussian by a bunch of Gaussians.
+%
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -164,6 +171,8 @@ switch lower(id)
         [varargout{1:nargout}] = double2int(varargin{:});  
     case 'plot'
         [varargout{1:nargout}] = gmmplot(varargin{:});       
+    case 'extras'
+        [varargout{1:nargout}] = gmm_extras(varargin{:});             
     otherwise
         help spm_gmm_lib
         error('Unknown function %s. Type ''help spm_gmm_lib'' for help.', id)
@@ -249,7 +258,7 @@ for i=1:numel(L)
 
     % ---------------------------------------------------------------------
     % Compute posterior mean (expected value)
-    % 1) t = sum_k {�z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
+    % 1) t = sum_k {z * ( mu[m] + A[m]/A[m,o]*(mu[o]-g) ) }
     for k=1:K
         X1k = zeros(1, 'like', X);
         X1k = bsxfun(@plus,X1k,MU(missing,k).');
@@ -375,7 +384,11 @@ for i=1:numel(L)
         
         % Binning uncertainty
         if any(any(E))
-            l = l - 0.5 * trace(Ao * diag(E(observed)));
+            if size(E,1)==1
+                l = l - 0.5 * trace(Ao * diag(E(observed)));
+            else
+                l = l - 0.5 * sum(bsxfun(@times,diag(Ao)',E(msk,observed)),2)';
+            end
         end
         
         % Reshape as a column vector
@@ -388,7 +401,7 @@ end
 logpX(all(isnan(X),2),:) = NaN;
 
 % =========================================================================
-function Z = responsibility(logpX, logPI)
+function Z = responsibility(logpX, logPI, varargin)
 % FORMAT Z = spm_gmm_lib('responsibility', logpX, logPI)
 %
 % Compute responsibilities.
@@ -396,12 +409,20 @@ function Z = responsibility(logpX, logPI)
 % vectors z_n.
 % The posterior is computed as:
 %   r_nk = exp(E[log Pi_k] + E[log p(x_n | Theta_k)]) / sum_k {r_nk}
+%
+% Extra terms can be added to the responsibilities prior to softmax by the
+% varargin argument. These arguments need to be compatible (w.r.t. size) with 
+% the following function call: bsxfun(@plus, Z, varargin{i}).
 
 % Omit NaN
 logpX(isnan(logpX)) = 0; 
 
 % Add terms: E[log Pi_k] + E[log p(X | Theta_k)]
 Z = bsxfun(@plus, logpX, logPI);
+
+for i=1:numel(varargin)
+    Z = bsxfun(@plus, Z, varargin{i});
+end
 
 % Exponentiate and normalise
 Z = bsxfun(@minus, Z, max(Z, [], 2));
@@ -731,7 +752,7 @@ end
 % Dimensions
 N = size(Z,1);
 K = size(Z,2);
-P = numel(E);
+P = size(E,2);
 if sum(E) == 0
     SS2 = zeros(P,P,size(Z,2), 'like', Z);
     return
@@ -764,8 +785,13 @@ for i=1:numel(L)
         else
             B1 = B;
         end
-        SS2(p,p,:) = SS2(p,p,:) ...
-            + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p)*B1);
+        if size(E,1)==1
+            SS2(p,p,:) = SS2(p,p,:) ...
+                + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p)*B1);
+        else
+            SS2(p,p,:) = SS2(p,p,:) ...
+                + reshape(sum(bsxfun(@times, Z(msk,:),E(msk,p)), 1), [1 1 K]);
+        end
     end
 end
 
@@ -1148,8 +1174,7 @@ if ~constrained
 else
 
     lb = -inf;
-    for em=1:100
-
+    for em=1:50
         % ---
         % Starting estimate
         if p0 == 0
@@ -1191,7 +1216,7 @@ else
             % -------------------------------------------------------------
             % Update n0 (mode, Gauss-Newton [convex])
             E = inf;
-            for gniter=1:1000
+            for gniter=1:100
 
                 % ---------------------------------------------------------
                 % Update {p,V} for W0 (posterior, closed form)
@@ -1203,12 +1228,15 @@ else
                 % ---------------------------------------------------------
 
                 % ---
-                % Objective function
-                Eprev = E;
-                E = S*n0(k)/2 * (LogDetW0(k) - logDetW - psiN) ...
-                    + S*spm_prob('LogGamma', n0(k)/2, N);
-                if E == Eprev
-                    break;
+                % Objective function                
+                E1 = S*n0(k)/2 * (LogDetW0(k) - logDetW - psiN) ...
+                     + S*spm_prob('LogGamma', n0(k)/2, N);
+                E = [E E1];
+                
+                subgain = spm_misc('get_gain',E);                
+                if subgain < 1e-6
+                    % Finished
+                    break
                 end
 
                 % ---
@@ -1278,16 +1306,19 @@ else
     
         
         % ---
-        % Objective function
-        lb_prev = lb;
-        lb  = 0;
+        % Objective function        
+        nlb  = 0;
         for k=1:K
-            lb  = lb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
+            nlb  = nlb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
         end
-        if abs(lb_prev-lb) < 2*eps
-            break;
+        
+        lb   = [lb nlb];      
+        gain = spm_misc('get_gain',lb);        
+        
+        if gain < 1e-3
+            % Finished
+            break
         end
-        % ---
         
     end % < "EM" loop
 
@@ -1596,7 +1627,6 @@ for k=1:K
     end
 end
 klMU = 0.5 * klMU;
-klA  = 0.5 * klA;
 
 %--------------------------------------------------------------------------
 % "Missing code" image 
@@ -1746,7 +1776,7 @@ title('Precisions (KL)')
 drawnow
 
 % =========================================================================
-function plot_cat(dm,Z,Template,figname)
+function plot_cat(Z,Template,figname)
 
 % ---------------------------------------------------------------------
 % Get figure (create if it does not exist)
@@ -1760,9 +1790,8 @@ end
 set(0, 'CurrentFigure', f);   
 clf(f);
 
-K        = size(Z,2);
+K        = size(Z,4);
 colors   = hsv(K);
-z        = floor(dm(3)/2) + 1;
 do_subpl = isequal(size(Z),size(Template));
 
 % ---------------------------------------------------------------------
@@ -1771,10 +1800,8 @@ if do_subpl
     subplot(121)
 end
 
-Z = reshape(Z,[dm K]);
-
 c = spm_gmm_lib('plot', 'cat2rgb', Z, colors);
-c = squeeze(c(:,:,z,:));
+c = squeeze(c(:,:,:,:));
 c = permute(c,[2 1 3]);
 imagesc(c); axis image off xy;   
 title('Z')
@@ -1785,12 +1812,10 @@ set(gca, 'clim', [0.5 K+0.5]);
 set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
 
 if do_subpl
-    subplot(122)
-    
-    Template = reshape(Template,[dm K]);
+    subplot(122)    
     
     c = spm_gmm_lib('plot', 'cat2rgb', Template, colors);
-    c = squeeze(c(:,:,z,:));
+    c = squeeze(c(:,:,:,:));
     c = permute(c,[2 1 3]);
     imagesc(c); axis image off xy;   
     
@@ -1975,7 +2000,7 @@ for p=1:P
     % GMM Density
     for k=1:K
         x = linspace(MU(p,k)-3*A(p,p,k)^(-0.5),MU(p,k)+3*A(p,p,k)^(-0.5),100);
-        y = normpdf(x, MU(p,k), A(p,p,k)^(-0.5));
+        y = 1/K*normpdf(x, MU(p,k), A(p,p,k)^(-0.5));
         plot(x, y, 'Color', colors(k,:), 'LineWidth', 1)
         xlims = [min([xlims(1) x]) max([xlims(2) x])];
     end
@@ -2022,26 +2047,31 @@ if nargin < 2
     pal = @hsv;
 end
 
+if size(f,3)>1
+    z = floor(size(f,3)/2) + 1;
+    f = f(:,:,z,:);
+end
+
 tri = false;
 if numel(size(f)) == 4 && size(f, 3) == 1
     tri = true;
-    dim = [size(f) 1 1];
-    f = reshape(f, [dim(1:2) dim(4)]);
+    dm  = [size(f) 1 1];
+    f   = reshape(f, [dm(1:2) dm(4)]);
 end
 if isa(pal, 'function_handle')
     pal = pal(size(f,3));
 end
 
-dim = [size(f) 1 1];
-c   = zeros([dim(1:2) 3]); % output RGB image
-s   = zeros(dim(1:2));     % normalising term
+dm = [size(f) 1 1];
+c   = zeros([dm(1:2) 3]); % output RGB image
+s   = zeros(dm(1:2));     % normalising term
 
-for k=1:dim(3)
+for k=1:dm(3)
     s = s + f(:,:,k);
     color = reshape(pal(k,:), [1 1 3]);
     c = c + bsxfun(@times, f(:,:,k), color);
 end
-if dim(3) == 1
+if dm(3) == 1
     c = c / max(1, max(s(:)));
 else
     c = bsxfun(@rdivide, c, s);
@@ -2050,6 +2080,84 @@ end
 if tri
     c = reshape(c, [size(c, 1) size(c, 2) 1 size(c, 3)]);
 end
+%==========================================================================
+
+% =========================================================================
+function varargout = gmm_extras(varargin)
+% Additional GMM functions
+%
+% gmm = spm_gmm_lib('extras', 'more_gmms', gmm, part)
+% > A crude heuristic to replace a single VB Gaussian by a bunch of VB Gaussians.
+%
+
+if nargin == 0
+    help spm_gmm_lib>extras
+    error('Not enough argument. Type ''help spm_gmm_lib>plot'' for help.');
+end
+id = varargin{1};
+varargin = varargin(2:end);
+switch lower(id)
+    case {'more_gmms'}
+        [varargout{1:nargout}] = more_gmms(varargin{:});      
+    otherwise
+        help spm_gmm_lib>extras
+        error('Unknown function %s. Type ''help spm_gmm_lib>extras'' for help.', id)
+end
+% =========================================================================
+
+% =========================================================================
+function gmm = more_gmms(gmm,part)
+% FORMAT gmm = spm_gmm_lib('extras', 'more_gmms', gmm, part)
+%
+% gmm  - Cell with the following format {m,b,W,n}, where there are K
+%        Gaussians.
+% part - [1,K_p] vector partitioning a K GMM into a K_p GMM (K_P>=K). E.g.
+%        [1 1 1 2 3 4 5 6 6] means that the first Gaussian will be divided
+%        into 3 and the last into 2. The rest will remain the same.
+%
+% gmm  - Cell with the following format {m,b,W,n}, where there are K_p 
+%        Gaussians.
+%
+% A crude heuristic to replace a single VB Gaussian by a bunch of VB Gaussians.
+% If there is only one Gaussian, then it should be the same as the
+% original distribution.
+MU0 = gmm{1};
+b0  = gmm{2};
+W0  = gmm{3};
+n0  = gmm{4};
+
+K   = numel(n0);
+K_p = numel(part);
+C   = size(MU0,1);
+
+A0 = bsxfun(@times,W0,reshape(n0,[1 1 K])); % E[Lambda]
+
+m = zeros(C,K_p);
+b = zeros(1,K_p);
+W = zeros(C,C,K_p);
+n = zeros(1,K_p); % A = nW, W = 1/n*inv(Cov)
+
+for k=1:K    
+    kk = sum(part==k);
+    w  = 1./(1 + exp(-(kk - 1)*0.25)) - 0.5;
+    mn = MU0(:,k);
+    vr = inv(A0(:,:,k));
+    
+    mn = sqrtm(vr)*randn(C,kk)*w + repmat(mn,[1 kk]);
+    vr = vr*(1 - w);
+    pr = inv(vr);
+    W1 = (1/n0(k))*pr;
+    
+    m(:,part==k)   = mn;
+    b(part==k)     = b0(k);
+    W(:,:,part==k) = repmat(W1,[1 1 kk]);
+    n(part==k)     = n0(k);
+end
+
+gmm{1} = m;
+gmm{2} = b;
+gmm{3} = W;
+gmm{4} = n;
 %==========================================================================
 
 %==========================================================================
