@@ -22,7 +22,7 @@ function varargout = spm_gmm(X, varargin)
 %              [{}=ML]
 % Prune      - Threshold on proportions to prune uninformative clusters
 %              [0=no pruning]
-% Missing    - Infer missing data: ['infer']/'remove'
+% Missing    - Infer missing data [true]
 % Start      - Starting method: METHOD or {METHOD, PRECISION} with
 %   METHOD    = ['kmeans'],'linspace','prior','sample','uniform',
 %               or provided: MU(PxK) or {MU(PxK),b}
