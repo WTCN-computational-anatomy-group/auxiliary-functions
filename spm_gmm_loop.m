@@ -205,8 +205,16 @@ if numel(GaussPrior) >= 1
     end
 end
 
-mean1 = {MU,b};
-prec  = {V,n};
+if sum(b) > 0
+    mean = {MU,b};
+else
+    mean = MU;
+end
+if sum(n) > 0
+    prec = {V,n};
+else
+    prec = A;
+end
 
 if ~isempty(Template)
     % Compute logPI by combining Template and [1xK] proportions in PI, as
@@ -235,12 +243,10 @@ end
 % -------------------------------------------------------------------------
 % Choose how to start
 if isempty(Z)
-    if Missing, const = spm_gmm_lib('Const', mean1, prec, L);
-    else,       const = spm_gmm_lib('Const', mean1, prec);
+    if Missing, const = spm_gmm_lib('Const', mean, prec, L);
+    else,       const = spm_gmm_lib('Const', mean, prec);
     end
     logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, E);
-    Z     = spm_gmm_lib('Responsibility', logpX, logPI);
-    clear logpX
 end
 
 % -------------------------------------------------------------------------
@@ -249,9 +255,14 @@ K = size(logPI,2); % Number of classes
 for em=1:IterMax
     
     % ---------------------------------------------------------------------
+    % Compute responsibilities
+    Z = spm_gmm_lib('Responsibility', logpX, logPI);
+    clear logpX
+    
+    % ---------------------------------------------------------------------
     % Compute sufficient statistics (bin uncertainty part)
     if sum(E) > 0
-    	SS2b = spm_gmm_lib('SuffStat', 'bin', E, Z, W, 1, {C,L});
+    	SS2b = spm_gmm_lib('SuffStat', 'bin', E, Z, W, {C,L});
     else
         SS2b = 0;
     end
@@ -269,8 +280,22 @@ for em=1:IterMax
         %   for each configuration of missing data
         [lSS0,lSS1,lSS2] = spm_gmm_lib('SuffStat', 'base', X, Z, W, {C,L});
         
+        % -----------------------------------------------------------------
+        % Initialise objective function
+        [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
+        [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
         LB = NaN(1,SubIterMax);
+        LB(1) = L1 + L2 + L3;
         for i=1:SubIterMax
+            
+            % -------------------------------------------------------------
+            % Save previous value
+            MUp     = MU;
+            Ap      = A;
+            Vp      = V;
+            bp      = b;
+            np      = n;
+            
             % -------------------------------------------------------------
             % Infer missing suffstat
             % sum{E[z]}, sum{E[z*x]}, sum{E[z*xx']}
@@ -279,29 +304,49 @@ for em=1:IterMax
 
             % -------------------------------------------------------------
             % Update GMM
-            [MU,A1,b,V1,n] = spm_gmm_lib('UpdateClusters', ...
-                                       SS0, SS1, SS2, {MU0,b0,V0,n0});
+            [MU,A,b,V,n] = spm_gmm_lib('UpdateClusters', ...
+                                          SS0, SS1, SS2, {MU0,b0,V0,n0});
             for k=1:size(MU,2)
-                [~,cholp] = chol(A1(:,:,k));
-                if cholp == 0
-                    A(:,:,k) = A1(:,:,k);
+                [~,cholp] = chol(A(:,:,k));
+                if cholp ~= 0
+                    A(:,:,k) = Ap(:,:,k);
                     if sum(n) > 0
-                        V(:,:,k) = V1(:,:,k);
+                        V(:,:,k) = Vp(:,:,k);
+                        n(k)     = np(k);
                     end
                 end
             end
-            mean1 = {MU,b};
+            mean = {MU,b};
             if ~sum(n), prec = {A};
             else,       prec = {V,n};   end
             
             % -------------------------------------------------------------
             % Marginal / Objective function
             [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean1, prec, L, SS2b);
+            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
             LB(i+1)    = L1+L2+L3;
-            subgain    = abs(LB(i+1)-LB(i))/(max(LB(2:i+1))-min(LB(2:i+1)));
+            subgain    = (LB(i+1)-LB(i))/(max(LB(2:i+1), [], 'omitnan')-min(LB(2:i+1), [], 'omitnan'));
+            if subgain < 0
+                MU         = MUp;
+                A          = Ap;
+                V          = Vp;
+                b          = bp;
+                n          = np;
+                mean = {MU,b};
+                if ~sum(n), prec = {A};
+                else,       prec = {V,n};   end
+                subgain    = 0;
+                [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
+                [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
+            end
             if Verbose > 0
-                fprintf('sub | %4d | lb = %6.10f | gain = %6.10f\n', i, LB(i+1), subgain);
+                switch sign(subgain)
+                    case 1,     incr = '(+)';
+                    case -1,    incr = '(-)';
+                    case 0,     incr = '(=)';
+                    otherwise,  incr = '';
+                end
+                fprintf('%-5s | %4d | lb = %-10.6g | gain = %-10.4g | %3s\n', 'sub', i, LB(i+1), subgain, incr);
             end
             if subgain < SubTolerance
                 break
@@ -319,21 +364,21 @@ for em=1:IterMax
         
         % -------------------------------------------------------------
         % Update GMM
-        [MU,A1,b,V1,n] = spm_gmm_lib('UpdateClusters', ...
+        [MU,A,b,V,n] = spm_gmm_lib('UpdateClusters', ...
                                    SS0, SS1, SS2, {MU0,b0,V0,n0});
         for k=1:size(MU,2)
-            [~,cholp] = chol(A1(:,:,k));
+            [~,cholp] = chol(A(:,:,k));
             if cholp == 0
-                A(:,:,k) = A1(:,:,k);
+                A(:,:,k) = A(:,:,k);
                 if sum(n) > 0
-                    V(:,:,k) = V1(:,:,k);
+                    V(:,:,k) = V(:,:,k);
                 end
             end
         end
-        mean1 = {MU,b};
+        mean = {MU,b};
         if ~sum(n), prec =  {A};
         else,       prec = {V,n};   end
-        const = spm_gmm_lib('const', mean1, prec, L);
+        const = spm_gmm_lib('const', mean, prec, L);
         
     end
                  
@@ -393,15 +438,15 @@ for em=1:IterMax
 
     % ---------------------------------------------------------------------
     % Check convergence
+    if isfield(lb, 'B')
+        lb.B(end+1)  = lb.B(end);
+        lb.XB(end+1) = lb.XB(end);
+    end
     [lb,gain] = check_convergence(lb, em, Verbose);
     if gain < Tolerance
         break;
     end
     
-    % ---------------------------------------------------------------------
-    % Compute responsibilities
-    Z = spm_gmm_lib('Responsibility', logpX, logPI);
-    clear logpX
 end
 
 if p.Results.Verbose >= 4 && ~isempty(dm)
@@ -426,16 +471,21 @@ function [lb,gain] = check_convergence(lb, em, verbose)
 % + print info
 
 lb.sum(end+1) = lb.X(end) + lb.Z(end) + lb.P(end) + lb.MU(end) + lb.A(end);
-if verbose >= 2
-    spm_gmm_lib('plot', 'LB', lb)
+if isfield(lb, 'B')
+    lb.sum(end) = lb.sum(end) + lb.B(end) + lb.XB(end);
 end
-gain = abs((lb.last - lb.sum(end))/(max(lb.sum(:))-min(lb.sum(:))));
+gain = (lb.sum(end) - lb.last)/(max(lb.sum(:), [], 'omitnan')-min(lb.sum(:), [], 'omitnan'));
 if verbose >= 1
-    if     numel(lb.sum) < 2,           incr = '';
-    elseif lb.sum(end) > lb.sum(end-1), incr = '(+)';
-    elseif lb.sum(end) < lb.sum(end-1), incr = '(-)';
-    else,                               incr = '(=)';
+    if verbose >= 2
+        spm_gmm_lib('plot', 'LB', lb)
     end
-    fprintf('%3d | lb = %10.6g | gain = %10.4g | %3s\n', em, lb.sum(end), gain, incr);
+    switch sign(gain)
+        case 1,     incr = '(+)';
+        case -1,    incr = '(-)';
+        case 0,     incr = '(=)';
+        otherwise,  incr = '';
+    end
+    fprintf('%-5s | %4d | lb = %-10.6g | gain = %-10.4g | %3s\n', 'gmm', em, lb.sum(end), gain, incr);
 end
+gain    = abs(gain);
 lb.last = lb.sum(end);
