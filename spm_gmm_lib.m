@@ -328,12 +328,22 @@ if nargin < 5
 end
 
 % -------------------------------------------------------------------------
+% Use double precision
+X  = double(X);
+MU = double(MU);
+A  = double(A);
+V  = double(V);
+n  = double(n);
+E  = double(E);
+const = double(const);
+
+% -------------------------------------------------------------------------
 % Dimensions
 N  = size(X,1);
 P  = size(X,2);
 K  = size(MU,2);
 if isempty(L), L = 2^P - 1;    end % None missing
-if isempty(E), E = zeros(1,P); end % No uncertainty
+if isempty(E), E = zeros(1,P, 'like', X); end % No uncertainty
 if size(const, 1) == 1
     const = repmat(const, [numel(L) 1]);
 end
@@ -372,10 +382,12 @@ for i=1:numel(L)
         % Bayesian case:
         %   inv(S(o,o)) ~ W(V(o,o) - V(o,m)*V(m,m)\V(m,o), n - Pm)
         if sum(n) > 0
-            Ao = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
+%             Ao = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
+            Ao = V(observed,observed,k) - V(observed,missing,k)*(spm_matcomp('inv',V(missing,missing,k))*V(missing,observed,k));
             Ao = (n(k)-Pm) * Ao;
         else
-            Ao = A(observed,observed,k) - A(observed,missing,k)*(A(missing,missing,k)\A(missing,observed,k));
+%             Ao = A(observed,observed,k) - A(observed,missing,k)*(A(missing,missing,k)\A(missing,observed,k));
+            Ao = A(observed,observed,k) - A(observed,missing,k)*(spm_matcomp('inv',A(missing,missing,k))*A(missing,observed,k));
         end
         
         % Quadratic term in observed values: (obs-mean) x (obs-mean)
@@ -414,6 +426,11 @@ function Z = responsibility(logpX, logPI, varargin)
 % varargin argument. These arguments need to be compatible (w.r.t. size) with 
 % the following function call: bsxfun(@plus, Z, varargin{i}).
 
+% Use double precision
+logpX = double(logpX);
+logPI = double(logPI);
+
+
 % Omit NaN
 logpX(isnan(logpX)) = 0; 
 
@@ -421,7 +438,7 @@ logpX(isnan(logpX)) = 0;
 Z = bsxfun(@plus, logpX, logPI);
 
 for i=1:numel(varargin)
-    Z = bsxfun(@plus, Z, varargin{i});
+    Z = bsxfun(@plus, Z, double(varargin{i}));
 end
 
 % Exponentiate and normalise
@@ -486,6 +503,12 @@ P = size(X, 2);
 K = size(Z, 2);
 
 %--------------------------------------------------------------------------
+% Use double precision
+X = double(X);
+Z = double(Z);
+W = double(W);
+
+%--------------------------------------------------------------------------
 % Weight responsibilities
 Z = bsxfun(@times, Z, W);
 
@@ -540,6 +563,13 @@ if nargin >= 4
         L = unique(C);
     end
 end
+
+
+%--------------------------------------------------------------------------
+% Use double precision
+X = double(X);
+Z = double(Z);
+W = double(W);
 
 %--------------------------------------------------------------------------
 % Dimensions
@@ -630,6 +660,11 @@ if nargin < 5
 end
 
 %--------------------------------------------------------------------------
+% Use double precision
+MU = double(MU);
+A  = double(A);
+
+%--------------------------------------------------------------------------
 % Dimensions
 P = size(MU,1);
 K = size(MU,2);
@@ -659,7 +694,8 @@ for i=1:numel(L)
             SS1k = lSS1{i}(:,k);
             MUo  = MU(observed,k);
             MUm  = MU(missing,k);
-            SA   = A(missing,missing,k) \ A(missing,observed,k);
+%             SA   = A(missing,missing,k) \ A(missing,observed,k);
+            SA   = spm_matcomp('inv',A(missing,missing,k)) * A(missing,observed,k);
             
             % 1) observed
             SS1(observed,k) = SS1(observed,k) + SS1k;
@@ -698,21 +734,20 @@ for i=1:numel(L)
     
             % 4) uncertainty ~ missing
             SS2(missing,missing,k) = SS2(missing,missing,k) ...
-                + SS0k * inv(A(missing,missing,k));
-%                 + SS0k * spm_matcomp('inv', A(missing,missing,k));
+                + SS0k * spm_matcomp('inv', A(missing,missing,k));
+%                 + SS0k * inv(A(missing,missing,k));
         end
     end
 end
 
 
 % =========================================================================
-function SS2 = suffstat_bin(E, Z, W, B, codes)
-% FORMAT SS2 = suffstat_bin(E, Z, W, B, {C,L})
+function SS2 = suffstat_bin(E, Z, W, codes)
+% FORMAT SS2 = suffstat_bin(E, Z, W, {C,L})
 %
 % E - Variance in each modality due to binning
 % Z - Responisbilities
 % W - Observation weights
-% B - Bias field
 % C - Missing code image
 % L - List of unique codes
 % P - Observed space dimension
@@ -723,7 +758,6 @@ function SS2 = suffstat_bin(E, Z, W, B, codes)
 C  = [];
 L  = [];
 if nargin < 4
-    B = 1;
     if nargin < 3
         W = 1;
     end
@@ -747,6 +781,11 @@ if nargin >= 5
     end
 end
 
+%--------------------------------------------------------------------------
+% Use double precision
+E = double(E);
+Z = double(Z);
+W = double(W);
 
 %--------------------------------------------------------------------------
 % Dimensions
@@ -780,17 +819,12 @@ for i=1:numel(L)
     list_p = 1:P;
     list_p = list_p(observed);
     for p=list_p
-        if numel(B) > 1
-            B1 = B(msk,p);
-        else
-            B1 = B;
-        end
         if size(E,1)==1
             SS2(p,p,:) = SS2(p,p,:) ...
-                + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p)*B1);
+                + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p));
         else
             SS2(p,p,:) = SS2(p,p,:) ...
-                + reshape(sum(bsxfun(@times, Z(msk,:),E(msk,p)), 1), [1 1 K]);
+                + reshape(sum(bsxfun(@times, Z(msk,:), E(msk,p)), 1), [1 1 K]);
         end
     end
 end
@@ -841,6 +875,16 @@ else
     end
 end
 
+
+%--------------------------------------------------------------------------
+% Use double precision
+MU = double(MU);
+b  = double(b);
+V  = double(V);
+n  = double(n);
+
+%--------------------------------------------------------------------------
+% Dimensions
 P = size(MU,1);
 K = size(MU,2);
     
@@ -862,7 +906,7 @@ if nargin == 3 && ~isempty(L)
 % This allows us to compute E[inv(S11)] and E[ln|S11]], which are needed to
 % compute the expected marginal distribution within each cluster.
 
-    c = zeros(numel(L), K);
+    c = zeros(numel(L), K, 'like', MU);
     for i=1:numel(L)
         code = L(i);
         observed = code2bin(code, P);
@@ -870,7 +914,8 @@ if nargin == 3 && ~isempty(L)
         Pm = sum(missing);
         Po = sum(observed);
         for k=1:K
-            Vo = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
+%             Vo = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
+            Vo = V(observed,observed,k) - V(observed,missing,k)*(spm_matcomp('inv',V(missing,missing,k))*V(missing,observed,k));
             c(i,k) = - 0.5 * Po * log(2*pi);
             if sum(n) > 0
                 no = n(k) - Pm;
@@ -890,7 +935,7 @@ if nargin == 3 && ~isempty(L)
 else
 %--------------------------------------------------------------------------
 % No missing dimensions
-    c = zeros(1,K);
+    c = zeros(1,K, 'like', MU);
     for k=1:K
         c(k) = - 0.5 * P * log(2*pi);
         if sum(n) > 0
@@ -935,6 +980,13 @@ if numel(pr) >= 1
         end
     end
 end
+
+%--------------------------------------------------------------------------
+% Use double precision
+MU0 = double(MU0);
+b0  = double(b0);
+V0  = double(V0);
+n0  = double(n0);
 
 % -------------------------------------------------------------------------
 % Mean
@@ -1452,10 +1504,12 @@ for i=1:numel(L)
         % Bayesian case:
         %   inv(S(o,o)) ~ W(V(o,o) - V(o,m)*V(m,m)\V(m,o), n - Pm)
         if sum(n) > 0
-            Ao = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
+%             Ao = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
+            Ao = V(observed,observed,k) - V(observed,missing,k)*(spm_matcomp('inv',V(missing,missing,k))*V(missing,observed,k));
             Ao = (n(k)-Pm) * Ao;
         else
-            Ao = A(observed,observed,k) - A(observed,missing,k)*(A(missing,missing,k)\A(missing,observed,k));
+%             Ao = A(observed,observed,k) - A(observed,missing,k)*(A(missing,missing,k)\A(missing,observed,k));
+            Ao = A(observed,observed,k) - A(observed,missing,k)*(spm_matcomp('inv',A(missing,missing,k))*A(missing,observed,k));
         end
         
         % 1) obs x mean
@@ -1741,7 +1795,7 @@ end
 % =========================================================================
 function plot_lowerbound(lb, figname)
 
-% ---------------------------------------------------------------------
+% -------------------------------------------------------------------------
 % Get figure (create if it does not exist)
 if nargin < 2
     figname = '(SPM) Plot GMM Lower Bound';
@@ -1753,32 +1807,51 @@ end
 set(0, 'CurrentFigure', f);   
 clf(f);
 
-% ---------------------------------------------------------------------
+% -------------------------------------------------------------------------
+% Choose type
+if isfield(lb, 'B')
+    nrow = 2;
+    ncol = 4;
+else
+    nrow = 2;
+    ncol = 3;
+end
+
+% -------------------------------------------------------------------------
 % Plots
-subplot(2, 3, 1);
+subplot(nrow, ncol, sub2ind([ncol nrow], 1, 1));
 plot(lb.sum)
 title('Lower Bound')
-subplot(2, 3, 2);
-plot(lb.X)
+subplot(nrow, ncol, sub2ind([ncol nrow], 2, 1));
+if isfield(lb, 'B')
+    plot(lb.X + lb.XB);
+else
+    plot(lb.X)
+end
 title('Observations (E+KL)')
-subplot(2, 3, 3);
+subplot(nrow, ncol, sub2ind([ncol nrow], 3, 1));
 plot(lb.Z)
 title('Responsibilities (KL)')
-subplot(2, 3, 4);
+subplot(nrow, ncol, sub2ind([ncol nrow], 1, 2));
 plot(lb.P)
 title('Proportions (KL)')
-subplot(2, 3, 5);
+subplot(nrow, ncol, sub2ind([ncol nrow], 2, 2));
 plot(lb.MU)
 title('Means (KL)')
-subplot(2, 3, 6);
+subplot(nrow, ncol, sub2ind([ncol nrow], 3, 2));
 plot(lb.A)
 title('Precisions (KL)')
+if isfield(lb, 'B')
+    subplot(nrow, ncol, sub2ind([ncol nrow], 4, 2));
+    plot(lb.B)
+    title('Bias Prior')
+end
 drawnow
 
 % =========================================================================
 function plot_cat(Z,Template,figname)
 
-% ---------------------------------------------------------------------
+% -------------------------------------------------------------------------
 % Get figure (create if it does not exist)
 if nargin<4
     figname = '(SPM) Plot GMM Categorical';
@@ -1794,7 +1867,7 @@ K        = size(Z,4);
 colors   = hsv(K);
 do_subpl = isequal(size(Z),size(Template));
 
-% ---------------------------------------------------------------------
+% -------------------------------------------------------------------------
 % Plots
 if do_subpl
     subplot(121)
