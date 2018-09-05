@@ -117,7 +117,6 @@ b0  = 0;  % Mean degrees of freedom (prior)
 n0  = 0;  % Precision degrees of freedom (prior)
 MU0 = []; % Mean (prior)
 V0  = []; % Scale matrix (prior)
-C   = []; % Image of missing codes
 L   = []; % List of unique codes
 logPI = []; % [expected] log-proportions
 PI    = []; % [expected] proportions
