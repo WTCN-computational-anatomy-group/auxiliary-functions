@@ -761,7 +761,9 @@ id = varargin{1};
 varargin = varargin(2:end);
 switch lower(id)
     case {'lowerbound','lb'}
-        [varargout{1:nargout}] = plot_lowerbound(varargin{:});        
+        [varargout{1:nargout}] = plot_lowerbound(varargin{:});  
+    case {'bias'}
+        [varargout{1:nargout}] = plot_bias(varargin{:});       
     otherwise
         help spm_bias_lib>plot
         error('Unknown function %s. Type ''help spm_bias_lib>plot'' for help.', id)
@@ -770,7 +772,7 @@ end
 % =========================================================================
 function plot_lowerbound(lb, figname)
 
-% ---------------------------------------------------------------------
+% -------------------------------------------------------------------------
 % Get figure (create if it does not exist)
 if nargin < 2
     figname = '(SPM) Plot Bias Lower Bound';
@@ -782,18 +784,95 @@ end
 set(0, 'CurrentFigure', f);   
 clf(f);
 
-% ---------------------------------------------------------------------
+% -------------------------------------------------------------------------
 % Plots
-subplot(2, 2, 1);
+subplot(1, 3, 1);
 plot(lb.sum)
 title('Lower Bound')
-subplot(2, 2, 2);
-plot(lb.X)
+subplot(1, 3, 2);
+plot(sum(lb.X,1) + sum(lb.XB,1));
 title('Conditional')
-subplot(2, 2, 3);
-plot(lb.XB)
-title('Normalisation')
-subplot(2, 2, 4);
+subplot(1, 3, 3);
 plot(lb.B)
 title('Regularisation)')
+drawnow
+
+
+% =========================================================================
+function plot_bias(X, B, Z, lat, figname)
+
+% -------------------------------------------------------------------------
+% Get figure (create if it does not exist)
+if nargin < 5
+    figname = '(SPM) Plot bias field';
+end
+f = findobj('Type', 'Figure', 'Name', figname);
+if isempty(f)
+    f = figure('Name', figname, 'NumberTitle', 'off');
+end
+set(0, 'CurrentFigure', f);   
+clf(f);
+
+% -------------------------------------------------------------------------
+% Lattice
+if nargin < 4
+    lat = [size(X) 1];
+    lat = lat(1:3);
+end
+clat = num2cell(lat);
+X = reshape(X, clat{:}, []);
+B = reshape(B, clat{:}, []);
+Z = reshape(Z, clat{:}, []);
+P = size(X,4);
+z = ceil(size(X,3)/2);
+
+% -------------------------------------------------------------------------
+% Choose type
+nrow = P;
+ncol = 4;
+
+% -------------------------------------------------------------------------
+% Plots
+handles = cell(nrow,ncol);
+for p=1:P
+    subplot(nrow, ncol, sub2ind([ncol nrow], 1, p));
+    tmp = X(:,:,z,p);
+    minval = min(tmp(:));
+    maxval = max(tmp(:));
+    handles{p,1} = imagesc(tmp(end:-1:1,end:-1:1)');
+    colormap(handles{p,1}.Parent, 'gray')
+    colorbar
+    axis off
+    box on
+    title(sprintf('Original %d', p));
+    
+    subplot(nrow, ncol, sub2ind([ncol nrow], 2, p));
+    tmp = tmp .* B(:,:,z,p);
+    minval = min(minval, min(tmp(:)));
+    maxval = max(maxval, max(tmp(:)));
+    handles{p,2} = imagesc(tmp(end:-1:1,end:-1:1)');
+    colormap(handles{p,2}.Parent, 'gray')
+    colorbar
+    axis off
+    box on
+    title(sprintf('Corrected %d', p));
+    
+    caxis(handles{p,1}.Parent, [minval maxval]);
+    caxis(handles{p,2}.Parent, [minval maxval]);
+    
+    subplot(nrow, ncol, sub2ind([ncol nrow], 3, p));
+    tmp = B(:,:,z,p);
+    handles{p,3} = imagesc(tmp(end:-1:1,end:-1:1)');
+    colorbar
+    axis off
+    box on
+    title(sprintf('Bias field %d', p));
+    
+    subplot(nrow, ncol, sub2ind([ncol nrow], 4, p));
+    tmp = reshape(catToColor(Z(:,:,z,:)), [lat(1:2) 3]);
+    handles{p,4} = imagesc(permute(tmp(end:-1:1,end:-1:1,:), [2 1 3]));
+    axis off
+    box on
+    title(sprintf('Resp. %d', p));
+end
 drawnow

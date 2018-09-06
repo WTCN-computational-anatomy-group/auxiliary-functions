@@ -1824,26 +1824,32 @@ plot(lb.sum)
 title('Lower Bound')
 subplot(nrow, ncol, sub2ind([ncol nrow], 2, 1));
 if isfield(lb, 'B')
-    plot(lb.X + lb.XB);
+    plot(sum(lb.X,1) + sum(lb.XB,1));
 else
-    plot(lb.X)
+    plot(sum(lb.X,1))
 end
-title('Observations (E+KL)')
+box on
+title('Observations (E)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 3, 1));
-plot(lb.Z)
+plot(sum(lb.Z,1))
+box on
 title('Responsibilities (KL)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 1, 2));
-plot(lb.P)
+plot(sum(lb.P,1))
+box on
 title('Proportions (KL)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 2, 2));
-plot(lb.MU)
+plot(sum(lb.MU,1))
+box on
 title('Means (KL)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 3, 2));
-plot(lb.A)
+plot(sum(lb.A,1))
+box on
 title('Precisions (KL)')
 if isfield(lb, 'B')
     subplot(nrow, ncol, sub2ind([ncol nrow], 4, 2));
-    plot(lb.B)
+    plot(sum(lb.B,1))
+    box on
     title('Bias Prior')
 end
 drawnow
@@ -1973,11 +1979,13 @@ for p=1:P
         maxx  = max(X1);
         weights = weights ./ (sum(weights)*(maxx-minx)/numel(weights));
         bar(centres, weights, 'EdgeColor', 'none', 'FaceColor', [0.7 0.7 0.7]);
+        ymax = max(weights);
     else
         % Input is a list of observations
         [H, edges] = histcounts(X(:,p), 64, 'Normalization', 'pdf');
         centres = (edges(1:end-1) + edges(2:end))/2;
         bar(centres, H, 'EdgeColor', 'none', 'FaceColor', [0.7 0.7 0.7]);
+        ymax = max(H);
     end
     xlims = [inf -inf];
     % -----------
@@ -1991,6 +1999,7 @@ for p=1:P
     xlabel(sprintf('x%d',p))
     ylabel('density')
     xlim(xlims);
+    ylim([0 ymax]);
     box on
     hold off
 

@@ -40,7 +40,10 @@ function [B,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, varargin)
 % LineSearch     - Max number of line search iterations [6]
 % BinWidth       - 1xP Bin width [0]
 % JointOptim     - Optimisation strategy [true=Joint]/false=Iterative
-% Verbose        - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more
+% Verbose        - Verbosity level: [0]= quiet
+%                                    1 = write (lower bound)
+%                                    2 = plot (lower bound)
+%                                    3 = plot more (gmm fit)
 % 
 % OUTPUT
 % ------
@@ -53,37 +56,37 @@ function [B,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, varargin)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
-lb0 = struct('sum', [], 'last', NaN, 'X', [], 'B', [], 'XB', []);
+lb0 = struct('sum', NaN, 'X', [], 'B', [], 'XB', []);
 
 % -------------------------------------------------------------------------
 % Parse inputs
-p = inputParser;
-p.FunctionName = 'spm_bias_loop';
-p.addParameter('LowerBound',     lb0,   @isstruct);
-p.addParameter('Coefficients',   [],    @isnumeric);
-p.addParameter('BiasField',      [],    @isnumeric);
-p.addParameter('RegPrecision',   [],    @isnumeric);
-p.addParameter('RegParam',       1,     @(X) isscalar(X) && isnumeric(X));
-p.addParameter('MissingCode',    {},    @(X) isnumeric(X) || iscell(X));
-p.addParameter('IterMax',        1024,  @(X) isscalar(X) && isnumeric(X));
-p.addParameter('Tolerance',      1e-4,  @(X) isscalar(X) && isnumeric(X));
-p.addParameter('LineSearch',     6,     @(X) isscalar(X) && isnumeric(X));
-p.addParameter('BinWidth',       0,     @isnumeric);
-p.addParameter('JointOptim',     true,  @(X) isscalar(X) && islogical(X));
-p.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
-p.parse(varargin{:});
-lb    = p.Results.LowerBound;
-B     = p.Results.BiasField;
-coeff = p.Results.Coefficients;
-ICO   = p.Results.RegPrecision;
-prms  = p.Results.RegParam;
-BW    = p.Results.BinWidth;
-C     = p.Results.MissingCode;
-IterMax    = p.Results.IterMax;
-Tolerance  = p.Results.Tolerance;
-LineSearch = p.Results.LineSearch;
-JointOptim = p.Results.JointOptim;
-Verbose    = p.Results.Verbose;
+q = inputParser;
+q.FunctionName = 'spm_bias_loop';
+q.addParameter('LowerBound',     lb0,   @isstruct);
+q.addParameter('Coefficients',   [],    @isnumeric);
+q.addParameter('BiasField',      [],    @isnumeric);
+q.addParameter('RegPrecision',   [],    @isnumeric);
+q.addParameter('RegParam',       1,     @(X) isscalar(X) && isnumeric(X));
+q.addParameter('MissingCode',    {},    @(X) isnumeric(X) || iscell(X));
+q.addParameter('IterMax',        1024,  @(X) isscalar(X) && isnumeric(X));
+q.addParameter('Tolerance',      1e-4,  @(X) isscalar(X) && isnumeric(X));
+q.addParameter('LineSearch',     6,     @(X) isscalar(X) && isnumeric(X));
+q.addParameter('BinWidth',       0,     @isnumeric);
+q.addParameter('JointOptim',     [],    @(X) isscalar(X) && islogical(X));
+q.addParameter('Verbose',        0,     @(X) isnumeric(X) || islogical(X));
+q.parse(varargin{:});
+lb    = q.Results.LowerBound;
+B     = q.Results.BiasField;
+coeff = q.Results.Coefficients;
+ICO   = q.Results.RegPrecision;
+prms  = q.Results.RegParam;
+BW    = q.Results.BinWidth;
+C     = q.Results.MissingCode;
+IterMax    = q.Results.IterMax;
+Tolerance  = q.Results.Tolerance;
+LineSearch = q.Results.LineSearch;
+JointOptim = q.Results.JointOptim;
+Verbose    = q.Results.Verbose;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -161,114 +164,133 @@ if isempty(C) && any(any(isnan(reshape(X, [], P))))
 end
 
 % -------------------------------------------------------------------------
-% Compute bias field if needed
+% Reshape everything in matrix form
+X = reshape(X, [], P);
+Z = reshape(Z, [], K);
+
+
+% -------------------------------------------------------------------------
+% Initialise coefficients if needed
 if isempty(coeff)
     coeff = zeros([nbcomp P], 'like', B);
 end
 
 % -------------------------------------------------------------------------
-% Initialise stuff
-if isnan(lb.last)
+% Initialise lower bound + reconstruct bias field
+if isnan(lb.sum(end))
     B   = spm_bias_lib('reconstruct', bases, coeff, 'add');
+    B   = reshape(B, [], P);
     B(~isfinite(X)) = 0;
-    LXB = sum(B(:)); % normalisation term: sum logdet(B)
+    LXB = sum(B, 1)';
     B   = exp(B);
-    LX  = spm_bias_lib('objective', reshape(X, [], P), reshape(Z, [], K), reshape(B, [], P), mean, prec, {C, L}, BW);
-    LB  = 0;
+    LX  = spm_bias_lib('objective', X, Z, B, mean, prec, {C, L}, BW);
+    LB  = zeros(P,1);
     for p=1:P
-        LB = LB - 0.5 * get_param(prms, 1) * reshape(coeff(:,:,:,p), [], 1).' * ICO * reshape(coeff(:,:,:,p), [], 1);
+        c1 = reshape(coeff(:,:,:,p), [], 1);
+        LB(p) = -0.5 * get_param(prms, 1) * (c1' * ICO * c1);
     end
-    llb = LX + LXB + LB;
-    lb.X(end+1)   = LX;
-    lb.XB(end+1)  = LXB;
-    lb.B(end+1)   = LB;
-    lb.sum(end+1) = lb.X(end) + lb.B(end) + lb.XB(end);
-    lb.last       = lb.sum(end);
+    llb = sum([sum(LX,'omitnan') sum(LXB,'omitnan') sum(LB,'omitnan')], 'omitnan');
+    lb.X(:,end+1)  = LX;
+    lb.XB(:,end+1) = LXB;
+    lb.B(:,end+1)  = LB;
+    lb.sum(end+1)  = llb;
 else
     B   = spm_bias_lib('reconstruct', bases, coeff, 'mult');
-    LX  = lb.X(end);
-    LXB = lb.XB(end);
-    LB  = lb.B(end);
-    llb = LX + LXB + LB;
+    B   = reshape(B, [], P);
+    if ~isempty(lb.X),  LX  = lb.X(:,end);  else, LX  = 0; end
+    if ~isempty(lb.XB), LXB = lb.XB(:,end); else, LXB = zeros(P,1); end
+    if ~isempty(lb.B),  LB  = lb.B(:,end);  else, LB  = zeros(P,1); end
+    llb = sum([sum(LX,'omitnan') sum(LXB,'omitnan') sum(LB,'omitnan')], 'omitnan');
 end
 
 % -------------------------------------------------------------------------
 % Select optimisation strategy
-% JointOptim = numel(coeff) <= 3000;
-if JointOptim
-    list_q = 1;
-    Q = P;
-    gain = 0;
-else
-    list_q = 1:P;
-    Q = 1;
-    gain = zeros(1,P);
+if isempty(JointOptim)
+    JointOptim = numel(coeff) <= 3000;
 end
+if JointOptim
+    R = 1;  % < Iterations needed (Joint: 1, Iter: P)
+    Q = P;  % < Size of Grad/Hess (Joint: P, Iter: 1)      
+else
+    R = P;
+    Q = 1;
+end
+gain = zeros(1,P); % < Allocate array to store gain
 
 % -------------------------------------------------------------------------
 % Gauss-Newton loop
-oneok = false;
+oneok = false; % < At least one success?
 for gnit=1:IterMax
 
     % ---------------------------------------------------------------------
     % Choose the right regularisation
     prm = get_param(prms, gnit);
     
-    for q=list_q
+    for r=1:R % < Joint: one loop, Iter: P loops
     
         if JointOptim
             list_p = 1:P;
             whichd = [];
         else
-            list_p = q;
-            whichd = q;
+            list_p = r;
+            whichd = r;
         end
         
-        % ---------------------------------------------------------------------
+        % -----------------------------------------------------------------
         % Compute grad/hess
-        [g,H] = spm_bias_lib('derivatives', whichd, reshape(B, [], P) .* reshape(X, [], P), bases, reshape(Z, [], K), cluster, {C,L}, (bsxfun(@times, reshape(B, [], P), BW).^2)/12);
+        [g,H] = spm_bias_lib('derivatives', whichd, B.*X, bases, Z, cluster, {C,L}, (bsxfun(@times, B, BW).^2)/12);
         g = reshape(g, J, Q);
         H = reshape(H, J, Q, J, Q);
-        for p=1:numel(list_p)
-            g(:,p)     = g(:,p)     + prm * ICO * reshape(coeff(:,:,:,list_p(p)), [], 1);
-            H(:,p,:,p) = H(:,p,:,p) + prm * reshape(ICO, [J 1 J]);
+        for q=1:Q
+            p          = list_p(q);
+            c1         = reshape(coeff(:,:,:,p), [], 1);
+            g(:,q)     = g(:,q)     + prm * ICO * c1;
+            H(:,q,:,q) = H(:,q,:,q) + prm * reshape(ICO, [J 1 J]);
         end
 
-        % ---------------------------------------------------------------------
+        % -----------------------------------------------------------------
         % Gauss-Newton
         g = g(:);
         H = reshape(H, J*Q, J*Q);
         H = (H+H')/2;
         % H = spm_matcomp('LoadDiag', H);
         dc = H\g;
+        dc = reshape(dc, [], Q);
 
-        % ---------------------------------------------------------------------
+        % -----------------------------------------------------------------
         % Line search
         armijo = 1;
         coeff0 = reshape(coeff, [], P);
         llb0   = llb;
         ok     = false;
         for ls=1:LineSearch
-            % -----------------------------------------------------------------
+            % -------------------------------------------------------------
             % Update bias field
-            coeff  = reshape(coeff,  [], P);
+            coeff           = reshape(coeff,  [], P);
             coeff(:,list_p) = coeff0(:,list_p) - armijo * dc;
-            coeff  = reshape(coeff,  [nbcomp P]);
-            B      = spm_bias_lib('reconstruct', bases, coeff, 'add');
-            B(~isfinite(X)) = 0;
-
-            % -----------------------------------------------------------------
-            % Update objective function
-            LXB = sum(B(:)); % sum logdet(B)
-            B   = exp(B);
-            LX  = spm_bias_lib('objective', reshape(X, [], P), reshape(Z, [], K), reshape(B, [], P), mean, prec, {C, L}, BW);
-            LB  = 0;
-            for p=1:P
-                LB = LB - 0.5 * prm * reshape(coeff(:,:,:,p), [], 1).' * ICO * reshape(coeff(:,:,:,p), [], 1);
+            coeff           = reshape(coeff,  [nbcomp P]);
+            for q=1:Q
+                p      = list_p(q);
+                c1     = coeff(:,:,:,p);
+                B(:,p) = reshape(spm_bias_lib('reconstruct', bases, c1, 'add'), [], 1);
+                B(~isfinite(X(:,p)),p) = 0;
             end
-            llb = LX + LXB + LB;
 
-            % -----------------------------------------------------------------
+            % -------------------------------------------------------------
+            % Update objective function
+            LXB(list_p,1) = sum(B(:,list_p),1)'; % < Update LogDet(B)
+            B(:,list_p) = exp(B(:,list_p));    % < Exponentiate
+            LX  = spm_bias_lib('objective', X, Z, B, mean, prec, {C, L}, BW);
+            for q=1:Q
+                p     = list_p(q);
+                c1    = reshape(coeff(:,:,:,p), [], 1);
+                LB(p) = -0.5 * prm * (c1' * ICO * c1);
+            end
+            llb = sum([sum(LX,'omitnan') ...
+                       sum(LXB,'omitnan') ...
+                       sum(LB,'omitnan')], 'omitnan');
+
+            % -------------------------------------------------------------
             % Check improvement
             if llb > llb0
                 ok = true;
@@ -277,36 +299,40 @@ for gnit=1:IterMax
                 armijo = armijo/2;
             end
         end
-        % ---------------------------------------------------------------------
+        % -----------------------------------------------------------------
         % If no improvement, use previous value
         if ~ok
             ls    = 0;
             llb   = llb0;
             coeff = reshape(coeff0,  [nbcomp P]);
-            B     = spm_bias_lib('reconstruct', bases, coeff, 'mult');
-            B(~isfinite(X)) = 1;
-            lb.X(end+1)  = lb.X(end);
-            lb.XB(end+1) = lb.XB(end);
-            lb.B(end+1)  = lb.B(end);
+            for q=1:Q
+                p      = list_p(q);
+                c1     = coeff(:,:,:,p);
+                B(:,p) = reshape(spm_bias_lib('reconstruct', bases, c1, 'mult'), [], 1);
+                B(~isfinite(X(:,p)),p) = 1;
+            end
+            lb.X(:,end+1)  = lb.X(:,end);
+            lb.XB(:,end+1) = lb.XB(:,end);
+            lb.B(:,end+1)  = lb.B(:,end);
         else
-            lb.X(end+1)  = LX;
-            lb.XB(end+1) = LXB;
-            lb.B(end+1)  = LB;
+            lb.X(:,end+1)  = LX;
+            lb.XB(:,end+1) = LXB;
+            lb.B(:,end+1)  = LB;
         end
         oneok = oneok || ok;
 
-        % ---------------------------------------------------------------------
-        % Check convergence
-        if isfield(lb, 'Z')
-            lb.Z(end+1)  = lb.Z(end);
-            lb.P(end+1)  = lb.P(end);
-            lb.MU(end+1) = lb.MU(end);
-            lb.A(end+1)  = lb.A(end);
+        
+        % -----------------------------------------------------------------
+        % Plot Bias
+        if Verbose(1) >= 3
+            spm_bias_lib('Plot', 'Bias', X, B, Z, lattice);
         end
-    
-        [lb,gain(q)] = check_convergence(lb, gnit, ls, list_p, Verbose);
+        
+        % -----------------------------------------------------------------
+        % Check convergence
+        [lb,gain(r)] = check_convergence(lb, gnit, ls, list_p, Verbose(1));
     end
-    if all(gain < Tolerance)
+    if sum(gain) < Tolerance
         break;
     end
     
@@ -332,19 +358,23 @@ function [lb,gain] = check_convergence(lb, em, ls, whichp, verbose)
 % Compute lower bound (by summing its parts) and its gain
 % + print info
 
-lb.sum(end+1) = lb.X(end) + lb.B(end) + lb.XB(end);
-if isfield(lb, 'Z')
-    lb.sum(end) = lb.sum(end) + lb.Z(end) + lb.P(end) + lb.A(end) + lb.MU(end);
+fields = fieldnames(lb);
+lb.sum(end+1) = 0;
+for i=1:numel(fields)
+    field = fields{i};
+    if ~any(strcmpi(field, {'sum' 'last'})) && ~isempty(lb.(field)) && ~isnan(lb.(field)(end))
+        lb.sum(end) = lb.sum(end) + sum(lb.(field)(:,end));
+    end
 end
-gain = (lb.sum(end) - lb.last)/(max(lb.sum(:), [], 'omitnan')-min(lb.sum(:), [], 'omitnan'));
+gain = (lb.sum(end) - lb.sum(end-1))/(max(lb.sum(:), [], 'omitnan')-min(lb.sum(:), [], 'omitnan'));
 if verbose >= 1
     if verbose >= 2
         spm_gmm_lib('plot', 'LB', lb)
     end
     switch sign(gain)
-        case 1,     incr = '(+)';
+        case  1,    incr = '(+)';
         case -1,    incr = '(-)';
-        case 0,     incr = '(=)';
+        case  0,    incr = '(=)';
         otherwise,  incr = '';
     end
     if ls == 0
@@ -360,4 +390,3 @@ if verbose >= 1
     fprintf('%-5s | %4d | lb = %-10.6g | gain = %-10.4g | %3s | %-7s\n', name, em, lb.sum(end), gain, incr, lsres);
 end
 gain = abs(gain);
-lb.last = lb.sum(end);
