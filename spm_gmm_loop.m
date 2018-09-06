@@ -49,7 +49,7 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 % BinUncertainty - 1xP Binning uncertainty
 %                  NxP Bias-modulated binning uncertainty
 % Verbose        - Verbosity level: [0]= quiet
-%                                    1 = write (lower boundà
+%                                    1 = write (lower bound)
 %                                    2 = plot (lower bound)
 %                                    3 = plot more (gmm fit)
 % 
@@ -81,7 +81,7 @@ p.addParameter('Tolerance',      1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubIterMax',     1024,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubTolerance',   1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinUncertainty', 0,     @isnumeric);
-p.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('Verbose',        0,     @(X) isnumeric(X) || islogical(X));
 p.parse(varargin{:});
 lb = p.Results.LowerBound;
 Z  = p.Results.Resp;
@@ -324,7 +324,7 @@ for em=1:IterMax
             end
             % -------------------------------------------------------------
             % Print stuff
-            if Verbose > 1
+            if numel(Verbose) > 1 && Verbose(2) > 0
                 switch sign(subgain)
                     case 1,     incr = '(+)';
                     case -1,    incr = '(-)';
@@ -375,7 +375,7 @@ for em=1:IterMax
 
     % ---------------------------------------------------------------------
     % Plot GMM
-    if Verbose >= 3
+    if Verbose(1) >= 3
         spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI);
     end
    
@@ -406,7 +406,7 @@ for em=1:IterMax
 
     % ---------------------------------------------------------------------
     % Check convergence
-    [lb,gain] = check_convergence(lb, em, Verbose);
+    [lb,gain] = check_convergence(lb, em, Verbose(1));
     if gain < Tolerance
         break;
     end

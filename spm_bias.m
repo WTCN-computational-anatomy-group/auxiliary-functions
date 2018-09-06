@@ -11,7 +11,7 @@ function varargout = spm_bias(X, varargin)
 %
 % OPTIONAL
 % ---------
-% K - Number of GMM classes [6]
+% K - Number of GMM classes [10]
 %
 % KEYWORD
 % -------
@@ -23,7 +23,10 @@ function varargout = spm_bias(X, varargin)
 % Tolerance  - Convergence criterion (lower bound gain) [1e-4]
 % BinWidth   - 1x[P] Bin width (histogram mode: add bits of variance) [0]
 % InputDim   - Input space dimension [0=try to guess]
-% Verbose    - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more
+% Verbose    - Verbosity level: [0]= quiet
+%                                1 = write (lower bound)
+%                                2 = plot (lower bound)
+%                                3 = plot more (gmm fit)
 % GMM        - Cell of GMM options:
 %              GaussPrior     - {MU0,b0,V0,n0} [{}=ML]
 %              PropPrior      - a0 [0=ML]
@@ -50,7 +53,7 @@ function varargout = spm_bias(X, varargin)
 p = inputParser;
 p.FunctionName = 'spm_bias';
 p.addRequired('X',                      @isnumeric);
-p.addOptional('K',           6,         @(X) isscalar(X) && isnumeric(X));
+p.addOptional('K',           10,        @(X) isscalar(X) && isnumeric(X));
 p.addParameter('VoxelSize',  1,         @isnumeric);
 p.addParameter('FWHM',       60,        @isnumeric);
 p.addParameter('NbBases',    0,         @isnumeric);
@@ -61,7 +64,7 @@ p.addParameter('IterMax',    1000,      @(X) isscalar(X) && isnumeric(X));
 p.addParameter('Tolerance',  1e-4,      @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinWidth',   0,         @isnumeric);
 p.addParameter('InputDim',   0,         @(X) isscalar(X) && isnumeric(X));
-p.addParameter('Verbose',    0,         @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('Verbose',    0,         @(X) isnumeric(X) || islogical(X));
 p.parse(X, varargin{:});
 K          = p.Results.K;
 vs         = p.Results.VoxelSize;
@@ -161,6 +164,13 @@ for em=1:IterMax
     end
     cluster = {mean prec};
     
+    
+    % ---------------------------------------------------------------------
+    % Plot Bias
+    if Verbose(1) >= 3
+        spm_bias_lib('Plot', 'Bias', X, field, Z, latX);
+    end
+    
     % ---------------------------------------------------------------------
     % Optimise Bias Field
     [field,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, ...
@@ -181,7 +191,7 @@ for em=1:IterMax
     % Check convergence
     obj  = lb.sum(end);
     den  = max(lb.sum(:), [], 'omitnan')-min(lb.sum(:), [], 'omitnan');
-    gain = check_convergence(obj, obj0, den, em, Verbose);
+    gain = check_convergence(obj, obj0, den, em, Verbose(1));
     if gain < Tolerance
         if ~isempty(RegParam)
             PrevRegParam = ThisRegParam;

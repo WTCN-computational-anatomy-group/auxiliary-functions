@@ -40,7 +40,10 @@ function [B,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, varargin)
 % LineSearch     - Max number of line search iterations [6]
 % BinWidth       - 1xP Bin width [0]
 % JointOptim     - Optimisation strategy [true=Joint]/false=Iterative
-% Verbose        - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more
+% Verbose        - Verbosity level: [0]= quiet
+%                                    1 = write (lower bound)
+%                                    2 = plot (lower bound)
+%                                    3 = plot more (gmm fit)
 % 
 % OUTPUT
 % ------
@@ -70,7 +73,7 @@ q.addParameter('Tolerance',      1e-4,  @(X) isscalar(X) && isnumeric(X));
 q.addParameter('LineSearch',     6,     @(X) isscalar(X) && isnumeric(X));
 q.addParameter('BinWidth',       0,     @isnumeric);
 q.addParameter('JointOptim',     [],    @(X) isscalar(X) && islogical(X));
-q.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+q.addParameter('Verbose',        0,     @(X) isnumeric(X) || islogical(X));
 q.parse(varargin{:});
 lb    = q.Results.LowerBound;
 B     = q.Results.BiasField;
@@ -318,9 +321,16 @@ for gnit=1:IterMax
         end
         oneok = oneok || ok;
 
+        
+        % -----------------------------------------------------------------
+        % Plot Bias
+        if Verbose(1) >= 3
+            spm_bias_lib('Plot', 'Bias', X, B, Z, lattice);
+        end
+        
         % -----------------------------------------------------------------
         % Check convergence
-        [lb,gain(r)] = check_convergence(lb, gnit, ls, list_p, Verbose);
+        [lb,gain(r)] = check_convergence(lb, gnit, ls, list_p, Verbose(1));
     end
     if sum(gain) < Tolerance
         break;
