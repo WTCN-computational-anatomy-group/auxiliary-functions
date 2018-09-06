@@ -799,7 +799,7 @@ drawnow
 
 
 % =========================================================================
-function plot_bias(X, B, Z, lat, figname)
+function plot_bias(X, B, lat, figname)
 
 % -------------------------------------------------------------------------
 % Get figure (create if it does not exist)
@@ -822,14 +822,13 @@ end
 clat = num2cell(lat);
 X = reshape(X, clat{:}, []);
 B = reshape(B, clat{:}, []);
-Z = reshape(Z, clat{:}, []);
 P = size(X,4);
 z = ceil(size(X,3)/2);
 
 % -------------------------------------------------------------------------
 % Choose type
 nrow = P;
-ncol = 4;
+ncol = 3;
 
 % -------------------------------------------------------------------------
 % Plots
@@ -867,12 +866,5 @@ for p=1:P
     axis off
     box on
     title(sprintf('Bias field %d', p));
-    
-    subplot(nrow, ncol, sub2ind([ncol nrow], 4, p));
-    tmp = reshape(catToColor(Z(:,:,z,:)), [lat(1:2) 3]);
-    handles{p,4} = imagesc(permute(tmp(end:-1:1,end:-1:1,:), [2 1 3]));
-    axis off
-    box on
-    title(sprintf('Resp. %d', p));
 end
 drawnow

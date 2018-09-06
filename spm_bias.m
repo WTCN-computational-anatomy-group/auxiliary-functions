@@ -168,7 +168,7 @@ for em=1:IterMax
     % ---------------------------------------------------------------------
     % Plot Bias
     if Verbose(1) >= 3
-        spm_bias_lib('Plot', 'Bias', X, field, Z, latX);
+        spm_bias_lib('Plot', 'Bias', X, field, latX);
     end
     
     % ---------------------------------------------------------------------
