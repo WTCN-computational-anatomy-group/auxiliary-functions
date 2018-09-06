@@ -36,31 +36,26 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 %
 % LowerBound     - Pre-computed lower bound structure with fields:
 %                   sum, last, X, Z, P, MU, A
-% Resp           - NxK Pre-computed responsibilities
 % GaussPrior     - {MU0,b0,V0,n0} [{}=ML]
 % PropPrior      - a0 [0=ML]
 % Missing        - Infer missing data [true]
 % MissingCode    - C, {C}, or {C,L} [recompute]
-%   C - Nx1 Image of missing code
-%   L - List of unique codes
+%                  C - Nx1 Image of missing code
+%                  L - List of unique codes
 % IterMax        - Max number of EM iterations [1024]
 % Tolerance      - Gain tolerance to stop the EM algorithm [1e-4]
 % SubIterMax     - Max number of sub-EM iterations (Missing == true) [1024]
 % SubTolerance   - Sub-EM gain tolerance (Missing == true) [1e-4]
 % BinUncertainty - 1xP Binning uncertainty
 %                  NxP Bias-modulated binning uncertainty
-% Verbose        - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more,
-%                                   4=plot more more
-% dm             - Original image dimensions (2d or 3d), necessary when
-%                  Verbose=4 [[]]
-% Template       - [NxK] Voxel-vise probabalistic template [[]]
-% PropReg        - Adds a bit of regularisation to the prop updates when 
-%                  using a template [[0]]
+% Verbose        - Verbosity level: [0]= quiet
+%                                    1 = write (lower boundà
+%                                    2 = plot (lower bound)
+%                                    3 = plot more (gmm fit)
 % 
 % OUTPUT
 % ------
 % 
-% Z       - NxK responsibilities
 % cluster - Structure with fields: MU, b, A, V, n
 % prop    - Structure with fields: LogProp, Prop, Dir
 % lb      - Structure with fields: sum, last, X, Z, P, MU, A
@@ -68,7 +63,7 @@ function [Z,cluster,prop,lb] = spm_gmm_loop(obs, cluster, prop, varargin)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
-lb0 = struct('sum', [], 'last', NaN, ...
+lb0 = struct('sum', NaN, ...
              'X', [], 'Z', [], 'P', [], 'MU', [], 'A', []);
 
 % -------------------------------------------------------------------------
@@ -87,25 +82,19 @@ p.addParameter('SubIterMax',     1024,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubTolerance',   1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinUncertainty', 0,     @isnumeric);
 p.addParameter('Verbose',        0,     @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
-p.addParameter('dm',             [],    @isnumeric);
-p.addParameter('Template',       [],    @isnumeric);
-p.addParameter('PropReg',        0,    @isnumeric);
 p.parse(varargin{:});
 lb = p.Results.LowerBound;
 Z  = p.Results.Resp;
-E  = p.Results.BinUncertainty;
 a0 = p.Results.PropPrior;
 C  = p.Results.MissingCode;
-GaussPrior   = p.Results.GaussPrior;
-Missing      = p.Results.Missing;
-IterMax      = p.Results.IterMax;
-Tolerance    = p.Results.Tolerance;
-SubIterMax   = p.Results.SubIterMax;
-SubTolerance = p.Results.SubTolerance;
-Verbose      = p.Results.Verbose;
-dm           = p.Results.dm;
-Template     = p.Results.Template;
-PropReg0     = p.Results.PropReg;
+BinUncertainty = p.Results.BinUncertainty;
+GaussPrior     = p.Results.GaussPrior;
+Missing        = p.Results.Missing;
+IterMax        = p.Results.IterMax;
+Tolerance      = p.Results.Tolerance;
+SubIterMax     = p.Results.SubIterMax;
+SubTolerance   = p.Results.SubTolerance;
+Verbose        = p.Results.Verbose;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -215,15 +204,6 @@ else
     prec = A;
 end
 
-if ~isempty(Template)
-    % Compute logPI by combining Template and [1xK] proportions in PI, as
-    % in:
-    % Ashburner J & Friston KJ. "Unified segmentation".
-    % NeuroImage 26(3):839-851 (2005).
-    logPI = bsxfun(@times,Template,PI);    
-    logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));
-end
-
 % -------------------------------------------------------------------------
 % Compute log-prop if needed
 if isempty(logPI)
@@ -240,13 +220,11 @@ if isempty(logPI)
 end
 
 % -------------------------------------------------------------------------
-% Choose how to start
-if isempty(Z)
-    if Missing, const = spm_gmm_lib('Const', mean, prec, L);
-    else,       const = spm_gmm_lib('Const', mean, prec);
-    end
-    logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, E);
+% logpX (needed to initialise Z)
+if Missing, const = spm_gmm_lib('Const', mean, prec, L);
+else,       const = spm_gmm_lib('Const', mean, prec);
 end
+logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, BinUncertainty);
 
 % -------------------------------------------------------------------------
 % EM loop
@@ -260,8 +238,8 @@ for em=1:IterMax
     
     % ---------------------------------------------------------------------
     % Compute sufficient statistics (bin uncertainty part)
-    if sum(E) > 0
-    	SS2b = spm_gmm_lib('SuffStat', 'bin', E, Z, W, {C,L});
+    if sum(BinUncertainty) > 0
+    	SS2b = spm_gmm_lib('SuffStat', 'bin', BinUncertainty, Z, W, {C,L});
     else
         SS2b = 0;
     end
@@ -281,10 +259,10 @@ for em=1:IterMax
         
         % -----------------------------------------------------------------
         % Initialise objective function
-        [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-        [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
-        LB = NaN(1,SubIterMax);
-        LB(1) = L1 + L2 + L3;
+        [LMU,LA]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
+        [LX,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
+        LB          = NaN(1,SubIterMax);
+        LB(1)       = LMU + LA + LX;
         for i=1:SubIterMax
             
             % -------------------------------------------------------------
@@ -321,10 +299,16 @@ for em=1:IterMax
             
             % -------------------------------------------------------------
             % Marginal / Objective function
-            [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-            [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
-            LB(i+1)    = L1+L2+L3;
+            [LMU,LA]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
+            [LX,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
+            LB(i+1)    = LMU+LA+LX;
             subgain    = (LB(i+1)-LB(i))/(max(LB(2:i+1), [], 'omitnan')-min(LB(2:i+1), [], 'omitnan'));
+            % -------------------------------------------------------------
+            % Check success
+            % > This should always improve since we use a closed-form
+            %   update. However, it sometimes does not, probably because of
+            %   precision issues (even though everything is in double). In
+            %   such cases, we go back to the previous parameters.
             if subgain < 0
                 MU         = MUp;
                 A          = Ap;
@@ -335,10 +319,12 @@ for em=1:IterMax
                 if ~sum(n), prec = {A};
                 else,       prec = {V,n};   end
                 subgain    = 0;
-                [L1,L2]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-                [L3,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
+                [LMU,LA]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
+                [LX,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
             end
-            if Verbose > 0
+            % -------------------------------------------------------------
+            % Print stuff
+            if Verbose > 1
                 switch sign(subgain)
                     case 1,     incr = '(+)';
                     case -1,    incr = '(-)';
@@ -383,43 +369,19 @@ for em=1:IterMax
                  
     % ---------------------------------------------------------------------
     % Update Proportions
-    if ~isempty(Template)
-        % Update proportions when a template is given
-        % The update equation is from:
-        % Ashburner J & Friston KJ. "Unified segmentation".
-        % NeuroImage 26(3):839-851 (2005).
-        logPI = bsxfun(@times,Template,PI);    
-        logPI = log(bsxfun(@times,logPI,1./sum(logPI,2)));    
-        
-        mgm = 1./(Template*PI');
-        mgm = mgm'*Template;                
-        
-        % Set regularisation
-        if PropReg0==0
-            PropReg = 1;
-        else
-            I       = size(logPI,1);
-            PropReg = PropReg0*I;
-        end
-        
-        PI = zeros(1,K);
-        for k=1:K                     
-            PI(k) = (SS0(k) + PropReg)/(mgm(k) + PropReg*K);
-        end
-        PI = PI/sum(PI);
-    elseif size(PI,1) == 1
+    if size(PI,1) == 1
         [PI,logPI,a] = spm_gmm_lib('UpdateProportions', SS0, a0);
     end        
 
     % ---------------------------------------------------------------------
     % Plot GMM
-    if p.Results.Verbose >= 3
+    if Verbose >= 3
         spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI);
     end
    
     % ---------------------------------------------------------------------
     % Marginal / Objective function
-    logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, E);
+    logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {C,L}, BinUncertainty);
     
     % ---------------------------------------------------------------------
     % Compute lower bound
@@ -430,28 +392,25 @@ for em=1:IterMax
             {MU,b}, prec, {MU0,b0}, {V0,n0});
         lb.X(end+1) = sum(sum(bsxfun(@times, logpX, bsxfun(@times, Z, W)),'omitnan'),'omitnan');
     else
-        lb.MU(end+1) = L1;
-        lb.A(end+1)  = L2;
-        lb.X(end+1)  = L3;
+        lb.MU(end+1) = LMU;
+        lb.A(end+1)  = LA;
+        lb.X(end+1)  = LX;
+    end
+    if isfield(lb, 'XB')
+        if isempty(lb.XB)
+            lb.XB = zeros(size(X,2),1);
+        else
+            lb.XB(:,end+1) = lb.XB(:,end); % < Add bias normalisation term
+        end
     end
 
     % ---------------------------------------------------------------------
     % Check convergence
-    if isfield(lb, 'B')
-        lb.B(end+1)  = lb.B(end);
-        lb.XB(end+1) = lb.XB(end);
-    end
     [lb,gain] = check_convergence(lb, em, Verbose);
     if gain < Tolerance
         break;
     end
     
-end
-
-if p.Results.Verbose >= 4 && ~isempty(dm)
-    % Plot responsibilities and template
-    spm_gmm_lib('Plot', 'cat', reshape(Z(:,:,floor(dm(3)/2) + 1,:),[dm(1:2) 1 K]), ...
-                               reshape(Template(:,:,floor(dm(3)/2) + 1,:),[dm(1:2) 1 K]));
 end
 
 % -------------------------------------------------------------------------
@@ -469,22 +428,25 @@ function [lb,gain] = check_convergence(lb, em, verbose)
 % Compute lower bound (by summing its parts) and its gain
 % + print info
 
-lb.sum(end+1) = lb.X(end) + lb.Z(end) + lb.P(end) + lb.MU(end) + lb.A(end);
-if isfield(lb, 'B')
-    lb.sum(end) = lb.sum(end) + lb.B(end) + lb.XB(end);
+fields = fieldnames(lb);
+lb.sum(end+1) = 0;
+for i=1:numel(fields)
+    field = fields{i};
+    if ~any(strcmpi(field, {'sum' 'last'})) && ~isempty(lb.(field)) && ~isnan(lb.(field)(end))
+        lb.sum(end) = lb.sum(end) + sum(lb.(field)(:,end));
+    end
 end
-gain = (lb.sum(end) - lb.last)/(max(lb.sum(:), [], 'omitnan')-min(lb.sum(:), [], 'omitnan'));
+gain = (lb.sum(end) - lb.sum(end-1))/(max(lb.sum(:), [], 'omitnan')-min(lb.sum(:), [], 'omitnan'));
 if verbose >= 1
     if verbose >= 2
         spm_gmm_lib('plot', 'LB', lb)
     end
     switch sign(gain)
-        case 1,     incr = '(+)';
+        case  1,    incr = '(+)';
         case -1,    incr = '(-)';
-        case 0,     incr = '(=)';
+        case  0,    incr = '(=)';
         otherwise,  incr = '';
     end
     fprintf('%-5s | %4d | lb = %-10.6g | gain = %-10.4g | %3s\n', 'gmm', em, lb.sum(end), gain, incr);
 end
-gain    = abs(gain);
-lb.last = lb.sum(end);
+gain = abs(gain);

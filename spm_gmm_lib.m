@@ -1824,26 +1824,26 @@ plot(lb.sum)
 title('Lower Bound')
 subplot(nrow, ncol, sub2ind([ncol nrow], 2, 1));
 if isfield(lb, 'B')
-    plot(lb.X + lb.XB);
+    plot(sum(lb.X,1) + sum(lb.XB,1));
 else
-    plot(lb.X)
+    plot(sum(lb.X,1))
 end
-title('Observations (E+KL)')
+title('Observations (E)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 3, 1));
-plot(lb.Z)
+plot(sum(lb.Z,1))
 title('Responsibilities (KL)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 1, 2));
-plot(lb.P)
+plot(sum(lb.P,1))
 title('Proportions (KL)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 2, 2));
-plot(lb.MU)
+plot(sum(lb.MU,1))
 title('Means (KL)')
 subplot(nrow, ncol, sub2ind([ncol nrow], 3, 2));
-plot(lb.A)
+plot(sum(lb.A,1))
 title('Precisions (KL)')
 if isfield(lb, 'B')
     subplot(nrow, ncol, sub2ind([ncol nrow], 4, 2));
-    plot(lb.B)
+    plot(sum(lb.B,1))
     title('Bias Prior')
 end
 drawnow
