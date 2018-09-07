@@ -3,7 +3,7 @@ function varargout = spm_impreproc(varargin)
 % Collection of tools for image pre-processing.
 %
 % FORMAT [Affine,bb] = spm_impreproc('atlas_crop',P,Affine,prefix,rem_neck)
-% FORMAT spm_impreproc('nm_reorient',Vin,vx)
+% FORMAT spm_impreproc('nm_reorient',Vin,vx,deg)
 % FORMAT spm_impreproc('reset_origin',P)
 % FORMAT R = spm_impreproc('rigid_align',P)
 % FORMAT V = spm_impreproc('reg_and_reslice',V)
@@ -63,7 +63,7 @@ function [Affine,bb] = atlas_crop(P,prefix,rem_neck)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 if nargin<2, prefix   = ''; end
-if nargin<3, rem_neck = false; end
+if nargin<3, rem_neck = 0;  end
 
 % Locate TPM.nii in SPM
 pth_tpm = fullfile(spm('dir'),'tpm','TPM.nii,');
@@ -91,15 +91,17 @@ V(1).mat      = M;
 % Pick the result with the best fit
 if ll1>ll2, Affine  = Affine1; else Affine  = Affine2; end
 
-Affine = spm_maff8(P,2,32,tpm,Affine,'mni');
-Affine = spm_maff8(P,2,1,tpm,Affine,'mni');
+Affine = spm_maff8(P,4,32,tpm,Affine,'mni');
+Affine = spm_maff8(P,4,1,tpm,Affine,'mni');
 
 % Voxel locations in TPM.nii
 Ltpm1 = [120 72.2 37.3 1]'; Ltpm2 = [120 72.2 75.9 1]';
 Rtpm1 = [3  72.2 37.3 1]'; Rtpm2 = [3  72.2 75.9 1]';
 
 Stpm1 = [58.6 42.6 119 1]'; Stpm2 = [58.60 99.4 119 1]';
-if rem_neck
+if rem_neck==2
+    Itpm1 = [61 42 31   1]'; Itpm2 = [61 107 29 1]';   
+elseif rem_neck==1
     Itpm1 = [58.6 39.4 2.5   1]'; Itpm2 = [58.60 99.4 2.5  1]';    
 else
     Itpm1 = [58.6 39.4 -200  1]'; Itpm2 = [58.60 99.4 -200 1]';
@@ -130,13 +132,14 @@ spm_impreproc('subvol',Vin,bb,prefix);
 %==========================================================================
 
 %==========================================================================
-function nm_reorient(Vin,vx,prefix)
+function nm_reorient(Vin,vx,prefix,deg)
 % Re-orient images
-% FORMAT nm_reorient(Vin,vx,type)
+% FORMAT nm_reorient(Vin,vx,type,deg)
 % Vin  - SPM volume objects
 % vx   - New voxel size
 % type - Order of interpolation
 % prefix - Prefix of file to write
+% def    - Degree of interpolation [0]
 %
 % The function reslices the input images to a resolution of vx mm.
 % Output images (with the prefix "pn_r") are written in the transverse
@@ -149,6 +152,7 @@ if length(vx)<3
     vx=[vx vx vx];
 end
 if nargin<3, prefix = 'ro_'; end
+if nargin<4, deg    = 4; end
 
 % If no arguments, then prompt for images
 %PP = spm_get([1 Inf],'*.img','Select files to reorient');
@@ -212,7 +216,7 @@ for V=VV', % Loop over images
         M   = inv(spm_matrix([0 0 -i])*inv(VO.mat)*V.mat);
 
         % Extract this slice according to the mapping
-        img = spm_slice_vol(V,M,dim(1:2),0);
+        img = spm_slice_vol(V,M,dim(1:2),deg);
 
         % Write this slice to output image
         spm_write_plane(VO,img,i);
@@ -293,8 +297,8 @@ V(1).mat      = M;
 % Pick the result with the best fit
 if ll1>ll2, Affine  = Affine1; else Affine  = Affine2; end
 
-Affine = spm_maff8(P,2,32,tpm,Affine,'rigid'); % Heavily regularised
-Affine = spm_maff8(P,2,1 ,tpm,Affine,'rigid'); % Lightly regularised
+Affine = spm_maff8(P,4,32,tpm,Affine,'rigid'); % Heavily regularised
+Affine = spm_maff8(P,4,1 ,tpm,Affine,'rigid'); % Lightly regularised
 
 % Load header
 Nii    = nifti(P);
@@ -360,7 +364,7 @@ end
 %==========================================================================
 
 %==========================================================================
-function [V,ref_ix] = reslice(V,ref_ix,interp)
+function [V,ref_ix] = reslice(V,interp,ref_ix)
 % Re-slice images
 % FORMAT V = reslice(V)
 % V - SPM volume object that can contain N different modalities (e.g. T1- 
@@ -376,14 +380,14 @@ function [V,ref_ix] = reslice(V,ref_ix,interp)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 
-if nargin<3, interp = 0; end
+if nargin<2, interp = 4; end
 
 N = numel(V);
 if N==1
     return;
 end
 
-if nargin<2
+if nargin<3
     % Get image with largest volume (for reslicing using this image as
     % reference)
     vol = zeros(N,3);
