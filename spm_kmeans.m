@@ -55,6 +55,8 @@ p.parse(X, K, varargin{:});
 W = p.Results.W;
 X = single(X);
 
+Replicates = p.Results.Replicates;
+
 % -------------------------------------------------------------------------
 % Special case: Apply model
 % > Here, we use learned centroids to segment an image
@@ -66,8 +68,8 @@ end
 % -------------------------------------------------------------------------
 % Guess cluster/replicates from provided centroids
 if ~ischar(p.Results.Start)
-    p.Results.Replicates = size(p.Results.Start, 3);
-    K                    = size(p.Results.Start, 1);
+    Replicates = size(p.Results.Start, 3);
+    K          = size(p.Results.Start, 1);
 end
 
 % -------------------------------------------------------------------------
@@ -104,7 +106,7 @@ E00 = inf;
 r0  = 0;
 % -------------------------------------------------------------------------
 % For each replicate
-for r=1:p.Results.Replicates
+for r=1:Replicates
     
     % ---------------------------------------------------------------------
     % Initial centroids
@@ -154,7 +156,7 @@ for r=1:p.Results.Replicates
     end
     
 end
-if p.Results.Verbose && p.Results.Replicates > 1
+if p.Results.Verbose && Replicates > 1
     fprintf('Best | r = %2d | E = %3g\n', r0, E00);
 end
 
@@ -256,6 +258,18 @@ if nargin < 5
     r = 1;
 end
 
+if isnumeric(method)
+    % Provided
+    K = size(method,1);
+    if size(method, 3) == 1
+        C = method;
+    else
+        C = method(:,:,r);
+    end
+
+    return
+end
+
 switch method
     
     case 'plus'
@@ -298,13 +312,7 @@ switch method
         C = bsxfun(@times, C, maxval - minval) + minval;
         
     otherwise
-    % Provided
-        K = size(method,1);
-        if size(method, 3) == 1
-            C = method;
-        else
-            C = method(:,:,r);
-        end
+        error('Undefined method!')
 end
 
 % =========================================================================
