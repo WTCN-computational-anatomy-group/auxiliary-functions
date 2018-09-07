@@ -1715,6 +1715,9 @@ function varargout = gmmplot(varargin)
 % c = spm_gmm_lib('plot', 'cat2rgb', f, pal)
 % > Generate an RGB volume from a categorical (e.g. responsibilities) volume.
 %
+% c = spm_gmm_lib('plot', 'show_cat_img', img, title_nam)
+% > Show categorical images
+%
 
 if nargin == 0
     help spm_gmm_lib>plot
@@ -1733,6 +1736,8 @@ switch lower(id)
         [varargout{1:nargout}] = plot_GaussPrior(varargin{:});              
     case {'cat2rgb'}
         [varargout{1:nargout}] = cat2rgb(varargin{:});         
+    case {'showcatimg'}
+        [varargout{1:nargout}] = show_cat_img(varargin{:});              
     otherwise
         help spm_gmm_lib>plot
         error('Unknown function %s. Type ''help spm_gmm_lib>plot'' for help.', id)
@@ -1776,7 +1781,8 @@ title('Precisions (KL)')
 drawnow
 
 % =========================================================================
-function plot_cat(Z,Template,figname)
+function plot_cat(Z,Template,ticklabels,figname)
+if nargin < 3, ticklabels = {}; end
 
 % ---------------------------------------------------------------------
 % Get figure (create if it does not exist)
@@ -1790,44 +1796,7 @@ end
 set(0, 'CurrentFigure', f);   
 clf(f);
 
-K        = size(Z,4);
-colors   = hsv(K);
-do_subpl = isequal(size(Z),size(Template));
-
-% ---------------------------------------------------------------------
-% Plots
-if do_subpl
-    subplot(121)
-end
-
-c = spm_gmm_lib('plot', 'cat2rgb', Z, colors);
-c = squeeze(c(:,:,:,:));
-c = permute(c,[2 1 3]);
-imagesc(c); axis image off xy;   
-title('Z')
-
-colormap(colors);
-cb = colorbar;
-set(gca, 'clim', [0.5 K+0.5]);
-set(cb, 'ticks', 1:K, 'ticklabels', {1:K}); 
-
-if do_subpl
-    subplot(122)    
-    
-    c = spm_gmm_lib('plot', 'cat2rgb', Template, colors);
-    c = squeeze(c(:,:,:,:));
-    c = permute(c,[2 1 3]);
-    imagesc(c); axis image off xy;   
-    
-    title('Template')
-    
-    colormap(colors);
-    cb = colorbar;
-    set(gca, 'clim', [0.5 K+0.5]);
-    set(cb, 'ticks', 1:K, 'ticklabels', {1:K});     
-end
-
-drawnow
+show_cat_img({Z,Template},{'Z','Template'},ticklabels);
 % =========================================================================
 
 % =========================================================================
@@ -2080,6 +2049,97 @@ end
 if tri
     c = reshape(c, [size(c, 1) size(c, 2) 1 size(c, 3)]);
 end
+%==========================================================================
+
+%==========================================================================
+function show_cat_img(img,title_nam,ticklabels)
+if isnumeric(img)
+    img = {img};
+end 
+N       = numel(img);
+if nargin < 2, title_nam = cell(1,N); end
+
+dm0    = size(img{1});
+K      = dm0(4);
+colors = hsv(K);
+            
+if nargin < 3 || isempty(ticklabels), ticklabels = 1:K; end
+
+if numel(ticklabels) ~= K
+    ticklabels = 1:K
+end
+
+if dm0(3)==1
+    % 2d 
+    %----------------------------------------------------------------------
+    
+    for n=1:N            
+        
+        subplot(1,N,n)
+        
+        slice = img{n}(:,:,1,:);
+        slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
+        slice = squeeze(slice(:,:,:,:));
+        slice = permute(slice,[2 1 3]);
+        imagesc(slice); axis off xy;      
+        
+        if ~isempty(title_nam{n})
+            title(title_nam{n})
+        end
+    end
+    
+    colormap(colors);
+    cb = colorbar;
+    set(gca, 'clim', [0.5 K+0.5]);
+    set(cb, 'ticks', 1:K, 'ticklabels', ticklabels); 
+else
+    % 3d
+    %----------------------------------------------------------------------
+    
+    for n=1:N  
+        subplot(N,3,3*(n - 1) + 1)
+        
+        slice = img{n}(:,:,floor(dm0(3)/2) + 1,:);
+        slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
+        slice = squeeze(slice(:,:,:,:));
+        slice = permute(slice,[2 1 3]);
+        imagesc(slice); axis off xy;  
+
+        if ~isempty(title_nam{n})
+            title(title_nam{n})
+        end
+        
+        subplot(N,3,3*(n - 1) + 2)
+        
+        slice = permute(img{n}(:,floor(dm0(2)/2) + 1,:,:),[3 1 2 4]);
+        slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
+        slice = squeeze(slice(:,:,:,:));    
+        imagesc(slice); axis off xy;  
+
+        if ~isempty(title_nam{n})
+            title(title_nam{n})
+        end
+        
+        subplot(N,3,3*(n - 1) + 3)
+        
+        slice = permute(img{n}(floor(dm0(1)/2) + 1,:,:,:),[2 3 1 4]);
+        slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
+        slice = squeeze(slice(:,:,:,:));
+        slice = permute(slice,[2 1 3]);
+        imagesc(slice); axis off xy;  
+        
+        if ~isempty(title_nam{n})
+            title(title_nam{n})
+        end
+        
+        colormap(colors);
+        cb = colorbar;
+        set(gca, 'clim', [0.5 K+0.5]);
+        set(cb, 'ticks', 1:K, 'ticklabels', ticklabels);             
+    end    
+end
+
+drawnow
 %==========================================================================
 
 % =========================================================================
