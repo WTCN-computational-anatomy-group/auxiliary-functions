@@ -97,8 +97,8 @@ V(1).mat      = M;
 % Pick the result with the best fit
 if ll1>ll2, Affine  = Affine1; else Affine  = Affine2; end
 
-Affine = spm_maff8(P,2,32,tpm,Affine,'mni');
-Affine = spm_maff8(P,2,1,tpm,Affine,'mni');
+Affine = spm_maff8(P,4,32,tpm,Affine,'mni');
+Affine = spm_maff8(P,4,1,tpm,Affine,'mni');
 
 % Voxel locations in TPM.nii
 Ltpm1 = [120 72.2 37.3 1]'; Ltpm2 = [120 72.2 75.9 1]';
