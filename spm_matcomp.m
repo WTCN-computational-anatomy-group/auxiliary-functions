@@ -1190,30 +1190,26 @@ end
 %==========================================================================
 
 %==========================================================================
-function [Q,ll] = softmax(Q,scl)
+function Q = softmax(Q,prop)
 % Compute soft-max
 % FORMAT [Q,ll] = softmax(Q,scl)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-if nargin<2, scl = 1; end
+if nargin<2, prop = 0; end
 
 dm      = size(Q);
 ndm     = numel(dm);
 dm(:)   = 1;
-dm(end) = numel(scl);
+dm(end) = numel(prop);
 
-if scl~=1
-    scl = reshape(scl,dm);
-    Q   = bsxfun(@plus,Q,log(scl)); % rescale log-probabilities
+if prop ~= 0
+    prop = reshape(prop,dm);
+    Q   = bsxfun(@plus,Q,prop); % rescale log-probabilities
 end
 
 mxQ = max(Q,[],ndm);
 Q   = exp(bsxfun(@minus,Q,mxQ));
 sQ  = nansum(Q,ndm);
-
-if nargout>1
-    ll = nansum(log(sQ) + mxQ);
-end
 
 Q = bsxfun(@rdivide,Q,sQ);
 end
