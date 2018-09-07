@@ -3,13 +3,14 @@ function varargout = spm_misc(varargin)
 % Collection of miscellaneous functions.
 %
 % FORMAT [M_avg,d] = spm_misc('compute_avg_mat',Mat0,dims)
-% FORMAT Nii = spm_misc('create_nii',pth,dat,mat,dtype,descrip,scl)
-% FORMAT y = spm_misc('linspace_vec',x1,x2,n)
+% FORMAT Nii       = spm_misc('create_nii',pth,dat,mat,dtype,descrip,scl)
+% FORMAT y         = spm_misc('linspace_vec',x1,x2,n)
 % FORMAT spm_misc('manage_parpool',num_workers)
-% FORMAT nw = spm_misc('nbr_parfor_workers')
-% FORMAT vx = spm_misc('vxsize',M)
-% FORMAT msk = spm_misc('msk_modality',f,modality)
-% FORMAT gain = spm_misc('get_gain',vals)
+% FORMAT nw        = spm_misc('nbr_parfor_workers')
+% FORMAT vx        = spm_misc('vxsize',M)
+% FORMAT msk       = spm_misc('msk_modality',f,modality)
+% FORMAT gain      = spm_misc('get_gain',vals)
+% FORMAT [B, rind] = spm_misc('affine_basis', type, flat)
 %
 % FORMAT help spm_parfor>function
 % Returns the help file of the selected function.
@@ -38,6 +39,8 @@ switch lower(id)
         [varargout{1:nargout}] = msk_modality(varargin{:});                
     case 'get_gain'
         [varargout{1:nargout}] = get_gain(varargin{:});          
+    case 'affine_basis'
+        [varargout{1:nargout}] = affine_basis(varargin{:});            
     otherwise
         help spm_parfor
         error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
@@ -285,6 +288,97 @@ function gain = get_gain(vals)
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 vals = vals(:);
 gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));   
+%==========================================================================
+
+%==========================================================================
+function [B, rind] = affine_basis(type, flat)
+% FORMAT [B, rind] = affine_basis(type, ('2d'))
+% type - * 'translation'
+%        * 'rotation'
+%        * 'rigid'      or 6
+%        * 'similitude' or 7
+%        * 'affine'     or 12 [default]
+% 
+% B    - 4x4xQ array.
+% rind - Indices of basis that shoudl be reularised (all but tr/rot)
+%
+% Returns a Lie algebra basis system encoding for one of the above
+% transformation types.
+
+if nargin < 2
+    flat = '3d';
+    if nargin < 1
+        type = 'affine';
+    end
+end
+
+flat = ischar(flat) && strcmpi(flat, '2d');
+if ~ischar(type)
+    type = num2str(type);
+end
+
+type = deblank(lower(type));
+
+% --- Define basis vectors
+
+Bt = [ 0 0 0 1   0 0 0 0   0 0 0 0 ;
+       0 0 0 0   0 0 0 1   0 0 0 0 ;
+       0 0 0 0   0 0 0 0   0 0 0 1 ;
+       0 0 0 0   0 0 0 0   0 0 0 0 ];
+
+Br = [ 0 -1 0 0   0 0 -1 0   0 0  0 0 ;
+       1  0 0 0   0 0  0 0   0 0 -1 0 ;
+       0  0 0 0   1 0  0 0   0 1  0 0 ;
+       0  0 0 0   0 0  0 0   0 0  0 0 ];
+
+Bsim = [ 1 0 0 0 ;
+         0 1 0 0 ;
+         0 0 1 0 ;
+         0 0 0 0 ];
+
+Bscl = [ 1 0 0 0   0 0 0 0   0 0 0 0 ;
+         0 0 0 0   0 1 0 0   0 0 0 0 ;
+         0 0 0 0   0 0 0 0   0 0 1 0 ;
+         0 0 0 0   0 0 0 0   0 0 0 0 ];
+
+Bshr = [ 0 1 0 0   0 0 1 0   0 0 0 0 ;
+         1 0 0 0   0 0 0 0   0 0 1 0 ;
+         0 0 0 0   1 0 0 0   0 1 0 0 ;
+         0 0 0 0   0 0 0 0   0 0 0 0 ];
+
+% --- Remove 3D basis if 2D
+if flat
+    Bt = Bt(:,1:8);
+    Br = Br(:,1:4);
+    Bsim = [ 1 0 0 0 ;
+             0 1 0 0 ;
+             0 0 0 0 ;
+             0 0 0 0 ];
+    Bscl = Bscl(:,1:8);
+    Bshr = Bshr(:,1:4);
+end
+
+% --- Build complete basis
+switch type
+    case 'translation'
+        B = Bt;
+        rind = [];
+    case 'rotation'
+        B = Br;
+        rind = [];
+    case {'rigid', '6'}
+        B = [Bt Br];
+        rind = [];
+    case {'similitude', '7'}
+        B = [Bt Br Bsim];
+        if flat,  rind = [4 5];
+        else      rind = [7 8 9];  end
+    case {'affine', '12'}
+        B = [Bt Br Bscl Bshr];
+        if flat,  rind = [4 5 6];
+        else      rind = [7 8 9 10 11 12];  end
+end
+B = reshape(B, 4, 4, []);
 %==========================================================================
 
 %==========================================================================
