@@ -29,7 +29,7 @@ switch lower(id)
     case 'smooth_img_in_mem'
         [varargout{1:nargout}] = smooth_img_in_mem(varargin{:});           
     case 'hist'
-        [varargout{1:nargout}] = hist(varargin{:});        
+        [varargout{1:nargout}] = spm_hist(varargin{:});        
     case 'fit_gmm2hist'
         [varargout{1:nargout}] = fit_gmm2hist(varargin{:});                 
     case 'fit_vbgmm2hist'
@@ -339,7 +339,7 @@ return
 %==========================================================================
 
 %==========================================================================
-function [V,W,C,BW] = hist(X,varargin)
+function [V,W,C,BW,El] = spm_hist(X,varargin)
 % _________________________________________________________________________
 %
 % Compute the (joint) histogram of a (multidimensional) dataset
@@ -388,9 +388,10 @@ p.addParameter('Missing',    false, @isscalar);
 p.addParameter('Reshape',    false, @isscalar);
 p.addParameter('Smooth',     0,     @isnumeric);
 p.addParameter('Verbose',    0,     @isscalar);
+p.addParameter('Labels',     {},    @iscell);
 p.parse(X, varargin{:});
-B = p.Results.B;
-
+B      = p.Results.B;
+Labels = p.Results.Labels;
 
 % -------------------------------------------------------------------------
 % Discard missing values
@@ -440,29 +441,59 @@ dim = zeros(1,P);
 hasnan = zeros(1,P,'logical');
 for c=1:P
     [I{c},V{c}]       = discretize(X(:,c),E{c});    
+    I{c}              = single(I{c});
     I{c}(isnan(I{c})) = numel(V{c});
-    V{c} = (V{c}(2:end) + V{c}(1:end-1))/2;
-    hasnan(c) = any(isnan(X(:,c)));
-    dim(c) = numel(V{c}) + hasnan(c);
+    V{c}              = (V{c}(2:end) + V{c}(1:end-1))/2;
+    hasnan(c)         = any(isnan(X(:,c)));
+    dim(c)            = numel(V{c}) + hasnan(c);
     if hasnan(c)
-        V{c}(end+1) = NaN;
+        V{c}(end+1)   = NaN;
     end
 end
-clear E
-clear X
+clear E X
 
 % -------------------------------------------------------------------------
 % Count
 if numel(dim) == 1
-    linI = [I{:}]; clear I
+    linI = [I{:}];
 else
-    linI = sub2ind(dim, I{:}); clear I
+    linI = sub2ind(dim, I{:});
 end
-W    = histcounts(linI, 1:prod(dim)+1); clear linI
-C    = V;
-V    = combvec(V{:});
-V    = V.';
-W    = W.';
+clear I
+
+% if ~isempty(Labels)
+%     nlabels = size(Labels{2},1);
+%     El      = zeros([prod(dim) nlabels],'single');
+%     
+%     if 0
+%         [a,b] = unique(linI);
+%         for i=1:numel(a)
+%             msk_rhs  = linI==a(i);
+%             msk_lhs  = find(msk_rhs);        
+%             labels_i = Labels{1}(msk_rhs);
+%             for l=1:nlabels
+%                 El(msk_lhs,l) = sum(labels_i==(l - 1));
+%             end        
+%         end
+%     else    
+%         for i=1:prod(dim)
+%             for l=1:nlabels                
+%                 El(i,l) = sum(Labels{1}(linI==i)==(l - 1));
+%             end  
+%             El(i,:)
+%         end
+%     end
+% 
+%     El = bsxfun(@rdivide,El,sum(El,2));    
+% else
+%     El = [];
+% end
+
+W = histcounts(linI, 1:prod(dim)+1); clear linI
+C = V;
+V = combvec(V{:});
+V = V.';
+W = W.';
 
 if p.Results.Reshape && ~p.Results.KeepZero
     error('spm_imbasics::hist - Cannot Reshape and not KeepZero')
