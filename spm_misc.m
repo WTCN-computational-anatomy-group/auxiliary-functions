@@ -270,7 +270,8 @@ function msk = msk_modality(f,modality)
 if strcmpi(modality,'mri'),    
     msk = isfinite(f) & (f~=0);
 elseif strcmp(modality,'CT'), 
-    msk = isfinite(f) & (f~=max(f(:))) & (f~=min(f(:))) & (f~=0);
+%     msk = isfinite(f) & (f~=max(f(:))) & (f~=min(f(:))) & (f~=0);
+    msk = isfinite(f) & (f~=max(f(:))) & (f~=min(f(:))) & (f~=0) & (f>-1020);
 end
 %==========================================================================
 
