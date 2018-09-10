@@ -22,7 +22,7 @@ function varargout = spm_gmm(X, varargin)
 %              [{}=ML]
 % Prune      - Threshold on proportions to prune uninformative clusters
 %              [0=no pruning]
-% Missing    - Infer missing data: ['infer']/'remove'
+% Missing    - Infer missing data [true]
 % Start      - Starting method: METHOD or {METHOD, PRECISION} with
 %   METHOD    = ['kmeans'],'linspace','prior','sample','uniform',
 %               or provided: MU(PxK) or {MU(PxK),b}
@@ -33,11 +33,10 @@ function varargout = spm_gmm(X, varargin)
 % Tolerance  - Convergence criterion (~ lower bound gain) [1e-4]
 % BinWidth   - 1x[P] Bin width (histogram mode: add bits of variance) [0]
 % InputDim   - Input space dimension [0=try to guess]
-% Verbose    - Verbosity level: [0]=quiet, 1=write, 2=plot, 3=plot more,
-%                                   4=plot more more 
-% dm         - Original image dimensions (2d or 3d), necessary when
-%                  Verbose=4 [[]]
-% Template   - [NxK] Voxel-vise probabalistic template [[]]
+% Verbose    - Verbosity level: [0]= quiet
+%                                1 = write (lower bound)
+%                                2 = plot (lower bound)
+%                                3 = plot more (gmm fit)
 %
 % OUTPUT
 % ------
