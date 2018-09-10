@@ -1034,10 +1034,12 @@ p.FunctionName = 'updatehyperpars';
 p.addParameter('constrained',0,@islogical);
 p.addParameter('figname','',@ischar);
 p.addParameter('verbose',0,@islogical);
+p.addParameter('lkp',[],@isnumeric);
 p.parse(varargin{:});
 constrained = p.Results.constrained;
 figname     = p.Results.figname;
 verbose     = p.Results.verbose;
+lkp         = p.Results.lkp;
 
 % Parameters
 S = numel(cluster); % Number of posteriors
@@ -1347,7 +1349,7 @@ end
 
 if verbose
     % Visualise results
-    spm_gmm_lib('plot','gaussprior',GaussPrior,figname);
+    spm_gmm_lib('plot','gaussprior',GaussPrior,lkp,figname);
 end
 % =========================================================================
 
@@ -1800,7 +1802,7 @@ show_cat_img({Z,Template},{'Z','Template'},ticklabels);
 % =========================================================================
 
 % =========================================================================
-function plot_gmm(obs, cluster, PI, figname)
+function plot_gmm(obs, cluster, PI, part, figname)
 
 X  = [];
 W  = [];
@@ -1830,7 +1832,7 @@ end
 
 % ---------------------------------------------------------------------
 % Get figure (create if it does not exist)
-if nargin < 4
+if nargin < 5
     figname = '(SPM) Plot GMM';
 end
 f = findobj('Type', 'Figure', 'Name', figname);
@@ -1844,7 +1846,14 @@ clf(f);
 % Sizes / colors
 P = size(X, 2);
 K = size(MU, 2);
-colors = hsv(K);
+
+lkp = part.lkp;
+mg  = part.mg;  
+
+PI = mg.*PI(:,lkp);
+
+% Set colors
+colors = hsv(max(lkp));
 
 % ---------------------------------------------------------------------
 % For each input dimension
@@ -1881,7 +1890,7 @@ for p=1:P
     for k=1:K
         x = linspace(MU(p,k)-3*A(p,p,k)^(-0.5),MU(p,k)+3*A(p,p,k)^(-0.5),100);
         y = PI(k)*normpdf(x, MU(p,k), A(p,p,k)^(-0.5));
-        plot(x, y, 'Color', colors(k,:), 'LineWidth', 1)
+        plot(x, y, 'Color', colors(lkp(k),:), 'LineWidth', 1)
         xlims = [min([xlims(1) x]) max([xlims(2) x])];
     end
     xlabel(sprintf('x%d',p))
@@ -1902,7 +1911,7 @@ for p=1:P
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');
             y = mvnpdf([x1(:) x2(:)],Mu1',Sigma2);
-            contour(x2, x1, reshape(y, [100 100])', 1, 'color', colors(k,:), 'LineWidth', 1);
+            contour(x2, x1, reshape(y, [100 100])', 1, 'color', colors(lkp(k),:), 'LineWidth', 1);
         end
         xlabel(sprintf('x%d',p))
         ylabel('x1')
@@ -1917,7 +1926,7 @@ end
 subplot(2, P, P+1)
 hold on
 for k=1:K
-    bar(k, PI(k), 'FaceColor', colors(k,:));
+    bar(k, PI(k), 'FaceColor', colors(lkp(k),:));
 end
 xlabel('class')
 ylabel('proportion')
@@ -1927,10 +1936,12 @@ drawnow
 % =========================================================================
 
 % =========================================================================
-function plot_GaussPrior(GaussPrior,figname)
+function plot_GaussPrior(GaussPrior,lkp,figname)
+
+if nargin < 2, lkp = []; end
 
 figname0 = '(SPM) GaussPrior';
-if nargin==2
+if nargin==3
     figname0 = [figname0 ' ' figname];
 end
 
@@ -1949,7 +1960,12 @@ n0 = GaussPrior{4};
     
 P      = size(m0,1);
 K      = size(m0,2);
-colors = hsv(K);
+
+if isempty(lkp)
+    lkp = 1:K;
+end
+
+colors = hsv(max(lkp));
 
 MU = m0;
 A  = bsxfun(@times,W0,reshape(n0,[1 1 K]));
@@ -1970,7 +1986,7 @@ for p=1:P
     for k=1:K
         x = linspace(MU(p,k)-3*A(p,p,k)^(-0.5),MU(p,k)+3*A(p,p,k)^(-0.5),100);
         y = 1/K*normpdf(x, MU(p,k), A(p,p,k)^(-0.5));
-        plot(x, y, 'Color', colors(k,:), 'LineWidth', 1)
+        plot(x, y, 'Color', colors(lkp(k),:), 'LineWidth', 1)
         xlims = [min([xlims(1) x]) max([xlims(2) x])];
     end
     xlabel(sprintf('x%d',p))
@@ -1991,7 +2007,7 @@ for p=1:P
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');
             y = mvnpdf([x1(:) x2(:)],Mu1',Sigma2);
-            contour(x2, x1, reshape(y, [100 100])', 1, 'color', colors(k,:), 'LineWidth', 1);
+            contour(x2, x1, reshape(y, [100 100])', 1, 'color', colors(lkp(k),:), 'LineWidth', 1);
         end
         xlabel(sprintf('x%d',p))
         ylabel('x1')
@@ -2166,7 +2182,7 @@ end
 % =========================================================================
 
 % =========================================================================
-function gmm = more_gmms(gmm,part)
+function [gmm,mg] = more_gmms(gmm,part)
 % FORMAT gmm = spm_gmm_lib('extras', 'more_gmms', gmm, part)
 %
 % gmm  - Cell with the following format {m,b,W,n}, where there are K
@@ -2192,10 +2208,11 @@ C   = size(MU0,1);
 
 A0 = bsxfun(@times,W0,reshape(n0,[1 1 K])); % E[Lambda]
 
-m = zeros(C,K_p);
-b = zeros(1,K_p);
-W = zeros(C,C,K_p);
-n = zeros(1,K_p); % A = nW, W = 1/n*inv(Cov)
+m  = zeros(C,K_p);
+b  = zeros(1,K_p);
+W  = zeros(C,C,K_p);
+n  = zeros(1,K_p); % A = nW, W = 1/n*inv(Cov)
+mg = ones(1,K);
 
 for k=1:K    
     kk = sum(part==k);
@@ -2212,6 +2229,8 @@ for k=1:K
     b(part==k)     = b0(k);
     W(:,:,part==k) = repmat(W1,[1 1 kk]);
     n(part==k)     = n0(k);
+    
+    mg(part==k) = 1/kk;
 end
 
 gmm{1} = m;
