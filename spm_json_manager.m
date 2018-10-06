@@ -6,9 +6,10 @@ function varargout = spm_json_manager(varargin)
 % FORMAT model      = spm_json_manager('init_model',input,load_dat,dat)
 % FORMAT spm_json_manager('modify_json_field',pth_json,field,val)
 % FORMAT spm_json_manager('modify_pth_in_population',dir_population,field,npth)
-% FORMAT spm_json_manager('make_pth_relative',input)
+% FORMAT spm_json_manager('make_pth_relative',input,speak)
 % FORMAT [populations,P] = spm_json_manager('get_populations',dat)
-% FORMAT dat = spm_json_manager('set_subjects',dat,S)
+% FORMAT dat             = spm_json_manager('set_subjects',dat,S)
+% FORMAT spm_json_manager('replace_json_field',pth_json,ofield,nfield,nval)
 %
 % FORMAT help spm_json_manager>function
 % Returns the help file of the selected function.
@@ -26,9 +27,9 @@ switch lower(id)
     case 'init_model'
         [varargout{1:nargout}] = init_model(varargin{:});           
     case 'modify_json_field'
-        [varargout{1:nargout}] = modify_json_field(varargin{:});             
-    case 'modify_pth_in_population'
-        [varargout{1:nargout}] = modify_pth_in_population(varargin{:});    
+        [varargout{1:nargout}] = modify_json_field(varargin{:});           
+    case 'replace_json_field'
+        [varargout{1:nargout}] = replace_json_field(varargin{:});                   
     case 'make_pth_relative'
         [varargout{1:nargout}] = make_pth_relative(varargin{:});              
     case 'get_populations'
@@ -739,7 +740,6 @@ end
 
 %==========================================================================
 
-
 %==========================================================================
 function modify_json_field(pth_json,field,val)
 % FORMAT spm_json_manager('modify_json_field',pth_json,field,val)
@@ -757,46 +757,38 @@ a         = orderfields(a);
 spm_jsonwrite(pth_json,a);
 %==========================================================================
 
-
 %==========================================================================
-function modify_pth_in_population(dir_population,field,npth)
-% FORMAT spm_json_manager('modify_pth_in_population',dir_population,field,new_pth)
+function replace_json_field(pth_json,ofield,nfield,nval)
+% FORMAT spm_json_manager('replace_json_field',pth_json,ofield,nfield,nval)
 %
-% dir_population - Path to a directory containing JSON files. 
-%                  Each JSON file holds subject-specific meta data.
-% field          - Field to change.
-% new_pth        - New path
+% pth_json - Path to JSON file.
+% ofield   - Field to change.
+% nfield   - New field name
+% val      - New value
+%
+% Replaces a field name in a JSON file with another name.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+if nargin < 4, nval = []; end
 
-% Get all JSON files
-json_files = dir(fullfile(dir_population,'*.json'));
-J          = numel(json_files);
+a = spm_jsonread(pth_json);
 
-for s=1:J
-    pth_json    = fullfile(dir_population,json_files(s).name);
-        
-    a           = spm_jsonread(pth_json);
-    opth        = a.(field);
-    ix1         = opth(1);
-    [~,nam,ext] = fileparts(opth);
-    if ~strcmp(ix1,filesep)
-        ix1 = '';
+if isfield(a,ofield)   
+    [a.(nfield)] = a.(ofield);
+    a            = rmfield(a,ofield);
+    
+    if ~isempty(nval)
+        a.(nfield) = nval;
     end
-    if isempty(npth)
-        nval = fullfile(npth,[nam ext]);
-    else
-        nval = fullfile([ix1 npth],[nam ext]);
-    end
-    a.(field)   = nval;
-    a           = orderfields(a);
-    spm_jsonwrite(pth_json,a);
 end
+
+a = orderfields(a);
+spm_jsonwrite(pth_json,a);
 %==========================================================================
 
 %==========================================================================
-function make_pth_relative(input)
-% FORMAT spm_json_manager('make_pth_relative',input)
+function make_pth_relative(input,speak)
+% FORMAT spm_json_manager('make_pth_relative',input,speak)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 
@@ -807,6 +799,8 @@ function make_pth_relative(input)
 % JSON file can be used to provide already known elements of the model.
 % It can be an existing template, an existing shape model (subspace,
 % residual precision, latent precision...) or a GMM.
+
+if nargin < 2, speak = true; end
 
 % -------------------------------------------------------------------------
 % Get all input json files
@@ -833,7 +827,9 @@ for j=1:J
     end
     I = numel(list_metadata);
     
-    fprintf('%s\n', pth_json);
+    if speak
+        fprintf('%s\n', pth_json);
+    end
     
     % ---------------------------------------------------------------------
     % Loop over elements in the file
