@@ -312,7 +312,7 @@ end
 %==========================================================================
 
 %==========================================================================
-function nfname1 = create_2d_slice(fname,axis_2d,clean_up)
+function nfname1 = create_2d_slice(fname,deg,axis_2d,clean_up)
 % Extract the central 2D slice from a 3D volume.
 % FORMAT nfname1 = create_2d_slice(fname,axis_2d,clean_up)
 % fname   - Input filename
@@ -321,13 +321,14 @@ function nfname1 = create_2d_slice(fname,axis_2d,clean_up)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
 
-if nargin<2, axis_2d  = 3;    end
-if nargin<3, clean_up = true; end
+if nargin<2, deg      = 0;    end
+if nargin<3, axis_2d  = 3;    end
+if nargin<4, clean_up = true; end
 
 V  = spm_vol(fname);
 vx = spm_misc('vxsize',V.mat);
 
-spm_impreproc('nm_reorient',fname,vx,'ro_');          
+spm_impreproc('nm_reorient',fname,vx,'ro_',deg);          
 [pth,nam,ext] = fileparts(fname);
 nfname        = fullfile(pth,['ro_' nam ext]);
 if clean_up
