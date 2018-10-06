@@ -27,7 +27,7 @@ switch lower(id)
     case 'smooth_img_in_mem'
         [varargout{1:nargout}] = smooth_img_in_mem(varargin{:});           
     case 'hist'
-        [varargout{1:nargout}] = spm_hist(varargin{:});        
+        [varargout{1:nargout}] = spm_hist(varargin{:});            
     case 'create_2d_slice'
         [varargout{1:nargout}] = create_2d_slice(varargin{:});        
     case 'compute_bb'
