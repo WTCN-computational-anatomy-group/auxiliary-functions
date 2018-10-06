@@ -1926,8 +1926,13 @@ clf(f);
 P = size(X, 2);
 K = size(MU, 2);
 
-lkp = part.lkp;
-mg  = part.mg;  
+if nargin < 4
+    lkp = 1:K;
+    mg  = ones(1,K);
+else
+    lkp = part.lkp;
+    mg  = part.mg;  
+end
 
 PI = mg.*PI(:,lkp);
 
