@@ -119,9 +119,9 @@ else
         W = obs{2};
     end
 end
-if iscell(C)
+if iscell(C) && ~isempty(C)
     codes = C;
-    C = codes{1};
+    C     = codes{1};
     if numel(codes) >= 2
         L = codes{2};
     else
