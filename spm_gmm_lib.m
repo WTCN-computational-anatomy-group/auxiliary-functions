@@ -2245,7 +2245,9 @@ function varargout = gmm_extras(varargin)
 % Additional GMM functions
 %
 % gmm = spm_gmm_lib('extras', 'more_gmms', gmm, part)
-% > A crude heuristic to replace a single VB Gaussian by a bunch of VB Gaussians.
+% > A crude heuristic to replace a single Gaussian by a bunch of Gaussians.
+% gmm = spm_gmm_lib('extras', 'collapse_gmms', gmm, part)
+% > A crude heuristic to replace a bunch of Gaussian with a single Gaussian.
 %
 
 if nargin == 0
@@ -2257,6 +2259,8 @@ varargin = varargin(2:end);
 switch lower(id)
     case {'more_gmms'}
         [varargout{1:nargout}] = more_gmms(varargin{:});      
+    case {'collapse_gmms'}
+        [varargout{1:nargout}] = collapse_gmms(varargin{:});         
     otherwise
         help spm_gmm_lib>extras
         error('Unknown function %s. Type ''help spm_gmm_lib>extras'' for help.', id)
@@ -2264,12 +2268,12 @@ end
 % =========================================================================
 
 % =========================================================================
-function [gmm,mg] = more_gmms(gmm,part)
-% FORMAT gmm = spm_gmm_lib('extras', 'more_gmms', gmm, part)
+function [gmm,mg] = more_gmms(gmm,lkp)
+% FORMAT gmm = spm_gmm_lib('extras', 'more_gmms', gmm, lkp)
 %
 % gmm  - Cell with the following format {m,b,W,n}, where there are K
 %        Gaussians.
-% part - [1,K_p] vector partitioning a K GMM into a K_p GMM (K_P>=K). E.g.
+% lkp - [1,K_p] vector partitioning a K GMM into a K_p GMM (K_P>=K). E.g.
 %        [1 1 1 2 3 4 5 6 6] means that the first Gaussian will be divided
 %        into 3 and the last into 2. The rest will remain the same.
 %
@@ -2279,13 +2283,16 @@ function [gmm,mg] = more_gmms(gmm,part)
 % A crude heuristic to replace a single VB Gaussian by a bunch of VB Gaussians.
 % If there is only one Gaussian, then it should be the same as the
 % original distribution.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+
 MU0 = gmm{1};
 b0  = gmm{2};
 W0  = gmm{3};
 n0  = gmm{4};
 
 K   = numel(n0);
-K_p = numel(part);
+K_p = numel(lkp);
 C   = size(MU0,1);
 
 A0 = bsxfun(@times,W0,reshape(n0,[1 1 K])); % E[Lambda]
@@ -2297,7 +2304,7 @@ n  = zeros(1,K_p); % A = nW, W = 1/n*inv(Cov)
 mg = ones(1,K);
 
 for k=1:K    
-    kk = sum(part==k);
+    kk = sum(lkp==k);
     w  = 1./(1 + exp(-(kk - 1)*0.25)) - 0.5;
     mn = MU0(:,k);
     vr = inv(A0(:,:,k));
@@ -2307,12 +2314,61 @@ for k=1:K
     pr = inv(vr);
     W1 = (1/n0(k))*pr;
     
-    m(:,part==k)   = mn;
-    b(part==k)     = b0(k);
-    W(:,:,part==k) = repmat(W1,[1 1 kk]);
-    n(part==k)     = n0(k);
+    m(:,lkp==k)   = mn;
+    b(lkp==k)     = b0(k);
+    W(:,:,lkp==k) = repmat(W1,[1 1 kk]);
+    n(lkp==k)     = n0(k);
     
-    mg(part==k) = 1/kk;
+    mg(lkp==k) = 1/kk;
+end
+
+gmm{1} = m;
+gmm{2} = b;
+gmm{3} = W;
+gmm{4} = n;
+%==========================================================================
+
+% =========================================================================
+function [gmm,mg] = collapse_gmms(gmm,lkp)
+% FORMAT gmm = spm_gmm_lib('extras', 'collapse', gmm, lkp)
+%
+% A crude heuristic to replace a bunch of Gaussian with a single Gaussian.
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
+
+MU0 = gmm{1};
+b0  = gmm{2};
+W0  = gmm{3};
+n0  = gmm{4};
+
+Kb = max(lkp);
+K  = numel(lkp);
+C  = size(MU0,1);
+
+A0 = bsxfun(@times,W0,reshape(n0,[1 1 K]));
+vr = zeros(size(A0));
+for k=1:K
+   vr(:,:,k) = inv(A0(:,:,k)); 
+end
+
+m  = zeros(C,Kb);
+b  = zeros(1,Kb);
+W  = zeros(C,C,Kb);
+n  = zeros(1,Kb);
+mg = ones(1,Kb);
+
+for k=1:Kb                        
+    mn  = mean(MU0(:,lkp == k),2);
+    vr1 = sum(vr(:,:,lkp == k),3);
+    
+    pr = inv(vr1);    
+    W1 = (1/n0(k))*pr;
+    
+    m(:,k)   = mn;    
+    W(:,:,k) = W1;
+    
+    b(k) = mean(b0(lkp == k));
+    n(k) = mean(n0(lkp == k));
 end
 
 gmm{1} = m;
