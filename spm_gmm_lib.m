@@ -2296,21 +2296,22 @@ b0  = gmm{2};
 W0  = gmm{3};
 n0  = gmm{4};
 
-K   = numel(n0);
-K_p = numel(lkp);
-C   = size(MU0,1);
+Kb = numel(n0);
+K  = numel(lkp);
+C  = size(MU0,1);
 
-A0 = bsxfun(@times,W0,reshape(n0,[1 1 K])); % E[Lambda]
+A0 = bsxfun(@times,W0,reshape(n0,[1 1 Kb])); % E[Lambda]
 
-m  = zeros(C,K_p);
-b  = zeros(1,K_p);
-W  = zeros(C,C,K_p);
-n  = zeros(1,K_p); % A = nW, W = 1/n*inv(Cov)
+m  = zeros(C,K);
+b  = zeros(1,K);
+W  = zeros(C,C,K);
+n  = zeros(1,K); % A = nW, W = 1/n*inv(Cov)
 mg = ones(1,K);
 
-for k=1:K    
+for k=1:Kb    
     kk = sum(lkp==k);
-    w  = 1./(1 + exp(-(kk - 1)*0.25)) - 0.5;
+%     w  = 1./(1 + exp(-(kk - 1)*0.25)) - 0.5;
+    w  = 1./(1 + exp(-(kk - 1)*1)) - 0.5;
     mn = MU0(:,k);
     vr = inv(A0(:,:,k));
     
@@ -2320,9 +2321,9 @@ for k=1:K
     W1 = (1/n0(k))*pr;
     
     m(:,lkp==k)   = mn;
-    b(lkp==k)     = b0(k);
+    b(lkp==k)     = b0(k)*kk;
     W(:,:,lkp==k) = repmat(W1,[1 1 kk]);
-    n(lkp==k)     = n0(k);
+    n(lkp==k)     = n0(k)*kk;
     
     mg(lkp==k) = 1/kk;
 end
@@ -2362,9 +2363,11 @@ W  = zeros(C,C,Kb);
 n  = zeros(1,Kb);
 mg = ones(1,Kb);
 
-for k=1:Kb                        
+for k=1:Kb                   
+    kk = sum(lkp==k);
+    
     mn  = mean(MU0(:,lkp == k),2);
-    vr1 = sum(vr(:,:,lkp == k),3);
+    vr1 = mean(vr(:,:,lkp == k),3);
     
     pr = inv(vr1);    
     W1 = (1/n0(k))*pr;
@@ -2372,8 +2375,8 @@ for k=1:Kb
     m(:,k)   = mn;    
     W(:,:,k) = W1;
     
-    b(k) = mean(b0(lkp == k));
-    n(k) = mean(n0(lkp == k));
+    b(k) = mean(b0(lkp == k))/kk;
+    n(k) = mean(n0(lkp == k))/kk;
 end
 
 gmm{1} = m;
