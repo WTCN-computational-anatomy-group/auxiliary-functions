@@ -73,12 +73,12 @@ function [Dx,Dy,Dz] = grad(X,vx)
 if nargin < 2, vx = ones([1 3],'like',X); end
 
 if size(X,3)==1
-    Dx = [diff(X,1,2),zeros(size(X,1),1,'like',X)]./vx(2);
-    Dy = [diff(X,1,1);zeros(1,size(X,2),'like',X)]./vx(1);
+    Dx = [diff(X,1,2),zeros(size(X,1),1,'like',X)]./vx(1);
+    Dy = [diff(X,1,1);zeros(1,size(X,2),'like',X)]./vx(2);
     Dz = 0;
 else
-    Dx = cat(2,diff(X,1,2),zeros(size(X,1),1,size(X,3),'like',X))./vx(2);
-    Dy = cat(1,diff(X,1,1),zeros(1,size(X,2),size(X,3),'like',X))./vx(1);
+    Dx = cat(2,diff(X,1,2),zeros(size(X,1),1,size(X,3),'like',X))./vx(1);
+    Dy = cat(1,diff(X,1,1),zeros(1,size(X,2),size(X,3),'like',X))./vx(2);
     Dz = cat(3,diff(X,1,3),zeros(size(X,1),size(X,2),1,'like',X))./vx(3);  
 end
 %==========================================================================
