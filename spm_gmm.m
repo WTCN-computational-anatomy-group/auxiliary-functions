@@ -93,7 +93,7 @@ p.addOptional('K',           0,             @(X) isscalar(X) && isnumeric(X));
 p.addOptional('W',           1,             @isnumeric);
 p.addParameter('PropPrior',  0,             @isnumeric);
 p.addParameter('GaussPrior', {},            @iscell);
-p.addParameter('Prune',      0,             @(X) isscalar(X) && isnumeric(X));
+p.addParameter('Prune',      0,             @(X) (isscalar(X) && isnumeric(X)) || islogical(X));
 p.addParameter('Missing',    true,          @islogical);
 p.addParameter('Start',      'kmeans',      @(X) ischar(X) || isnumeric(X));
 p.addParameter('KMeans',     {},            @iscell);
@@ -918,8 +918,8 @@ else
             if ~isempty(prec{2})
                 prec{2} = prec{2}(:,:,kept);
             end
-            if numel(prec) >= 3 && sum(prec{2}) > 0
-                prec{2} = prec{2}(kept);
+            if numel(prec) >= 3 && sum(prec{3}) > 0
+                prec{3} = prec{3}(kept);
             end
         end
     end
