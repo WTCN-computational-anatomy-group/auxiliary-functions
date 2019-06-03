@@ -21,7 +21,8 @@ function [L,C,SUMD,D] = spm_kmeans(X, K, varargin)
 %                   or a KxPxR array with R the number of replicates
 % Replicates - Number of replicates with different starts [1]
 % Missing    - Keep rows with missing data [true]
-% Order      - Centroid ordering method: ['magnitude'], 'total', 'random'
+% Order      - Centroid ordering method: ['magnitude'], 'total', 'random',
+%              'intensity'
 % Verbose    - Verbosity level [0]
 %
 % OUTPUT
@@ -160,9 +161,11 @@ if p.Results.Verbose && Replicates > 1
     fprintf('Best | r = %2d | E = %3g\n', r0, E00);
 end
 
-% -------------------------------------------------------------------------
-% Order centroids
-[L,C,SUMD,D] = order(p.Results.Order,L,C,SUMD,D,W);
+if ~isempty(p.Results.Order)
+    % -------------------------------------------------------------------------
+    % Order centroids
+    [L,C,SUMD,D] = order(p.Results.Order,L,C,SUMD,D,W);
+end
 
 % -------------------------------------------------------------------------
 % Replace discarded missing values
@@ -228,6 +231,8 @@ switch method
         end
     case 'magnitude'
         measure = sqrt(sum(C.^2, 2));
+    case 'intensity'
+        measure = C(:,1);        
     otherwise
         return
 end
@@ -328,10 +333,13 @@ if nargin < 2
     X = 1:numel(P);
 end
 
-p = cumsum([0 P(:).'/sum(P(:))]);
+p      = cumsum([0 P(:).'/sum(P(:))]);
 p(end) = 1e3*eps + p(end);
-[~, i] = histc(rand,p);
-x = X(i);
+i      = 0;
+while i == 0
+    [~, ~, i] = histcounts(rand,p);
+end
+x      = X(i);
 
 % =========================================================================
 function D = sqeuclidian(X,C)
