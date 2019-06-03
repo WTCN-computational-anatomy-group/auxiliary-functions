@@ -265,17 +265,27 @@ M_avg(4,:)=[0 0 0 1];
 %==========================================================================
 
 %==========================================================================
-function msk = msk_modality(f,modality)
+function msk = msk_modality(f,modality,mskonlynan)
 % Get a mask for masking voxels in different imaging modalities
 % FORMAT msk = msk_modality(f,modality)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
-if strcmpi(modality,'mri')
-    msk = isfinite(f) & (f~=0);
-elseif strcmp(modality,'CT')
-%     msk = isfinite(f) & (f~=max(f(:))) & (f~=min(f(:))) & (f~=0);
-    msk = isfinite(f) & (f~=0) & (f>=-150) & (f<=3000);
-    msk = msk | (f>=-1005) & (f<=-995);    
+if nargin < 3, mskonlynan = false; end
+
+if mskonlynan
+    if strcmpi(modality,'mri')
+        msk = isfinite(f) & (f>=0);
+    elseif strcmp(modality,'CT')
+        msk = isfinite(f);
+    end
+else
+    if strcmpi(modality,'mri')
+        msk = isfinite(f) & (f>0);
+    elseif strcmp(modality,'CT')
+%         msk = isfinite(f) & (f~=0) & (f>-200) & (f<3000);
+%         msk = msk | (f>=-1010) & (f<=-990);
+        msk = isfinite(f) & (f~=0) & (f>-1020) & (f<3000);
+    end
 end
 %==========================================================================
 
