@@ -24,7 +24,7 @@ switch lower(id)
         [varargout{1:nargout}] = dive(varargin{:});        
     case 'grad'
         [varargout{1:nargout}] = grad(varargin{:});
-    case 'smooth_img_in_mem'
+    case 'smooth_img'
         [varargout{1:nargout}] = smooth_img_in_mem(varargin{:});           
     case 'hist'
         [varargout{1:nargout}] = spm_hist(varargin{:});            
@@ -84,27 +84,37 @@ end
 %==========================================================================
 
 %==========================================================================
-function smooth_img_in_mem(img,fwhm) 
+function simg = smooth_img_in_mem(img,fwhm,VoxelSize) 
 % Smooth an image with a Gaussian kernel
 % FORMAT smooth_img_in_mem(img,fwhm) 
 % img          - Image
 % fwhm         - Full-width at half maximum
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
-if nargin<2, fwhm = 10; end
+if nargin<2, fwhm      = 10; end
+if nargin<3, VoxelSize = 1; end
 
-if numel(fwhm)==1
+if numel(fwhm) == 1
     fwhm = fwhm*ones(1,3);
 end
+if numel(VoxelSize) == 1
+    VoxelSize = VoxelSize*ones(1,3);
+end
 
-lim = ceil(2*fwhm);
-x   = -lim(1):lim(1); x = spm_smoothkern(fwhm(1),x); x = x/sum(x);
-y   = -lim(2):lim(2); y = spm_smoothkern(fwhm(2),y); y = y/sum(y);
-z   = -lim(3):lim(3); z = spm_smoothkern(fwhm(3),z); z = z/sum(z);
-i   = (length(x) - 1)/2;
-j   = (length(y) - 1)/2;
-k   = (length(z) - 1)/2;
-spm_conv_vol(img,img,x,y,z,-[i j k]);
+simg = zeros(size(img));
+
+fwhm = fwhm./VoxelSize;                        % voxel anisotropy
+s1   = fwhm/sqrt(8*log(2));              % FWHM -> Gaussian parameter
+
+x  = round(6*s1(1)); x = -x:x; x = spm_smoothkern(fwhm(1),x,1); x  = x/sum(x);
+y  = round(6*s1(2)); y = -y:y; y = spm_smoothkern(fwhm(2),y,1); y  = y/sum(y);
+z  = round(6*s1(3)); z = -z:z; z = spm_smoothkern(fwhm(3),z,1); z  = z/sum(z);
+
+i  = (length(x) - 1)/2;
+j  = (length(y) - 1)/2;
+k  = (length(z) - 1)/2;
+
+spm_conv_vol(img,simg,x,y,z,-[i,j,k]);
 %==========================================================================
 
 %==========================================================================
@@ -325,46 +335,50 @@ if nargin<2, deg      = 0;    end
 if nargin<3, axis_2d  = 3;    end
 if nargin<4, clean_up = true; end
 
+% Create bounding box
 V  = spm_vol(fname);
-vx = spm_misc('vxsize',V.mat);
-
-spm_impreproc('nm_reorient',fname,vx,'ro_',deg);          
-[pth,nam,ext] = fileparts(fname);
-nfname        = fullfile(pth,['ro_' nam ext]);
-if clean_up
-    delete(fname);
-end
-
-V  = spm_vol(nfname);
 dm = V.dim;
-
-if axis_2d==1
+if axis_2d     == 1
     d1 = floor(dm(1)/2) + 1;
-    bb = [d1 d1;-inf inf;-inf inf];
-elseif axis_2d==2
+    bb = [d1 d1;-inf inf;-inf inf];   
+elseif axis_2d == 2
     d1 = floor(dm(2)/2) + 1;
     bb = [-inf inf;d1 d1;-inf inf];
-elseif axis_2d==3 
+elseif axis_2d == 3 
     d1 = floor(dm(3)/2) + 1;
     bb = [-inf inf;-inf inf;d1 d1];
 end                
 
 % Crop according to bounding-box
-spm_impreproc('subvol',V,bb','2d_');      
-[pth,nam,ext] = fileparts(nfname);   
+spm_impreproc('subvol',V,bb','2d_',deg);      
+[pth,nam,ext] = fileparts(fname);   
 nfname1       = fullfile(pth,['2d_' nam ext]);   
-delete(nfname);
+if clean_up, delete(fname); end
 
-% Make sure 'removed' dimension has vx=1
-n  = nifti(nfname1);
-M0 = n.mat;
-d  = [1 1 M0(3,3)];
-D  = diag([d, 1]);                     
-M1 = M0/D;    
+if axis_2d == 1 || axis_2d == 2
+    % Make sure 1D plane is in z dimension
+    Nii  = nifti(nfname1);
+    mat  = Nii.mat;
     
-spm_get_space(nfname1,M1);
-
-spm_impreproc('reset_origin',nfname1);
+    % Permute image data and apply permutation matrix to orientation matrix
+    if axis_2d == 1
+        img = permute(Nii.dat(:,:,:),[2 3 1]);            
+        P   = [0 1 0 0; 0 0 1 0; 1 0 0 0; 0 0 0 1];
+    else
+        img = permute(Nii.dat(:,:,:),[1 3 2]);        
+        P   = [1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1];
+    end   
+    mat     = P*mat*P';
+    dm      = [size(img) 1];
+    
+    % Overwrite image data
+    VO             = spm_vol(nfname1);
+    VO.dim(1:3)    = dm(1:3);        
+    VO.mat         = mat;
+    VO             = spm_create_vol(VO);        
+    Nii            = nifti(VO.fname);    
+    Nii.dat(:,:,:) = img; 
+end
 %==========================================================================
 
 %==========================================================================
