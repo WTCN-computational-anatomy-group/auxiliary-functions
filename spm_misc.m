@@ -11,6 +11,7 @@ function varargout = spm_misc(varargin)
 % FORMAT msk       = spm_misc('msk_modality',f,modality)
 % FORMAT gain      = spm_misc('get_gain',vals)
 % FORMAT [B, rind] = spm_misc('affine_basis', type, flat)
+% FORMAT             spm_misc('clean_holly_mbrud')
 %
 % FORMAT help spm_parfor>function
 % Returns the help file of the selected function.
@@ -41,6 +42,8 @@ switch lower(id)
         [varargout{1:nargout}] = get_gain(varargin{:});          
     case 'affine_basis'
         [varargout{1:nargout}] = affine_basis(varargin{:});            
+    case 'clean_holly_mbrud'
+        [varargout{1:nargout}] = clean_holly_mbrud(varargin{:});              
     otherwise
         help spm_parfor
         error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
@@ -290,6 +293,14 @@ function gain = get_gain(vals)
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 vals = vals(:);
 gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));   
+%==========================================================================
+
+%==========================================================================
+function clean_holly_mbrud
+fprintf('Start cleaning Holly trash... ')
+system('rm -rf /data/mbrud/.Trash-1904');
+system('rm -rf /data-scratch/mbrud/.Trash-1904');
+fprintf('done!\n')
 %==========================================================================
 
 %==========================================================================
