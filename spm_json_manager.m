@@ -44,20 +44,21 @@ end
 
 
 %==========================================================================
-function [dat,dict] = init_dat(input,dat,output_path)
+function [dat,dict] = init_dat(input,dat,output_path,channels2inc)
 %__________________________________________________________________________
 % Initialise a dat object from one or several JSON files.
 % These JSON files can either be explicitely provided, or searched for in a
 % directory:
 %
-% FORMAT [dat,dict] = spm_json_manager('init_dat',input)
+% FORMAT [dat,dict] = spm_json_manager('init_dat',input,output_path,channels2inc)
 %
-% input - Path to a JSON file or ot a directory with all the JSON files.
-%         The input can also be a list (= cell) of paths.
-%
-% dat   - A hierarchical object (cell of structs) representing all input
-%         files and metadata
-% dict  - A dictionary mapping subject IDs to indices in dat.
+% input        - Path to a JSON file or ot a directory with all the JSON files.
+%                The input can also be a list (= cell) of paths.
+% dat          - A hierarchical object (cell of structs) representing all input
+%                files and metadata
+% dict         - A dictionary mapping subject IDs to indices in dat.
+% output_path  - Path to store loaded dat object.
+% channels2inc - Cell of channel names to load (e.g., {'T1','T2'}).
 %
 % ---
 %
@@ -142,6 +143,9 @@ elseif nargin<3
     else
         output_path = '';
     end
+end
+if nargin < 4
+    channels2inc = {}; % All channels will be included
 end
 
 % -------------------------------------------------------------------------
@@ -317,8 +321,8 @@ for j=1:J
                     dat{s}.modality{m}.channel{c}.name   = channel;
                     dat{s}.modality{m}.channel_map(channel) = c;
                 end
-                % ---------------------------------------------------------
-                % Add channel
+                % -----------------------------------------------------
+                % Add channel                
                 c = dat{s}.modality{m}.channel_map(channel);
                 if isfield(dat{s}.modality{m}.channel{c}, 'nii')
                     N = numel(dat{s}.modality{m}.channel{c}.nii);
@@ -454,6 +458,45 @@ for j=1:J
         
     end % < Loop over elements (I)
 end % < Loop over files (J)
+
+if numel(dat) == 0
+    error('No subjects found! Error in input path?')
+end
+
+% -------------------------------------------------------------------------
+% Remove channels (if requested via channels2inc)
+if ~isempty(channels2inc)
+    for i=1:numel(dat)
+        if isfield(dat{i}.modality{1},'channel')
+            C1 = numel(dat{i}.modality{1}.channel);
+            for c1=1:C1
+                C2 = numel(dat{i}.modality{1}.channel);
+                for c2=1:C2
+                    channel_name = dat{i}.modality{1}.channel{c2}.name;
+                    if ~any(ismember(channels2inc,channel_name) == 1)
+                        dat{i}.modality{1}.channel(c2) = [];
+                        dat{i}.modality{1}.channel_map.remove(channel_name);   
+                        break
+                    end   
+                end
+            end
+            
+            C   = numel(dat{i}.modality{1}.channel);            
+            map = dat{i}.modality{1}.channel_map;
+            k   = keys(map); 
+            for i1=1:length(map)                                
+                for c=1:C
+                    channel_name = dat{i}.modality{1}.channel{c}.name;
+                    if strcmp(k{i1},channel_name)
+                        break
+                    end
+                end
+                
+                dat{i}.modality{1}.channel_map(k{i1}) = c;
+            end
+        end
+    end
+end
 
 % -------------------------------------------------------------------------
 % Save file on disk if needed
