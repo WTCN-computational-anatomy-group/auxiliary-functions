@@ -2169,7 +2169,7 @@ colors = hsv(K);
 if nargin < 3 || isempty(ticklabels), ticklabels = 1:K; end
 
 if numel(ticklabels) ~= K
-    ticklabels = 1:K
+    ticklabels = 1:K;
 end
 
 if dm0(3)==1
@@ -2184,7 +2184,7 @@ if dm0(3)==1
         slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
         slice = squeeze(slice(:,:,:,:));
         slice = permute(slice,[2 1 3]);
-        imagesc(slice); axis off xy;      
+        imagesc(slice); axis off image xy;      
         
         if ~isempty(title_nam{n})
             title(title_nam{n})
@@ -2206,18 +2206,14 @@ else
         slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
         slice = squeeze(slice(:,:,:,:));
         slice = permute(slice,[2 1 3]);
-        imagesc(slice); axis off xy;  
-
-        if ~isempty(title_nam{n})
-            title(title_nam{n})
-        end
+        imagesc(slice); axis off image xy;  
         
         subplot(N,3,3*(n - 1) + 2)
         
         slice = permute(img{n}(:,floor(dm0(2)/2) + 1,:,:),[3 1 2 4]);
         slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
         slice = squeeze(slice(:,:,:,:));    
-        imagesc(slice); axis off xy;  
+        imagesc(slice); axis off image xy;  
 
         if ~isempty(title_nam{n})
             title(title_nam{n})
@@ -2229,11 +2225,7 @@ else
         slice = spm_gmm_lib('plot', 'cat2rgb', slice, colors);
         slice = squeeze(slice(:,:,:,:));
         slice = permute(slice,[2 1 3]);
-        imagesc(slice); axis off xy;  
-        
-        if ~isempty(title_nam{n})
-            title(title_nam{n})
-        end
+        imagesc(slice); axis off image xy;  
         
         colormap(colors);
         cb = colorbar;
@@ -2311,7 +2303,7 @@ mg = ones(1,K);
 for k=1:Kb    
     kk = sum(lkp==k);
 %     w  = 1./(1 + exp(-(kk - 1)*0.25)) - 0.5;
-    w  = 1./(1 + exp(-(kk - 1)*1)) - 0.5;
+    w  = 1./(1 + exp(-(kk - 1)*2)) - 0.5;
     mn = MU0(:,k);
     vr = inv(A0(:,:,k));
     
