@@ -325,7 +325,7 @@ for gnit=1:IterMax
         % -----------------------------------------------------------------
         % Plot Bias
         if Verbose(1) >= 3
-            spm_bias_lib('Plot', 'Bias', X, B, Z, lattice);
+            spm_bias_lib('Plot', 'Bias', X, B, lattice);
         end
         
         % -----------------------------------------------------------------
