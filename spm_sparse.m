@@ -1,5 +1,3 @@
-% TODO: sliding boundary conditions
-
 function varargout = spm_sparse(id, varargin)
 %__________________________________________________________________________
 % Collection of useful sparse matrices.
@@ -8,8 +6,8 @@ function varargout = spm_sparse(id, varargin)
 % Smooth regularisation matrices.
 % > L*v(:) is equivalent to spm_diffeo('vel2mom', v, ...)
 %
-% FORMAT L = spm_sparse('precision', 'diffeo', lat_dim, lat_vs, bnd)
-% FORMAT K = spm_sparse('kernel',    'diffeo', lat_dim, lat_vs, bnd)
+% FORMAT L = spm_sparse('precision', 'diffeo', lat_dim, lat_vs, param, bnd)
+% FORMAT K = spm_sparse('kernel',    'diffeo', lat_dim, lat_vs, param, bnd)
 %
 % FORMAT L = spm_sparse('precision', 'field',  lat_dim, lat_vs, bnd)
 % FORMAT K = spm_sparse('kernel',    'field',  lat_dim, lat_vs, bnd)
@@ -53,6 +51,8 @@ function varargout = spm_sparse(id, varargin)
             error('No function named %s\n', string(id));
     end
 end
+
+% TODO: sliding boundary conditions
 
 %% Precision matrices
 
