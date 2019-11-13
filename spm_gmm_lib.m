@@ -183,7 +183,7 @@ end
 %--------------------------------------------------------------------------
 
 % =========================================================================
-function X = infermissing(X, Z, cluster, codes)
+function X = infermissing(X, Z, cluster, codes, sample)
 % FORMAT X = spm_gmm_lib('missing', X, Z, {MU,A}, {C,L})
 % X  - NxP   observations
 % Z  - NxK   responsibilities
@@ -195,6 +195,10 @@ function X = infermissing(X, Z, cluster, codes)
 % X - NxP    observations with inferred values
 %
 % Compute the mean expected value of missing voxels.
+
+if nargin < 5
+    sample = false;
+end
 
 MU = [];
 A  = [];
@@ -240,7 +244,7 @@ end
 % -------------------------------------------------------------------------
 % For each missing combination
 for i=1:numel(L)
-    
+   
     % ---------------------------------------------------------------------
     % Get code / mask / missing modalities
     c        = L(i);
@@ -251,7 +255,7 @@ for i=1:numel(L)
     msk      = (C == c);
     Nm       = sum(msk);
     if Nm == 0, continue; end
-    
+   
     % ---------------------------------------------------------------------
     % Initialise
     X(msk,missing) = 0;
@@ -263,9 +267,13 @@ for i=1:numel(L)
         X1k = zeros(1, 'like', X);
         X1k = bsxfun(@plus,X1k,MU(missing,k).');
         X1k = bsxfun(@plus,X1k,bsxfun(@minus, MU(observed,k).', X(msk,observed)) * (A(observed,missing,k) / A(missing,missing,k)));
+        if sample
+            Smk = spm_matcomp('Inv',A(missing,missing,k));
+            X1k = X1k + mvnrnd(zeros(1,Pm),Smk,Nm);
+        end
         X(msk,missing) = X(msk,missing) + bsxfun(@times, X1k, Z(msk,k));
     end
-                    
+                   
 end
 
 % =========================================================================
@@ -1982,7 +1990,11 @@ for p=1:P
     xlabel(sprintf('x%d',p))
     ylabel('density')
     xlim(xlims);
-    ylim([0 1.1*ymax]);
+    if ymax == 0
+        ylim([0 1.1]);
+    else
+        ylim([0 1.1*ymax]);
+    end
     box on
     hold off
 
