@@ -284,6 +284,7 @@ else
     elseif strcmp(modality,'CT')
 %         msk = isfinite(f) & (f~=0) & (f>-200) & (f<3000);
 %         msk = msk | (f>=-1010) & (f<=-990);
+%         msk = isfinite(f) & (f~=0) & (f>0) & (f<100);
         msk = isfinite(f) & (f~=0) & (f>-1020) & (f<3000);
     end
 end
