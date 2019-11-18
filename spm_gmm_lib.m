@@ -1755,7 +1755,7 @@ elseif nbits <= 16
 elseif nbits <= 32
     type = [type '32'];
 elseif nbits <= 64
-    type = [type '54'];
+    type = [type '64'];
 else
     type = 'double';
 end

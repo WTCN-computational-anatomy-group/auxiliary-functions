@@ -247,7 +247,11 @@ for j=1:J
     %   as one json object.
     for i=1:I
         metadata = list_metadata{i};
-        metadata = check_metadata_dat(metadata);
+        try
+            metadata = check_metadata_dat(metadata);
+        catch
+            continue
+        end
           
         % Get poulation and subject name
         name       = metadata.name;
