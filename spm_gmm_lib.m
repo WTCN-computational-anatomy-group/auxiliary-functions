@@ -337,12 +337,12 @@ end
 
 % -------------------------------------------------------------------------
 % Use double precision
-X  = double(X);
+% X  = double(X);
 MU = double(MU);
 A  = double(A);
 V  = double(V);
 n  = double(n);
-E  = double(E);
+% E  = double(E);
 const = double(const);
 
 % -------------------------------------------------------------------------
@@ -435,9 +435,8 @@ function Z = responsibility(logpX, logPI, varargin)
 % the following function call: bsxfun(@plus, Z, varargin{i}).
 
 % Use double precision
-logpX = double(logpX);
-logPI = double(logPI);
-
+% logpX = double(logpX);
+% logPI = double(logPI);
 
 % Omit NaN
 logpX(isnan(logpX)) = 0; 
@@ -446,7 +445,8 @@ logpX(isnan(logpX)) = 0;
 Z = bsxfun(@plus, logpX, logPI);
 
 for i=1:numel(varargin)
-    Z = bsxfun(@plus, Z, double(varargin{i}));
+    Z = bsxfun(@plus, Z, varargin{i});
+%     Z = bsxfun(@plus, Z, double(varargin{i}));
 end
 
 % Exponentiate and normalise
@@ -512,9 +512,9 @@ K = size(Z, 2);
 
 %--------------------------------------------------------------------------
 % Use double precision
-X = double(X);
-Z = double(Z);
-W = double(W);
+% X = double(X);
+% Z = double(Z);
+% W = double(W);
 
 %--------------------------------------------------------------------------
 % Weight responsibilities
@@ -522,20 +522,20 @@ Z = bsxfun(@times, Z, W);
 
 %--------------------------------------------------------------------------
 % Oth order
-SS0 = sum(Z, 1, 'omitnan');
+SS0 = sum(double(Z), 1, 'omitnan');
 
 %--------------------------------------------------------------------------
 % 1st order
-SS1 = sum(bsxfun(@times, X, reshape(Z, [N 1 K])), 1, 'omitnan');
+SS1 = sum(double(bsxfun(@times, X, reshape(Z, [N 1 K]))), 1, 'omitnan');
 SS1 = reshape(SS1, [P K]);
 
 %--------------------------------------------------------------------------
 % 1nd order
 SS2 = zeros(P,P,K, 'like', Z);
 for i=1:P
-    SS2(i,i,:) = reshape(sum(bsxfun(@times, Z, X(:,i).^2),1,'omitnan'), [1 1 K]);
+    SS2(i,i,:) = reshape(sum(double(bsxfun(@times, Z, X(:,i).^2)),1,'omitnan'), [1 1 K]);
     for j=i+1:P
-        SS2(i,j,:) = reshape(sum(bsxfun(@times, Z, X(:,i).*X(:,j)),1,'omitnan'), [1 1 K]);
+        SS2(i,j,:) = reshape(sum(souble(bsxfun(@times, Z, X(:,i).*X(:,j))),1,'omitnan'), [1 1 K]);
         SS2(j,i,:) = SS2(i,j,:);
     end
 end
@@ -575,9 +575,9 @@ end
 
 %--------------------------------------------------------------------------
 % Use double precision
-X = double(X);
-Z = double(Z);
-W = double(W);
+% X = double(X);
+% Z = double(Z);
+% W = double(W);
 
 %--------------------------------------------------------------------------
 % Dimensions
@@ -611,12 +611,12 @@ for i=1:numel(L)
     
     % ---------------------------------------------------------------------
     % Oth order moment
-    SS0{i} = sum(Z1, 1);
+    SS0{i} = sum(double(Z1), 1);
     if nargout == 1, return; end
 
     % ---------------------------------------------------------------------
     % 1st order moment
-    SS1{i} = sum(bsxfun(@times, X1, reshape(Z1, [Nm 1 K])), 1);
+    SS1{i} = sum(double(bsxfun(@times, X1, reshape(Z1, [Nm 1 K]))), 1);
     SS1{i} = reshape(SS1{i}, [Po K]);
     if nargout == 2, return; end
 
@@ -624,9 +624,9 @@ for i=1:numel(L)
     % 2nd order moment
     SS2{i} = zeros(Po,Po,K, 'like', Z);
     for k=1:Po
-        SS2{i}(k,k,:) = reshape(sum(bsxfun(@times, Z1, X1(:,k).^2),1), [1 1 K]);
+        SS2{i}(k,k,:) = reshape(sum(double(bsxfun(@times, Z1, X1(:,k).^2)),1), [1 1 K]);
         for j=k+1:Po
-            SS2{i}(k,j,:) = reshape(sum(bsxfun(@times, Z1, X1(:,k).*X1(:,j)),1), [1 1 K]);
+            SS2{i}(k,j,:) = reshape(sum(double(bsxfun(@times, Z1, X1(:,k).*X1(:,j))),1), [1 1 K]);
             SS2{i}(j,k,:) = SS2{i}(k,j,:);
         end
     end
@@ -791,9 +791,9 @@ end
 
 %--------------------------------------------------------------------------
 % Use double precision
-E = double(E);
-Z = double(Z);
-W = double(W);
+% E = double(E);
+% Z = double(Z);
+% W = double(W);
 
 %--------------------------------------------------------------------------
 % Dimensions
@@ -829,10 +829,10 @@ for i=1:numel(L)
     for p=list_p
         if size(E,1)==1
             SS2(p,p,:) = SS2(p,p,:) ...
-                + bsxfun(@times, reshape(sum(Z(msk,:), 1), [1 1 K]), E(p));
+                + bsxfun(@times, reshape(sum(double(Z(msk,:)), 1), [1 1 K]), E(p));
         else
             SS2(p,p,:) = SS2(p,p,:) ...
-                + reshape(sum(bsxfun(@times, Z(msk,:), E(msk,p)), 1), [1 1 K]);
+                + reshape(sum(double(bsxfun(@times, Z(msk,:), E(msk,p))), 1), [1 1 K]);
         end
     end
 end
