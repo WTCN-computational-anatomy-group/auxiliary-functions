@@ -741,6 +741,7 @@ end
 % Compute GMM likelihood from bias-corrected data
 X = X .* B;
 [lSS0,lSS1,lSS2] = spm_gmm_lib('SuffStat', 'base', X, Z, 1, {C,L});
+SS2b = 0;
 if sum(binwidth) > 0
     SS2b = spm_gmm_lib('SuffStat', 'bin', binvar, Z, 1, {C,L});
 end
