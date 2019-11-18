@@ -398,7 +398,7 @@ for em=1:IterMax
     end
     if isfield(lb, 'XB')
         if isempty(lb.XB)
-            lb.XB = zeros(size(X,2),1);
+            lb.XB = 0;
         else
             lb.XB(:,end+1) = lb.XB(:,end); % < Add bias normalisation term
         end
