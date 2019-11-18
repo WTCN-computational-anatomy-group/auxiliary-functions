@@ -170,7 +170,6 @@ end
 X = reshape(X, [], P);
 Z = reshape(Z, [], K);
 
-
 % -------------------------------------------------------------------------
 % Initialise coefficients if needed
 if isempty(coeff)
@@ -281,7 +280,7 @@ for gnit=1:IterMax
             % -------------------------------------------------------------
             % Update objective function
             LXB(list_p,1) = sum(B(:,list_p),1)'; % < Update LogDet(B)
-            B(:,list_p) = exp(B(:,list_p));    % < Exponentiate
+            B(:,list_p)   = exp(B(:,list_p));    % < Exponentiate
             LX  = spm_bias_lib('objective', X, Z, B, mean, prec, {C, L}, BW);
             for q=1:Q
                 p     = list_p(q);
