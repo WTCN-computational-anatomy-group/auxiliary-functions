@@ -1468,10 +1468,10 @@ else
         end
     end
 end
-if nargin <= 6
+if nargin < 6
     L = [];
 end
-if nargin <= 7
+if nargin < 7
     SS2b = 0;
 end
 
