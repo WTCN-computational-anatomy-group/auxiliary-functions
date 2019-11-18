@@ -2039,9 +2039,10 @@ function plot_GaussPrior(GaussPrior,lkp,figname)
 
 if nargin < 2, lkp = []; end
 
-figname0 = '(SPM) GaussPrior';
 if nargin==3
-    figname0 = [figname0 ' ' figname];
+    figname0 = figname;
+else
+    figname0 = '(SPM) GaussPrior';
 end
 
 % ---------------------------------------------------------------------
