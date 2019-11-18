@@ -260,7 +260,7 @@ for em=1:IterMax
         % -----------------------------------------------------------------
         % Initialise objective function
         [LMU,LA]    = spm_gmm_lib('KL', 'GaussWishart', {MU,b}, prec, {MU0,b0}, {V0,n0});
-        [LX,const] = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
+        [LX,const]  = spm_gmm_lib('MarginalSum', lSS0, lSS1, lSS2, mean, prec, L, SS2b);
         LB          = NaN(1,SubIterMax);
         LB(1)       = LMU + LA + LX;
         for i=1:SubIterMax
@@ -375,7 +375,7 @@ for em=1:IterMax
 
     % ---------------------------------------------------------------------
     % Plot GMM
-    if Verbose(1) >= 3
+    if Verbose(1) >= 3        
         spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI);
     end
    
