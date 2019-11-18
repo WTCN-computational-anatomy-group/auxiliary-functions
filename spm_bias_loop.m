@@ -149,6 +149,8 @@ cluster = {MU, prec{:}};
 % Get lattice
 lattice = zeros(1,numel(bases));
 nbcomp  = zeros(1,numel(bases));
+nbcomp  = [nbcomp 1];
+nbcomp  = nbcomp(1:3);
 for i=1:numel(bases)
     lattice(i) = size(bases{i},1);
     nbcomp(i)  = size(bases{i},2);
@@ -387,6 +389,6 @@ if verbose >= 1
     else
         name = 'bias';
     end
-    fprintf('%-5s | %4d | lb = %-10.6g | gain = %-10.4g | %3s | %-7s\n', name, em, lb.sum(end), gain, incr, lsres);
+    fprintf('%-5s |ï¿½%4d | lb = %-10.6g | gain = %-10.4g | %3s |ï¿½%-7s\n', name, em, lb.sum(end), gain, incr, lsres);
 end
 gain = abs(gain);
