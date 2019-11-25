@@ -150,7 +150,7 @@ switch lower(id)
     case 'suffstat'
         [varargout{1:nargout}] = suffstat(varargin{:});
     case 'const'
-        [varargout{1:nargout}] = const(varargin{:});
+        [varargout{1:nargout}] = const_fun(varargin{:});
     case 'updateclusters'
         [varargout{1:nargout}] = updateclusters(varargin{:});   
     case 'updateproportions'
@@ -268,7 +268,7 @@ for i=1:numel(L)
         X1k = bsxfun(@plus,X1k,MU(missing,k).');
         X1k = bsxfun(@plus,X1k,bsxfun(@minus, MU(observed,k).', X(msk,observed)) * (A(observed,missing,k) / A(missing,missing,k)));
         if sample
-            Smk = spm_matcomp('Inv',A(missing,missing,k));
+            Smk = inv_stable(A(missing,missing,k));
             X1k = X1k + mvnrnd(zeros(1,Pm),Smk,Nm);
         end
         X(msk,missing) = X(msk,missing) + bsxfun(@times, X1k, Z(msk,k));
@@ -391,11 +391,11 @@ for i=1:numel(L)
         %   inv(S(o,o)) ~ W(V(o,o) - V(o,m)*V(m,m)\V(m,o), n - Pm)
         if sum(n) > 0
 %             Ao = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
-            Ao = V(observed,observed,k) - V(observed,missing,k)*(spm_matcomp('inv',V(missing,missing,k))*V(missing,observed,k));
+            Ao = V(observed,observed,k) - V(observed,missing,k)*(inv_stable(V(missing,missing,k))*V(missing,observed,k));
             Ao = (n(k)-Pm) * Ao;
         else
 %             Ao = A(observed,observed,k) - A(observed,missing,k)*(A(missing,missing,k)\A(missing,observed,k));
-            Ao = A(observed,observed,k) - A(observed,missing,k)*(spm_matcomp('inv',A(missing,missing,k))*A(missing,observed,k));
+            Ao = A(observed,observed,k) - A(observed,missing,k)*(inv_stable(A(missing,missing,k))*A(missing,observed,k));
         end
         
         % Quadratic term in observed values: (obs-mean) x (obs-mean)
@@ -439,7 +439,7 @@ function Z = responsibility(logpX, logPI, varargin)
 % logPI = double(logPI);
 
 % Omit NaN
-logpX(isnan(logpX)) = 0; 
+logpX = spm_arrayset('nan',logpX,single(0));
 
 % Add terms: E[log Pi_k] + E[log p(X | Theta_k)]
 Z = bsxfun(@plus, logpX, logPI);
@@ -703,7 +703,7 @@ for i=1:numel(L)
             MUo  = MU(observed,k);
             MUm  = MU(missing,k);
 %             SA   = A(missing,missing,k) \ A(missing,observed,k);
-            SA   = spm_matcomp('inv',A(missing,missing,k)) * A(missing,observed,k);
+            SA   = inv_stable(A(missing,missing,k)) * A(missing,observed,k);
             
             % 1) observed
             SS1(observed,k) = SS1(observed,k) + SS1k;
@@ -742,7 +742,7 @@ for i=1:numel(L)
     
             % 4) uncertainty ~ missing
             SS2(missing,missing,k) = SS2(missing,missing,k) ...
-                + SS0k * spm_matcomp('inv', A(missing,missing,k));
+                + SS0k * inv_stable( A(missing,missing,k));
 %                 + SS0k * inv(A(missing,missing,k));
         end
     end
@@ -838,7 +838,7 @@ for i=1:numel(L)
 end
 
 % =========================================================================
-function c = const(mean,prec,L)
+function c = const_fun(mean,prec,L)
 % FORMAT c = spm_gmm_lib('const', {MU,b}, {V,n})
 % FORMAT c = spm_gmm_lib('const', {MU,b}, {A})
 % FORMAT c = spm_gmm_lib('const', {MU},   {A})
@@ -923,14 +923,14 @@ if nargin == 3 && ~isempty(L)
         Po = sum(observed);
         for k=1:K
 %             Vo = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
-            Vo = V(observed,observed,k) - V(observed,missing,k)*(spm_matcomp('inv',V(missing,missing,k))*V(missing,observed,k));
+            Vo = V(observed,observed,k) - V(observed,missing,k)*(inv_stable(V(missing,missing,k))*V(missing,observed,k));
             c(i,k) = - 0.5 * Po * log(2*pi);
             if sum(n) > 0
                 no = n(k) - Pm;
-                c(i,k) = c(i,k) + 0.5 * spm_prob('W','ELogDet',Vo,no) ...
+                c(i,k) = c(i,k) + 0.5 * wishart_elogdet(Vo,no) ...
                                 - 0.5 * no * MU(observed,k).' * Vo * MU(observed,k);
             else
-                c(i,k) = c(i,k) + 0.5 * spm_matcomp('LogDet',Vo) ...
+                c(i,k) = c(i,k) + 0.5 * logdet(LogDet',Vo) ...
                                 - 0.5 * MU(observed,k).' * Vo * MU(observed,k);
             end
             if sum(b) > 0
@@ -947,10 +947,10 @@ else
     for k=1:K
         c(k) = - 0.5 * P * log(2*pi);
         if sum(n) > 0
-            c(k) = c(k) + 0.5 * spm_prob('W','ELogDet',V(:,:,k),n(k)) ...
+            c(k) = c(k) + 0.5 * wishart_elogdet(V(:,:,k),n(k)) ...
                         - 0.5 * n(k) * MU(:,k)' * V(:,:,k) * MU(:,k);
         else
-            c(k) = c(k) + 0.5 * spm_matcomp('LogDet',V(:,:,k)) ...
+            c(k) = c(k) + 0.5 * logdet(V(:,:,k)) ...
                         - 0.5 * MU(:,k)' * V(:,:,k) * MU(:,k);
         end
         if sum(b) > 0
@@ -1026,12 +1026,12 @@ else
     for k=1:K
         SS2(:,:,k) = SS2(:,:,k) +   b0(k) * MU0(:,k) * MU0(:,k).' ...
                                 -    b(k) * MU(:,k)  * MU(:,k).' ...
-                                + spm_matcomp('Inv',V0(:,:,k));
+                                + inv_stable(V0(:,:,k));
     end
 end
 V = SS2;
 for k=1:K
-    V(:,:,k) = spm_matcomp('Inv', V(:,:,k));
+    V(:,:,k) = inv_stable( V(:,:,k));
 end
 if sum(n) > 0
     A = bsxfun(@times, V, reshape(n, [1 1 K]));
@@ -1172,8 +1172,8 @@ if ~constrained
         Wn        = 0;
         for s=1:S
             [~,~,W,n] = get_posteriors(cluster,s);
-            sumLogDet = sumLogDet + spm_matcomp('LogDet', W(:,:,k));
-            sumPsi    = sumPsi    + spm_prob('DiGamma', n(k)/2, N);
+            sumLogDet = sumLogDet + logdet( W(:,:,k));
+            sumPsi    = sumPsi    + DiGamma(n(k)/2, N);
             Wn        = Wn        + n(k)*W(:,:,k);
         end
         sumLogDet = sumLogDet/S;
@@ -1188,14 +1188,14 @@ if ~constrained
             % -------------------------------------------------------------
             % Update W0 (mode, closed-form)
             W0(:,:,k)   = Wn/n0(k);
-            LogDetW0(k) = spm_matcomp('LogDet', W0(:,:,k));
+            LogDetW0(k) = logdet( W0(:,:,k));
             % -------------------------------------------------------------
             
             % ---
             % Objective function
             Eprev = E;
             E = 0.5*S*n0(k)*( LogDetW0(k) - sumLogDet - sumPsi ) ...
-                + S*spm_prob('LogGamma', n0(k)/2, N);
+                + S*LogGamma(n0(k)/2, N);
             
             if E == Eprev
                 break;
@@ -1204,8 +1204,8 @@ if ~constrained
             % ---
             % Gradient & Hessian
             g = 0.5*S*( LogDetW0(k) - sumLogDet - sumPsi ...
-                         + spm_prob('DiGamma', n0(k)/2, N) );
-            H = S/4*spm_prob('DiGamma', n0(k)/2, N, 1);
+                         + DiGamma(n0(k)/2, N) );
+            H = S/4*DiGamma(n0(k)/2, N, 1);
 
             % ---
             % Update
@@ -1246,7 +1246,7 @@ else
                 p0 = p0 + S*n0(k);
                 for s=1:S
                     [~,~,W,n] = get_posteriors(cluster,s);
-                    V0 = V0 + spm_matcomp('Inv', n(k)*W(:,:,k));
+                    V0 = V0 + inv_stable( n(k)*W(:,:,k));
                 end
             end
             p0 = p0/K;
@@ -1267,8 +1267,8 @@ else
             Lambda   = 0;
             for s=1:S
                 [~,~,W,n] = get_posteriors(cluster,s);
-                logDetW = logDetW  + spm_matcomp('Logdet', W(:,:,k));
-                psiN    = psiN     + spm_prob('DiGamma', n(k)/2, N);
+                logDetW = logDetW  + logdet( W(:,:,k));
+                psiN    = psiN     + DiGamma(n(k)/2, N);
                 Lambda  = Lambda   + n(k)*W(:,:,k);
             end
             logDetW  = logDetW/S;
@@ -1283,19 +1283,19 @@ else
                 % ---------------------------------------------------------
                 % Update {p,V} for W0 (posterior, closed form)
                 p(k)       = p0 + S*n0(k);
-                V(:,:,k)   = spm_matcomp('Inv', spm_matcomp('Inv', V0) + Lambda);
+                V(:,:,k)   = inv_stable( inv_stable( V0) + Lambda);
                 % Useful values
-                W0(:,:,k)   = spm_matcomp('Inv', spm_prob('W', 'E', V(:,:,k), p(k)));
-                LogDetW0(k) = -spm_prob('W', 'Elogdet', V(:,:,k), p(k));
+                W0(:,:,k)   = inv_stable( wishart_e(V(:,:,k), p(k)));
+                LogDetW0(k) = -wishart_elogdet(V(:,:,k), p(k));
                 % ---------------------------------------------------------
 
                 % ---
                 % Objective function                
                 E1 = S*n0(k)/2 * (LogDetW0(k) - logDetW - psiN) ...
-                     + S*spm_prob('LogGamma', n0(k)/2, N);
+                     + S*LogGamma(n0(k)/2, N);
                 E = [E E1];
                 
-                subgain = spm_misc('get_gain',E);                
+                subgain = get_gain(E);                
                 if subgain < 1e-6
                     % Finished
                     break
@@ -1303,8 +1303,8 @@ else
 
                 % ---
                 % Gradient & Hessian
-                g = S/2*(LogDetW0(k) - logDetW - psiN + spm_prob('DiGamma', n0(k)/2, N));
-                H = S/4 * spm_prob('DiGamma', n0(k)/2, N, 1);
+                g = S/2*(LogDetW0(k) - logDetW - psiN + DiGamma(n0(k)/2, N));
+                H = S/4 * DiGamma(n0(k)/2, N, 1);
 
                 % ---
                 % Update
@@ -1326,8 +1326,8 @@ else
         sumPsi  = 0;
         pV      = 0;
         for k=1:K
-            sumlogV = sumlogV + spm_matcomp('LogDet', V(:,:,k));
-            sumPsi  = sumPsi  + spm_prob('DiGamma', p(k)/2, N);
+            sumlogV = sumlogV + logdet( V(:,:,k));
+            sumPsi  = sumPsi  + DiGamma(p(k)/2, N);
             pV      = pV      + p(k)*V(:,:,k);
         end
         sumlogV = sumlogV/K;
@@ -1343,21 +1343,21 @@ else
             % -------------------------------------------------------------
             % Update V0 (closed-form)
             V0 = pV/p0;
-            LogDetV0 = spm_matcomp('LogDet', V0);
+            LogDetV0 = logdet( V0);
             % -------------------------------------------------------------
 
             % ---
             % Objective function
             Eprev = E;
-            E = p0*K/2*( N*LogDetV0 - sumlogV - sumPsi ) + K*spm_prob('LogGamma', p0/2, N);
+            E = p0*K/2*( N*LogDetV0 - sumlogV - sumPsi ) + K*LogGamma(p0/2, N);
             if E == Eprev
                 break;
             end
 
             % ---
             % Gradient & Hessian
-            g = K/2*( LogDetV0 - sumlogV - sumPsi + spm_prob('DiGamma', p0/2, N) );
-            H = K/4*spm_prob('DiGamma', p0/2, N, 1);
+            g = K/2*( LogDetV0 - sumlogV - sumPsi + DiGamma(p0/2, N) );
+            H = K/4*DiGamma(p0/2, N, 1);
 
             % ---
             % Update
@@ -1371,11 +1371,11 @@ else
         % Objective function        
         nlb  = 0;
         for k=1:K
-            nlb  = nlb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
+            nlb  = nlb - wishart_kl(V(:,:,k), p(k), V0, p0);
         end
         
         lb   = [lb nlb];      
-        gain = spm_misc('get_gain',lb);        
+        gain = get_gain(lb);        
         
         if gain < 1e-3
             % Finished
@@ -1398,7 +1398,7 @@ else
     extras.p0  = p0;
     extras.lb  = 0;
     for k=1:K
-        extras.lb  = extras.lb - spm_prob('Wishart', 'kl', V(:,:,k), p(k), V0, p0);
+        extras.lb  = extras.lb - wishart_kl(V(:,:,k), p(k), V0, p0);
     end  
     
     GaussPrior{1} = m0;
@@ -1483,7 +1483,7 @@ if isempty(L), L = 2^P - 1;    end % None missing
 
 % -------------------------------------------------------------------------
 % Constant term
-const = spm_gmm_lib('const', mean, prec, L);
+const = const_fun(mean, prec, L);
 
 lb  = 0;
 
@@ -1515,11 +1515,11 @@ for i=1:numel(L)
         %   inv(S(o,o)) ~ W(V(o,o) - V(o,m)*V(m,m)\V(m,o), n - Pm)
         if sum(n) > 0
 %             Ao = V(observed,observed,k) - V(observed,missing,k)*(V(missing,missing,k)\V(missing,observed,k));
-            Ao = V(observed,observed,k) - V(observed,missing,k)*(spm_matcomp('inv',V(missing,missing,k))*V(missing,observed,k));
+            Ao = V(observed,observed,k) - V(observed,missing,k)*(inv_stable(V(missing,missing,k))*V(missing,observed,k));
             Ao = (n(k)-Pm) * Ao;
         else
 %             Ao = A(observed,observed,k) - A(observed,missing,k)*(A(missing,missing,k)\A(missing,observed,k));
-            Ao = A(observed,observed,k) - A(observed,missing,k)*(spm_matcomp('inv',A(missing,missing,k))*A(missing,observed,k));
+            Ao = A(observed,observed,k) - A(observed,missing,k)*(inv_stable(A(missing,missing,k))*A(missing,observed,k));
         end
         
         % 1) obs x mean
@@ -1659,12 +1659,12 @@ LogDetA = zeros(1,K, 'like', V);
 if sum(n) > 0
     A = bsxfun(@times, V, reshape(n, [1 1 K]));
     for k=1:K
-        LogDetA(k) = spm_prob('W','ELogDet',V(:,:,k),n(k));
+        LogDetA(k) = wishart_elogdet(V(:,:,k),n(k));
     end
 else
     A = V;
     for k=1:K
-        LogDetA(k) = spm_matcomp('LogDet',A(:,:,k));
+        LogDetA(k) = logdet(A(:,:,k));
     end
 end
 
@@ -1687,7 +1687,7 @@ for k=1:K
                     + P;
     end
     if sum(n0) > 0
-        klA = klA - spm_prob('W', 'kl', V(:,:,k), n(k), V0(:,:,k), n0(k));
+        klA = klA - wishart_kl(V(:,:,k), n(k), V0(:,:,k), n0(k));
     end
 end
 klMU = 0.5 * klMU;
@@ -1965,7 +1965,7 @@ for p=1:P
         idx2 = zeros(numel(idx), max(idx));
         idx2(sub2ind(size(idx2), 1:numel(idx), idx')) = 1;
         weights = sum(bsxfun(@times, weights, idx2), 1);
-        clear idx1 idx2
+        idx1 = []; idx2 = [];
         minx  = min(X1);
         maxx  = max(X1);
         weights = weights ./ (sum(weights)*(maxx-minx)/numel(weights));
@@ -2005,7 +2005,7 @@ for p=1:P
         hold on
         for k=1:K
             Mu1     = MU([1 p],k);
-            Sigma2  = spm_matcomp('Inv', A([1 p],[1 p],k));
+            Sigma2  = inv_stable( A([1 p],[1 p],k));
             Sigma   = sqrt(Sigma2);
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');
@@ -2102,7 +2102,7 @@ for p=1:P
         hold on
         for k=1:K
             Mu1     = MU([1 p],k);
-            Sigma2  = spm_matcomp('Inv', A([1 p],[1 p],k));
+            Sigma2  = inv_stable( A([1 p],[1 p],k));
             Sigma   = sqrt(Sigma2);
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');
@@ -2400,4 +2400,142 @@ m = cluster{s}{1}{1};
 b = cluster{s}{1}{2};
 W = cluster{s}{2}{1};
 n = cluster{s}{2}{2};
+%==========================================================================
+
+% === logdet =============================================================
+function ld = logdet(A)
+% A  - A postive-definite square matrix
+% ld - Logarithm of determinant of A
+%
+% Log-determinant of a positive-definite matrix.
+% Cholesky factorisation is used to compute a more stable log-determinant.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+% John Ashburner
+% $Id$
+
+% Cholseki decomposition of A (A = C' * C, with C upper-triangular)
+[C, p] = chol(numeric(A));
+
+if p > 0
+   % A should usually be positive definite, but check anyway.
+   warning(['Attempting to compute log determinant of matrix ' ...
+            'that is not positive definite (p=%d).'], p);
+end
+
+% Because C is triangular, |C| = prod(diag(C))
+% Hence: log|C| = sum(log(diag(C)))
+% And:   log|A| = log|C'*C| = log(|C|^2) = 2 * sum(log(diag(C)))
+ld = 2 * sum(log(diag(C)));
+
+% === loaddiag ===========================================================
+function A = loaddiag(A)
+% A  - A square matrix
+%
+% Load A's diagonal until it is well conditioned for inversion.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+factor = 1e-7;
+while rcond(A) < 1e-5
+    A = A + factor * max([diag(A); eps]) * eye(size(A));
+    factor = 10 * factor;
+end
+
+% === inv ================================================================
+function A = inv_stable(A)
+% A  - A positive-definite square matrix
+% iA - Its inverse
+%
+% Stable inverse of a positive-definite matrix.
+% Eigendecomposition is used to compute a more stable inverse.
+%__________________________________________________________________________
+% Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+
+[V,D] = eig(A);
+if any(diag(D) <= 0)
+    warning('[spm_gmm_lib::inv_stable] Matrix has negative eigenvalues')
+    D(D <= 0) = eps; % Threshold negative eigenvalues
+end
+D     = loaddiag(D);
+A     = real(V * (D \ V'));
+
+% === wishart_elogdet ================================================================
+function out = wishart_elogdet(V, n, mode)
+if nargin < 3 || mode(1) ~= 'n'
+    K   = size(V, 1);
+    out = DiGamma(0.5*n, K) + K*log(2) + logdet(V);
+else
+    out = wishart_elogdet(V/n, n);
+end
+
+% === wishart_kl ================================================================
+function kl = wishart_kl(varargin)
+% FORMAT kl = wishart_kl(V1,      n1, V0,      n0)
+% FORMAT kl = wishart_kl(lambda1, n1, lambda0, n0, 'normal')
+
+% Check if we are in the reparameterised case
+if nargin == 5
+    kl = wishart_kl(varargin{1}/varargin{2}, varargin{2}, ...
+                  varargin{3}/varargin{4}, varargin{4});
+    return
+end
+
+% Usual KL
+V1 = varargin{1};
+n1 = varargin{2};
+V0 = varargin{3};
+n0 = varargin{4};
+K  = size(V1, 1);
+kl =   0.5*n0*(logdet(V0) - logdet(V1)) ...
+     + 0.5*n1*(trace(V0\V1) - K) ...
+     + 0.5*(n1 - n0)*DiGamma(0.5*n1, K) ...
+     + LogGamma(0.5*n0, K) - LogGamma(0.5*n1, K);
+ 
+ % === wishart_e ================================================================
+function out = wishart_e(V, n, mode)
+if nargin < 3 || mode(1) ~= 'n'
+    out = n*V;
+else
+    out = V;
+end 
+
+% === LogGamma ================================================================
+function lg = LogGamma(a, p)
+if nargin < 2
+    p = 1;
+end
+lg = (p*(p-1)/4)*log(pi);
+for i=1:p
+    lg = lg + gammaln(a + (1-p)/2);
+end
+
+% === DiGamma ================================================================
+function dg = DiGamma(a, p, k)
+if nargin < 3
+    k = 0;
+    if nargin < 2
+        p = 1;
+    end
+end
+dg = 0;
+for i=1:p
+    dg = dg + psi(k, a + (1-i)/2);
+end
+
+% === DiGamma ================================================================
+function gain = get_gain(vals)
+% FORMAT gain = get_gain(vals)
+%
+% vals - A vector of values
+%
+% gain - Computed gain
+%
+% Compute gain --- usually used to determine a stopping criteria when
+% optimising
+%__________________________________________________________________________
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
+vals = vals(:);
+gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));   
 %==========================================================================
