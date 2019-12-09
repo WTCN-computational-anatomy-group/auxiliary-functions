@@ -127,7 +127,7 @@ if iscell(C) && ~isempty(C)
     else
         L = unique(C);
     end
-    clear codes
+    codes = [];
 end
 if Missing && isempty(C) && any(any(isnan(X)))
     C = spm_gmm_lib('obs2code', X);
@@ -234,7 +234,7 @@ for em=1:IterMax
     % ---------------------------------------------------------------------
     % Compute responsibilities
     Z = spm_gmm_lib('Responsibility', logpX, logPI);
-    clear logpX
+    logpX = [];
     
     % ---------------------------------------------------------------------
     % Compute sufficient statistics (bin uncertainty part)

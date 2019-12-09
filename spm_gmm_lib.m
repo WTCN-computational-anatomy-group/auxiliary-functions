@@ -622,7 +622,7 @@ for i=1:numel(L)
 
     % ---------------------------------------------------------------------
     % 2nd order moment
-    SS2{i} = zeros(Po,Po,K, 'like', Z);
+    SS2{i} = zeros(Po,Po,K);
     for k=1:Po
         SS2{i}(k,k,:) = reshape(sum(bsxfun(@times, Z1, X1(:,k).^2),1, 'double'), [1 1 K]);
         for j=k+1:Po
@@ -801,14 +801,14 @@ N = size(Z,1);
 K = size(Z,2);
 P = size(E,2);
 if sum(E) == 0
-    SS2 = zeros(P,P,size(Z,2), 'like', Z);
+    SS2 = zeros(P,P,size(Z,2));
     return
 end
 if isempty(L)
     L = 2^P - 1; % None missing
 end
 Z   = bsxfun(@times, Z, W); % Multiply resp with observation count
-SS2 = zeros(P,P,K, 'like', Z);
+SS2 = zeros(P,P,K);
 
 % -------------------------------------------------------------------------
 % 2nd order moment: uncertainty ~ binning
@@ -2058,8 +2058,8 @@ m0 = GaussPrior{1};
 W0 = GaussPrior{3};
 n0 = GaussPrior{4};
     
-P      = size(m0,1);
-K      = size(m0,2);
+P = size(m0,1);
+K = size(m0,2);
 
 if isempty(lkp)
     lkp = 1:K;
