@@ -1003,9 +1003,10 @@ for i=1:size(L,1)
     % 2nd order moment
     SS2{i} = zeros(Po,Po,K);
     for k=1:Po
-        SS2{i}(k,k,:) = reshape(sum(bsxfun(@times, Z{i}, X{i}(:,k).^2),1, 'double'), [1 1 K]);
+        Xk = X{i}(:,k);
+        SS2{i}(k,k,:) = reshape(sum(bsxfun(@times, Z{i}, Xk.^2),1, 'double'), [1 1 K]);
         for j=k+1:Po
-            SS2{i}(k,j,:) = reshape(sum(bsxfun(@times, Z{i}, X{i}(:,k).*X{i}(:,j)),1, 'double'), [1 1 K]);
+            SS2{i}(k,j,:) = reshape(sum(bsxfun(@times, Z{i}, Xk.*X{i}(:,j)),1, 'double'), [1 1 K]);
             SS2{i}(j,k,:) = SS2{i}(k,j,:);
         end
     end
