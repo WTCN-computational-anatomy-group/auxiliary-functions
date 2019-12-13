@@ -100,7 +100,7 @@ p.addParameter('IterMax',    1000,          @(X) isscalar(X) && isnumeric(X));
 p.addParameter('Tolerance',  1e-4,          @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinWidth',   0,             @isnumeric);
 p.addParameter('InputDim',   0,             @(X) isscalar(X) && isnumeric(X));
-p.addParameter('Verbose',    0,             @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('Verbose',    0,             @(X) (numel(X) <= 2) && (isnumeric(X) || islogical(X)));
 p.parse(X, varargin{:});
 W          = p.Results.W;
 K          = p.Results.K;
