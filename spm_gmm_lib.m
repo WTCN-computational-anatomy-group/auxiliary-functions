@@ -2883,6 +2883,7 @@ if any(diag(D) <= 0)
 end
 D     = loaddiag(D);
 A     = real(V * (D \ V'));
+A     = (A+A.')/2;
 
 % === wishart_elogdet =====================================================
 function out = wishart_elogdet(V, n, mode)
