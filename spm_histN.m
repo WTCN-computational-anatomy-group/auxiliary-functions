@@ -22,16 +22,16 @@ function [V,W,C,BW,E] = spm_histN(X,varargin)
 % KeepZero - Keep bins with zero observations [true]
 % Missing  - Keep rows with missing data [false]
 %            Additional bins are created for missing values.
-% Reshape  - Reshape W and V so that their lattice is B1xB2x... [false]
+% Reshape  - Reshape output so that their lattice is M1xM2x... [false]
 % Smooth   - FWHM of the smoothing kernel (in bins) [0]
 % Verbose  - Verbosity level [0]
 %
 % OUTPUT
 % ------
-% values  - MxP matrix of multidimensional values (bin centres)
-% count   - Mx1 vector of weights (bin counts)
-% centres - 1xP cell of Mpx1 vectors: bin centres
-% widths  - 1xP vector (or 1xP cell of Mx1 vectors) bin widths 
+% values  - MxP matrix of multidimensional values (or M1x...xP if Reshape)
+% count   - Mx1 vector of counts                  (or M1x...x1 if Reshape)
+% centres - 1xP cell of Mpx1 bin centres
+% widths  - 1xP vector (or 1xP cell of Mpx1 vectors) bin widths
 %
 % (M can be smaller that the specified number of bins if KeepZero = false)
 %__________________________________________________________________________
@@ -79,7 +79,7 @@ if ~iscell(B) && size(B,1) == 1
 % Number of bins provided
     E = B;
     if numel(B) < P
-        E = padarray(E, [0, P-numel(B)], 'replicate', 'post');
+        E = spm_padarray(E, [0, P-numel(B)], 'replicate', 'post');
     end
     BW = (maxval - minval)./B;
     E  = num2cell(E);
@@ -109,10 +109,11 @@ V  = cell(1,P);      % Bin edges
 dim = zeros(1,P);
 hasnan = zeros(1,P,'logical');
 for c=1:P
-    [I{c},V{c}]       = discretize(X(:,c),E{c});    
+    [I{c},V{c}]       = discretize(X(:,c),E{c}); % /!\ in a toolbox?
     I{c}              = single(I{c});
     I{c}(isnan(I{c})) = numel(V{c});
     V{c}              = (V{c}(2:end) + V{c}(1:end-1))/2; % Edge to centre
+    V{c}              = V{c}(:);
     hasnan(c)         = any(isnan(X(:,c)));
     dim(c)            = numel(V{c}) + hasnan(c);
     if hasnan(c)
@@ -130,17 +131,18 @@ else
 end
 linI = uint64(linI);
 clear I
-
 if isscalar(Wi)
     Wi = Wi * ones(size(linI));
 end
 Wi = double(Wi);
-W = spm_hist(linI, Wi, prod(dim)); % TODO: push new spm_hist
+W  = spm_hist(linI, Wi, prod(dim)); % TODO: push new spm_hist
+W  = W(:);
 clear linI Wi
-C = V;
-V = combvec(V{:}); % TODO: combvec belongs to nnet toolbox
-V = V.';
-W = W(:).';
+
+% -------------------------------------------------------------------------
+% Create matrix of multivariate bin centres
+C  = V;
+V  = mycombvec(V{:});
 
 % -------------------------------------------------------------------------
 % Smooth
@@ -181,4 +183,25 @@ if ~p.Results.KeepZero
     empty = W == 0;
     W     = W(~empty);
     V     = V(~empty,:);
+end
+
+function x = mycombvec(varargin)
+% Create all possible combinations of input values.
+%
+% FORMAT x = mycombvec(y1,y2,...,yN)
+% y1,y2,...,yN  must be column vectors
+% x             is an MxN matrix, where M is the number of combinations
+%
+% /!\ It does not have the exact same behaviour as Matlab's combvec.
+%     It is equivalent to: `x = combvec(y1(:)',y2(:)',...)'`
+x = varargin{1}(:);
+varargin = varargin(2:end);
+while ~isempty(varargin)
+    y  = varargin{1}(:);
+    Nx = size(x,1);
+    Ny = size(y,1);
+    x  = repmat(x,  [Ny 1]);
+    y  = repmat(y.', [Nx 1]);
+    x  = [x y(:)];
+    varargin = varargin(2:end);
 end
