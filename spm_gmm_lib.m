@@ -62,12 +62,12 @@ function varargout = spm_gmm_lib(varargin)
 % b   -  1  x K        Mean degrees of freedom         (Gauss prior)
 % V   -  P  x P  x K   Precision scale matrix          (Wishart prior)
 % n   -  1  x K        Precision degrees of freedom    (Wishart prior)
-% E   - [N] x P        Bin variance                    (Histogram GMM) 
+% U   - [N] x P        Uncertainty about observations  (Histogram GMM) 
 % SS0 -  1  x K        Zeroth order sufficient statistics
 % SS1 -  P  x K        First  order sufficient statistics
 % SS2 -  P  x P  x K   Second order sufficient statistics
 % C   -  N  x 1        Code image: one code / missing combination
-% L   -  M  x P        Mask of observed channels per code
+% mask-  M  x P        Mask of observed channels per 'missing code'
 %--------------------------------------------------------------------------
 
 if nargin == 0
@@ -84,12 +84,12 @@ switch lower(id)
 %--------------------------------------------------------------------------
     case 'infermissing'
         [varargout{1:nargout}] = infermissing(varargin{:});
-        % X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {C,L})
+        % X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {code_im,code_list})
         % > Infer missing values (this should only be done once, at the end)
     case 'marginal'
         [varargout{1:nargout}] = marginal(varargin{:});
-        % logp = spm_gmm_lib('Marginal', X, {MU,A},   const, {C, L}, E)
-        % logp = spm_gmm_lib('Marginal', X, {MU,V,n}, const, {C, L}, E)
+        % logp = spm_gmm_lib('Marginal', X, {MU,A},   const, mask, U)
+        % logp = spm_gmm_lib('Marginal', X, {MU,V,n}, const, mask, U)
         % > Observation's marginal log probability within each cluster
     case 'responsibility'
         [varargout{1:nargout}] = responsibility(varargin{:});
@@ -97,21 +97,20 @@ switch lower(id)
         % > Compute & normalise responsibilities (safe softmax)
     case 'suffstat'
         [varargout{1:nargout}] = suffstat(varargin{:});
-        % FORMAT [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', X, Z, W)
-        % FORMAT [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', 'base',  X, Z, W)
-        % FORMAT [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', 'infer', SS0, SS1, SS2, {MU,A}, L)
-        % FORMAT         [SS2] = spm_gmm_lib('SuffStat', 'bin',   E, Z, W, {C,L})
+        % FORMAT [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', X, Z, W, (mask))
+        % FORMAT [SS0,SS1,SS2] = spm_gmm_lib('SuffStat', 'infer', SS0, SS1, SS2, {MU,A}, mask)
+        % FORMAT         [SS2] = spm_gmm_lib('SuffStat', 'uncertainty', U, Z, W, (mask))
         % > Compute sufficient statistics (0th, 1st, 2nd order)
-        %   default: use only non-missing data => E[z], E[z]*x, E[z]*xx'
-        %   'base':  statistics / each config  => E[z], E[z]*g, E[z]*gg'
-        %   'infer': base to full statistics   => E[z], E[z*x], E[z*xx']
-        %   'bin':   binning uncertainty       => Tr(S\cov[gg'])
+        %   default: no missing data            => E[z], E[z]*x, E[z]*xx'
+        %            with mising data           => E[z], E[z]*g, E[z]*gg'
+        %   'infer': base to full statistics    => E[z], E[z*x], E[z*xx']
+        %   'uncertainty': observed uncertainty => Tr(S\cov[gg'])
     case {'normalisation' 'normalization'}
         [varargout{1:nargout}] = normalisation(varargin{:});
-        % const = spm_gmm_lib('Normalisation',  MU,     A,    (L))
-        % const = spm_gmm_lib('Normalisation', {MU,b}, {V,n}, (L))
+        % const = spm_gmm_lib('Normalisation',  MU,     A,    (mask))
+        % const = spm_gmm_lib('Normalisation', {MU,b}, {V,n}, (mask))
         % > Normalisation term of a Gaussian log-distribution
-        %   If L is provided -> marginal distributions
+        %   If mask is provided -> marginal distributions
 %--------------------------------------------------------------------------
 % Update parameters 
 %--------------------------------------------------------------------------
@@ -133,8 +132,8 @@ switch lower(id)
 %--------------------------------------------------------------------------    
     case 'marginalsum'
         [varargout{1:nargout}] = marginalsum(varargin{:});
-        % [lb,const] = spm_gmm_lib('MarginalSum', SS0, SS1, SS2,  MU,     A,    L, SS2b)
-        % [lb,const] = spm_gmm_lib('MarginalSum', SS0, SS1, SS2, {MU,b}, {V,n}, L, SS2b)
+        % [lb,const] = spm_gmm_lib('MarginalSum', SS0, SS1, SS2,  MU,     A,    mask, SS2u)
+        % [lb,const] = spm_gmm_lib('MarginalSum', SS0, SS1, SS2, {MU,b}, {V,n}, mask, SS2u)
         % > Compute conditional datasum: E[ln p(g|MU,A,Z)]
         %   Also returns the result of spm_gmm_lib('const')
     case 'kl'
@@ -152,12 +151,12 @@ switch lower(id)
 %--------------------------------------------------------------------------
     case 'obs2cell'
         [varargout{1:nargout}] = obs2cell(varargin{:}); 
-        % [X,C,L] = spm_gmm_lib('obs2cell', X)
+        % [X,code_im,mask] = spm_gmm_lib('obs2cell', X)
         % > Transform a matrix of observations into a cell of matrices for
         %   each missing pattern.
     case 'cell2obs'
         [varargout{1:nargout}] = cell2obs(varargin{:}); 
-        % X = spm_gmm_lib('cell2obs', X, C, L)
+        % X = spm_gmm_lib('cell2obs', X, code_im, mask)
         % > Create a matrix of observations from a cell of matrices.
 %--------------------------------------------------------------------------
 % Visualisation 
@@ -167,7 +166,7 @@ switch lower(id)
         % spm_gmm_lib('Plot', 'LB', lb)
         % > Plot lower bound
         %
-        % spm_gmm_lib('Plot', 'GMM', {X,W}, {MU,A}, PI)
+        % spm_gmm_lib('Plot', 'GMM', X, W, mask, {MU,A}, PI)
         % > Plot mixture fit
         %
         % spm_gmm_lib('plot', 'cat', dm, Z, Template, (wintitle))
