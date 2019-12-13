@@ -498,7 +498,7 @@ for em=1:iter_max
                     case 0,     incr = '(=)';
                     otherwise,  incr = '';
                 end
-                fprintf('%-5s | %4d | lb = %-10.6g | gain = %-10.4g | %3s\n', 'sub', i, LB(i+1), subgain, incr);
+                fprintf('%-5s | %4d | lb = %-12.6g | gain = %-10.4g | %3s\n', 'sub', i, LB(i+1), subgain, incr);
             end
             if subgain < subtolerance
                 break
@@ -612,7 +612,7 @@ if verbose >= 1
         case  0,    incr = '(=)';
         otherwise,  incr = '';
     end
-    fprintf('%-5s | %4d | lb = %-10.6g | gain = %-10.4g | %3s\n', 'gmm', em, lb.sum(end), gain, incr);
+    fprintf('%-5s | %4d | lb = %-12.6g | gain = %-10.4g | %3s\n', 'gmm', em, lb.sum(end), gain, incr);
 end
 gain = abs(gain);
 
