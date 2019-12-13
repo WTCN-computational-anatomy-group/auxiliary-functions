@@ -2406,8 +2406,8 @@ for p=1:P
     % GMM Density
     for k=1:K
         x = linspace(MU(p,k)-3*A(p,p,k)^(-0.5),MU(p,k)+3*A(p,p,k)^(-0.5),100);
-        y = PI(k)*normal_pdf(x, MU(p,k), A(p,p,k)^(-1));
-        plot(x, y', 'Color', colors(lkp(k),:), 'LineWidth', 1)
+        y = PI(k)*spm_Npdf(x, MU(p,k), A(p,p,k)^(-1));
+        plot(x, y, 'Color', colors(lkp(k),:), 'LineWidth', 1)
         xlims = [min([xlims(1) x]) max([xlims(2) x])];
     end
     xlabel(sprintf('x%d',p))
@@ -2432,7 +2432,7 @@ for p=1:P
             Sigma   = sqrt(Sigma2);
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');            
-            y = normal_pdf([x1(:) x2(:)], Mu1, Sigma2);
+            y = spm_mvNpdf([x1(:) x2(:)]', Mu1, Sigma2);
             contour(x2, x1, reshape(y, [100 100])', 1, 'color', colors(lkp(k),:), 'LineWidth', 1);
         end
         xlabel(sprintf('x%d',p))
@@ -2508,8 +2508,8 @@ for p=1:P
     % GMM Density
     for k=1:K
         x = linspace(MU(p,k)-3*A(p,p,k)^(-0.5),MU(p,k)+3*A(p,p,k)^(-0.5),100);        
-        y = 1/K*normal_pdf(x, MU(p,k), A(p,p,k)^(-1));
-        plot(x, y', 'Color', colors(lkp(k),:), 'LineWidth', 1)
+        y = 1/K*spm_Npdf(x, MU(p,k), A(p,p,k)^(-1));
+        plot(x, y, 'Color', colors(lkp(k),:), 'LineWidth', 1)
         xlims = [min([xlims(1) x]) max([xlims(2) x])];
     end
     xlabel(sprintf('x%d',p))
@@ -2529,7 +2529,8 @@ for p=1:P
             Sigma   = sqrt(Sigma2);
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');            
-            y = normal_pdf([x1(:) x2(:)], Mu1, Sigma2);
+            Sigma2(1,2) = Sigma2(2,1); % Make sure symmetric, spm_mvNpdf complains otherwise - but it is just numerical accuracy
+            y = spm_mvNpdf([x1(:) x2(:)]', Mu1, Sigma2);
             contour(x2, x1, reshape(y, [100 100])', 1, 'color', colors(lkp(k),:), 'LineWidth', 1);
         end
         xlabel(sprintf('x%d',p))
@@ -2961,26 +2962,4 @@ function gain = get_gain(vals)
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 vals = vals(:);
 gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));   
-%==========================================================================
-
-%==========================================================================
-function y = normal_pdf(x,m,Sigma)
-% FORMAT y = normal_pdf(x,m,Sigma)
-% Probability density function (PDF) of normal distribution.
-%__________________________________________________________________________
-% Copyright (C) 2019 Wellcome Trust Centre for Neuroimaging
-
-nd = size(Sigma,1); % number of dimensions
-sz = size(x);
-if sz(2) ~= nd, x = x'; end
-sz = size(m);
-if sz(2) ~= nd, m = m'; end
-
-xm = x - m;
-if nd > 1
-    y  = det(2*pi*Sigma)^(-0.5)*exp(-0.5*dot(xm',Sigma\(xm')));
-else
-    sd = sqrt(Sigma);
-    y  = 1/(sd*sqrt(2*pi))*exp((-0.5/sd^2)*xm.^2);
-end
 %==========================================================================
