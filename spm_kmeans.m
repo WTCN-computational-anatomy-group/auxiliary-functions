@@ -253,6 +253,7 @@ function [C,K] = start(method, X, WW, K, dist, r)
 % method - Method to use to select starting centroids
 %               'plus', 'sample', 'uniform' or provided matrix
 % X      - Vector of NxP observed values
+% WW     - 
 % K      - Number of clusters
 % dist   - Distance function handle
 % r      - Replicate index

@@ -75,7 +75,6 @@ function varargout = spm_gmm(X, varargin)
 % P: Dimension of observation space
 % K: Number of clusters
 
-
 % -------------------------------------------------------------------------
 % Special case: Apply model
 % > Here, we use a learned GMM to segment an image
@@ -101,7 +100,7 @@ p.addParameter('IterMax',    1000,          @(X) isscalar(X) && isnumeric(X));
 p.addParameter('Tolerance',  1e-4,          @(X) isscalar(X) && isnumeric(X));
 p.addParameter('BinWidth',   0,             @isnumeric);
 p.addParameter('InputDim',   0,             @(X) isscalar(X) && isnumeric(X));
-p.addParameter('Verbose',    0,             @(X) isscalar(X) && (isnumeric(X) || islogical(X)));
+p.addParameter('Verbose',    0,             @(X) (numel(X) <= 2) && (isnumeric(X) || islogical(X)));
 p.parse(X, varargin{:});
 W          = p.Results.W;
 K          = p.Results.K;
@@ -136,7 +135,6 @@ end
 % default value
 if K == 0, K = 2; end
         
-
 % -------------------------------------------------------------------------
 % Proportion / Dirichlet
 if size(PropPrior, 1) > 1
@@ -148,7 +146,7 @@ else
     % Dirichlet prior
     a0              = PropPrior(:)';
     if numel(a0) < K
-        a0          = padarray(a0, [0 K - numel(a0)], 'replicate', 'post');
+        a0          = spm_padarray(a0, [0 K - numel(a0)], 'replicate', 'post');
     end
     PI              = [];
     logPI           = [];
@@ -166,40 +164,9 @@ X  = reshape(X, [], P);
 N  = size(X, 1); % Number of observations
 N0 = N;          % Original number of observations
 
-
 % -------------------------------------------------------------------------
 % Reshape W (weights)
 W = W(:);
-
-% -------------------------------------------------------------------------
-% Prepare missing data stuff (code image, mask, ...)
-if ~any(any(isnan(X)))
-    Missing = false;
-end
-if Missing
-    % Deal with missing data
-    code      = spm_gmm_lib('obs2code', X);     % Code image
-    code_list = unique(code);                   % List of codes
-    missmsk   = [];
-else
-    % Compute mask of removed rows
-    missmsk   = any(isnan(X),2);
-    code      = spm_gmm_lib('double2int', (2^P-1) * ones(sum(~missmsk),1));
-    code_list = 2^P-1;
-end
-% Discard rows with missing values
-if ~isempty(missmsk)
-    X         = X(~missmsk,:);
-    if size(W,1) > 1
-        W     = W(~missmsk);
-    end
-    if size(PI,1) > 1
-        PI0   = PI(missmsk,:);
-        PI    = PI(~missmsk,:);
-    end
-    N         = sum(~missmsk);
-end
-missmsk = find(missmsk); % saves a bit of memory
 
 % -------------------------------------------------------------------------
 % "Bin" variance
@@ -207,7 +174,7 @@ missmsk = find(missmsk); % saves a bit of memory
 % binning. Here, we assume some kind of uniform distribution inside the bin
 % and consequently add the corresponding variance to the 2nd order moment.
 if numel(E) < P
-    E = padarray(E, [0 P - numel(E)], 'replicate', 'post');
+    E = spm_padarray(E, [0 P - numel(E)], 'replicate', 'post');
 end
 E = (E.^2)/12;
 
@@ -215,7 +182,7 @@ E = (E.^2)/12;
 % Initialise Gauss-Wishart prior
 [MU0,b0,V0,n0] = initialise_prior(GaussPrior, K, P);
 pr = struct('MU', MU0, 'b', b0, 'V', V0, 'n', n0);
-    
+
 % -------------------------------------------------------------------------
 % Initialise mixture
 [~, MU, b, A, V, n, PI00,logPI00] = start(Start, X, W, K, a0, pr, KMeans);
@@ -224,6 +191,42 @@ if isempty(PI)
     logPI = logPI00;
 end
 clear PI00 logPI00
+
+% -------------------------------------------------------------------------
+% Prepare missing data stuff (code image, mask, ...)
+if ~any(any(isnan(X)))
+    Missing = false;
+end
+if Missing
+    % Deal with missing data
+    [X,code_image,msk_obs] = spm_gmm_lib('obs2cell', X);
+    if size(W,1) > 1
+        W = spm_gmm_lib('obs2cell', W, code_image, false);
+    end
+    if size(PI,1) > 1
+        PI = spm_gmm_lib('obs2cell', PI, code_image, false);
+    end
+    if size(E,1) > 1
+        E = spm_gmm_lib('obs2cell', E, code_image, true);
+    end
+    missmsk = [];
+else
+    % Discard rows with missing values
+    missmsk = any(isnan(X),2);
+    if ~isempty(missmsk)
+        X         = X(~missmsk,:);
+        if size(W,1) > 1
+            W     = W(~missmsk);
+        end
+        if size(PI,1) > 1
+            PI0   = PI(missmsk,:);
+            PI    = PI(~missmsk,:);
+        end
+        N         = sum(~missmsk);
+    end
+    missmsk = find(missmsk); % saves a bit of memory
+    msk_obs = logical([]);
+end
 
 % -------------------------------------------------------------------------
 % Default prior mean/precision if needed
@@ -254,17 +257,16 @@ else,          prec = {A};       end
 
 % -------------------------------------------------------------------------
 % MAIN LOOP
-[Z,cluster,prop] = spm_gmm_loop({X,W}, {mean,prec}, ...
+[Z,cluster,prop] = spm_gmm_lib('loop', X, W, {mean,prec}, ...
     {'LogProp', logPI, 'Prop', PI}, ...
     'GaussPrior',     {MU0, b0, V0, n0}, ...
     'PropPrior',      a0, ...
-    'Missing',        Missing, ...
-    'MissingCode',    {code,code_list}, ...
+    'Missing',        msk_obs, ...
     'IterMax',        p.Results.IterMax, ...
     'Tolerance',      p.Results.Tolerance, ...
     'SubIterMax',     p.Results.IterMax, ...
     'SubTolerance',   p.Results.Tolerance, ...
-    'BinUncertainty', E, ...
+    'ObsUncertainty', E, ...
     'Verbose',        p.Results.Verbose);
 
 MU = cluster.MU;
@@ -277,9 +279,21 @@ a  = prop.Dir;
 % -------------------------------------------------------------------------
 
 % -------------------------------------------------------------------------
+% Cell 2 Matrix
+if Missing
+    Z = spm_gmm_lib('cell2obs', Z, code_image, msk_obs);
+    if size(PI,1) > 1 && nargout >= 4
+        PI = spm_gmm_lib('cell2obs', PI, code_image, msk_obs);
+    end
+    if nargout >= 9
+        X = spm_gmm_lib('cell2obs', X, code_image, msk_obs);
+    end
+end
+
+% -------------------------------------------------------------------------
 % Infer missing values
 if nargout >= 9 && Missing
-    X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {code,code_list});
+    X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, code_image);
 end
 
 % -------------------------------------------------------------------------
@@ -394,7 +408,7 @@ K = size(MU,2);
 % Proportions/Dirichlet
 if numel(PI) <= K
     PI = PI(:)';
-    PI = padarray(PI, [0 K - numel(PI)], 'replicate', 'post');
+    PI = spm_padarray(PI, [0 K - numel(PI)], 'replicate', 'post');
     
     if abs(sum(PI)-1) > eps('single')
         % Dirichlet prior
@@ -430,24 +444,21 @@ if ~any(any(isnan(X)))
 end
 if Missing
     % Deal with missing data
-    code      = spm_gmm_lib('obs2code', X);     % Code image
-    code_list = unique(code);                   % List of codes
-    missmsk   = [];
-else
-    % Compute mask of removed rows
-    missmsk   = any(isnan(X),2);
-    code      = spm_gmm_lib('double2int', (2^P-1) * ones(sum(~missmsk),1));
-    code_list = 2^P-1;
-end
-% Discard rows with missing values
-if ~isempty(missmsk)
-    X         = X(~missmsk,:);
-    if size(logPI,1) > 1
-        logPI = logPI(~missmsk,:);
+    [X,code_image,msk_obs] = spm_gmm_lib('obs2cell', X);
+    if size(E,1) > 1
+        E = spm_gmm_lib('obs2cell', E, code_image, true);
     end
-    N         = sum(~missmsk);
+    missmsk = [];
+else
+    % Discard rows with missing values
+    missmsk = any(isnan(X),2);
+    if ~isempty(missmsk)
+        X         = X(~missmsk,:);
+        N         = sum(~missmsk);
+    end
+    missmsk = find(missmsk); % saves a bit of memory
+    msk_obs = [];
 end
-missmsk = find(missmsk); % saves a bit of memory
 
 % -------------------------------------------------------------------------
 % "Bin" variance
@@ -455,18 +466,14 @@ missmsk = find(missmsk); % saves a bit of memory
 % binning. Here, we assume some kind of uniform distribution inside the bin
 % and consequently add the corresponding variance to the 2nd order moment.
 if numel(E) < P
-    E = padarray(E, [0 P - numel(E)], 'replicate', 'post');
+    E = spm_padarray(E, [0 P - numel(E)], 'replicate', 'post');
 end
 E = (E.^2)/12;
 
 % -------------------------------------------------------------------------
 % Compute marginal log-likelihood
-if Missing
-    const = spm_gmm_lib('Const', mean, prec, code_list);
-else
-    const  = spm_gmm_lib('Const', mean, prec);
-end
-logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, {code,code_list}, E);
+const = spm_gmm_lib('Normalisation', mean, prec, msk_obs);
+logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, msk_obs, E);
 
 % -------------------------------------------------------------------------
 % Compute responsibilities
@@ -474,9 +481,18 @@ Z = spm_gmm_lib('Responsibility', logpX, logPI);
 clear logpX logPI
  
 % -------------------------------------------------------------------------
+% Cell 2 Matrix
+if Missing
+    Z = spm_gmm_lib('cell2obs', Z, code_image, msk_obs);
+    if nargout >= 2
+        X = spm_gmm_lib('cell2obs', X, code_image, msk_obs);
+    end
+end
+
+% -------------------------------------------------------------------------
 % Infer missing values
 if nargout >= 2 && Missing
-    X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, {code,code_list});
+    X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, code_image);
 end
  
 % -------------------------------------------------------------------------
@@ -1127,7 +1143,7 @@ if numel(method) >= 2 || ~any(strcmpi(method{1}, {'kmeans','prior'}))
         A = diag(((maxval - minval)./(2*K)).^(-2));
     end
     if size(A,3) < K
-        A = padarray(A, [0 0 K-size(A,3)], 'replicate', 'post');
+        A = spm_padarray(A, [0 0 K-size(A,3)], 'replicate', 'post');
     end
     if size(A,1) == 1
         A = bsxfun(@times, A, eye(size(X,2)));
@@ -1202,7 +1218,7 @@ end
 if ~isempty(b)
     b = b(:)';
     if numel(b) < K
-        b = padarray(b, [0 K - numel(b)], 'replicate', 'post');
+        b = spm_padarray(b, [0 K - numel(b)], 'replicate', 'post');
     end
 end
 % -------------------------------------------------------------------------
@@ -1223,14 +1239,14 @@ end
 if ~isempty(n)
     n = n(:)';
     if numel(n) < K
-        n = padarray(n, [0 K - numel(n)], 'replicate', 'post');
+        n = spm_padarray(n, [0 K - numel(n)], 'replicate', 'post');
     end
 end
 % -------------------------------------------------------------------------
 % Scale [default]
 if ~isempty(V)
     if size(V,3) < K
-        V = padarray(V, [0 0 K - size(V,3) ], 'replicate', 'post');
+        V = spm_padarray(V, [0 0 K - size(V,3) ], 'replicate', 'post');
     end
     if size(V,1) == 1
         V = bsxfun(@times, V, eye(P));
