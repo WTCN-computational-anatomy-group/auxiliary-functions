@@ -2876,11 +2876,12 @@ function A = inv_stable(A)
 % Eigendecomposition is used to compute a more stable inverse.
 %__________________________________________________________________________
 % Copyright (C) 2017 Wellcome Trust Centre for Neuroimaging
+I           = eye(size(A,1));
+opts        = struct;
 opts.POSDEF = true;
-opts.SYM = true;
-I = eye(size(A,1));
-A = linsolve(A, I, opts);
-A = (A + A.')/2;
+opts.SYM    = true;
+A           = linsolve(A, I, opts);
+A           = (A + A.')/2;
 
 % === wishart_elogdet =====================================================
 function out = wishart_elogdet(V, n, mode)
