@@ -845,7 +845,6 @@ for j=1:numel(varargin)
     for i=1:numel(Z)
         if iscell(Zj), Zji = Zj{i};
         else,          Zji = Zj;   end
-        Zji  = spm_arrayset('nan', Zji, single(0)); % Do we really need that?
         Z{i} = bsxfun(@plus, Z{i}, Zji);
     end
 end
