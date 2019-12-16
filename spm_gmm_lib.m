@@ -754,6 +754,7 @@ P     = size(MU,1);
 K     = size(MU,2);
 logpX = cell(1,numel(X));
 if nargin < 5, E = zeros(1,P); end
+if isscalar(E), E = E*ones(1,P); end
 
 % -------------------------------------------------------------------------
 % For each combination of missing voxels
