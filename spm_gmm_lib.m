@@ -247,6 +247,8 @@ function [Z,cluster,prop,lb] = loop(X, weights, cluster, props, varargin)
 %                                    1 = write (lower bound)
 %                                    2 = plot (lower bound)
 %                                    3 = plot more (gmm fit)
+% Labels         - {NoxK} Log of voxel-wise labels (from, e.g., manual
+%                  segmentations) [[]]
 % 
 % OUTPUT
 % ------
@@ -276,6 +278,7 @@ p.addParameter('SubIterMax',     1024,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('SubTolerance',   1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('ObsUncertainty', 0,     @(X) isnumeric(X) || iscell(X));
 p.addParameter('Verbose',        0,     @(X) isnumeric(X) || islogical(X));
+p.addParameter('Labels',         [],    @(X) isnumeric(X) || iscell(X));
 p.parse(varargin{:});
 lb              = p.Results.LowerBound;
 Z               = p.Results.Resp;
@@ -288,6 +291,7 @@ tolerance       = p.Results.Tolerance;
 subiter_max     = p.Results.SubIterMax;
 subtolerance    = p.Results.SubTolerance;
 verbose         = p.Results.Verbose;
+labels          = p.Results.Labels;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -401,7 +405,7 @@ for em=1:iter_max
     
     % ---------------------------------------------------------------------
     % Compute responsibilities
-    Z = responsibility(logpX, log_prop);
+    Z = responsibility(logpX, log_prop, labels);
     clear logpX
     
     % ---------------------------------------------------------------------
@@ -552,7 +556,7 @@ for em=1:iter_max
     % ---------------------------------------------------------------------
     % Compute lower bound
     lb.P(end+1) = kl_dirichlet(prop_posterior, prop_prior);
-    lb.Z(end+1) = kl_categorical(Z, weights, log_prop);
+    lb.Z(end+1) = kl_categorical(Z, weights, log_prop, labels);
     if isempty(obs_channels)
         [lb.MU(end+1),lb.A(end+1)] = kl_gausswishart({MU,b}, prec, {MU0,b0}, {V0,n0});
         lb.X(end+1) = sum(sum(bsxfun(@times, logpX, bsxfun(@times, Z, weights)),2),'double');
@@ -842,10 +846,12 @@ Z = cell(1,numel(varargin{1}));
 [Z{:}] = deal(0);
 for j=1:numel(varargin)
     Zj = varargin{j};
-    for i=1:numel(Z)
-        if iscell(Zj), Zji = Zj{i};
-        else,          Zji = Zj;   end
-        Z{i} = bsxfun(@plus, Z{i}, Zji);
+    if ~isempty(Zj)
+        for i=1:numel(Z)
+            if iscell(Zj), Zji = Zj{i};
+            else,          Zji = Zj;   end
+            Z{i} = bsxfun(@plus, Z{i}, Zji);
+        end
     end
 end
 
@@ -1902,7 +1908,7 @@ function varargout = kl(varargin)
 % klP = spm_gmm_lib('kl', 'Dirichlet', a, a0)
 % > KL divergence between two Dirichlet distributions
 %
-% klZ = spm_gmm_lib('kl', 'Categorical', Z, W, logPI)
+% klZ = spm_gmm_lib('kl', 'Categorical', Z, W, logPI, labels)
 % > KL divergence between two Categorical distributions
 
 if nargin == 0
@@ -1924,7 +1930,7 @@ switch lower(id)
 end
 
 % =========================================================================
-function klZ = kl_categorical(Z, W, logPI)
+function klZ = kl_categorical(Z, W, logPI, labels)
 
 if ~iscell(Z)
     Z = {Z};
@@ -1937,6 +1943,12 @@ for i=1:numel(Z)
     Z1 = Z{i};
     if iscell(W), W1 = W{i}; else, W1 = W; end
     if iscell(logPI), logPI1 = logPI{i}; else, logPI1 = logPI; end
+    if iscell(labels), labels1 = labels{i}; else, labels1 = labels; end
+    
+    if ~isempty(labels1)
+        % E[ln p(Z|labels)]
+        klZ = klZ + sum(sum(bsxfun(@times,Z1,labels1), 2) .* W1, 'double');
+    end
     
     % E[ln p(Z|PI)] (prior ~ responsibilities)
     klZ = klZ + sum(sum(bsxfun(@times,Z1,logPI1), 2) .* W1, 'double');
