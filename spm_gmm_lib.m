@@ -2894,14 +2894,18 @@ function A = inv_stable(A)
 % opts.SYM    = true;
 % A           = linsolve(A, I, opts);
 % A           = (A + A.')/2;
-[V,D] = eig(A); 
-if any(diag(D) <= 0) 
-    warning('[spm_gmm_lib::inv_stable] Matrix has negative eigenvalues') 
-    D(D <= 0) = eps; % Threshold negative eigenvalues 
-end 
-D     = loaddiag(D); 
-A     = real(V * (D \ V')); 
-A     = (A+A.')/2; 
+% [V,D] = eig(A); 
+% if any(diag(D) <= 0) 
+%     warning('[spm_gmm_lib::inv_stable] Matrix has negative eigenvalues') 
+%     D(D <= 0) = eps; % Threshold negative eigenvalues 
+% end 
+% D     = loaddiag(D); 
+% A     = real(V * (D \ V')); 
+% A     = (A+A.')/2; 
+[V,D] = eig(A);
+D     = max(diag(D), eps);
+A     = real(V * bsxfun(@ldivide, D, V'));
+A     = 0.5*(A + A.'); % Ensure symetric inverse
 
 % === wishart_elogdet =====================================================
 function out = wishart_elogdet(V, n, mode)
