@@ -1000,7 +1000,7 @@ for i=1:size(L,1)
     if nargout == 1, return; end
 
     % ---------------------------------------------------------------------
-    % 1st and (stable) 2nd order moments
+    % 1st and 2nd order moments
     SS1{i} = zeros(Po,K);
     SS2{i} = zeros(Po,Po,K);
     for k=1:K
