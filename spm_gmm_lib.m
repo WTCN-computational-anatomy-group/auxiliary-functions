@@ -710,7 +710,7 @@ for i=1:numel(L)
         X1k = bsxfun(@plus,X1k,MU(im,k).');
         X1k = bsxfun(@plus,X1k,bsxfun(@minus, MU(io,k).', X(msk,io)) * (A(io,im,k) / A(im,im,k)));
         if sample
-            Smk = inv_stable(A(im,im,k));
+            Smk = inv(A(im,im,k));
             X1k = X1k + mvnrnd(zeros(1,Pm),Smk,Nm);
         end
         X(msk,im) = X(msk,im) + bsxfun(@times, X1k, Z(msk,k));
@@ -793,10 +793,10 @@ for i=1:size(L,1)
         %      Multivariate Analysis, 1st edition. Academic Press.
 
         if sum(n) > 0
-            Ao = V(io,io,k) - V(io,im,k)*(inv_stable(V(im,im,k))*V(im,io,k));
+            Ao = V(io,io,k) - V(io,im,k)*(inv(V(im,im,k))*V(im,io,k));
             Ao = (n(k)-Pm) * Ao;
         else
-            Ao = A(io,io,k) - A(io,im,k)*(inv_stable(A(im,im,k))*A(im,io,k));
+            Ao = A(io,io,k) - A(io,im,k)*(inv(A(im,im,k))*A(im,io,k));
         end
         
         % Quadratic term in observed values: (obs-mean) x (obs-mean)
@@ -1000,20 +1000,21 @@ for i=1:size(L,1)
     if nargout == 1, return; end
 
     % ---------------------------------------------------------------------
-    % 1st order moment
-    SS1{i} = sum(bsxfun(@times, X{i}, reshape(Z{i}, [Nm 1 K])), 1, 'double');
-    SS1{i} = reshape(SS1{i}, [Po K]);
-    if nargout == 2, return; end
-
-    % ---------------------------------------------------------------------
-    % 2nd order moment
+    % 1st and (stable) 2nd order moments
+    SS1{i} = zeros(Po,K);
     SS2{i} = zeros(Po,Po,K);
-    for k=1:Po
-        Xk = X{i}(:,k);
-        SS2{i}(k,k,:) = reshape(sum(bsxfun(@times, Z{i}, Xk.^2),1, 'double'), [1 1 K]);
-        for j=k+1:Po
-            SS2{i}(k,j,:) = reshape(sum(bsxfun(@times, Z{i}, Xk.*X{i}(:,j)),1, 'double'), [1 1 K]);
-            SS2{i}(j,k,:) = SS2{i}(k,j,:);
+    for k=1:K
+        zk = double(Z{i}(:,k));
+        for m=1:Po
+            xm  = double(X{i}(:,m));
+            zx  = zk.*xm;
+            SS1{i}(m,k)   = sum(zx);
+            SS2{i}(m,m,k) = sum(zx.*xm);
+            for m1=(m+1):Po
+                xm  = double(X{i}(:,m1));
+                SS2{i}(m,m1,k) = sum(zx.*xm);
+                SS2{i}(m1,m,k) = SS2{i}(m,m1,k);
+            end
         end
     end
 end
@@ -1065,7 +1066,7 @@ for i=1:size(L,1)
             SS1k = lSS1{i}(:,k);
             MUo  = MU(io,k);
             MUm  = MU(im,k);
-            SA   = inv_stable(A(im,im,k)) * A(im,io,k);
+            SA   = inv(A(im,im,k)) * A(im,io,k);
             
             % 1) observed
             SS1(io,k) = SS1(io,k) + SS1k;
@@ -1104,7 +1105,7 @@ for i=1:size(L,1)
     
             % 4) uncertainty ~ missing
             SS2(im,im,k) = SS2(im,im,k) ...
-                + SS0k * inv_stable(A(im,im,k));
+                + SS0k * inv(A(im,im,k));
         end
     end
 end
@@ -1290,7 +1291,7 @@ if nargin == 3 && ~isempty(L) && ~all(L(:)==1)
         im = ~io;                   % Missing channels
         Pm = sum(im);               % Number of missing channels
         for k=1:K
-            Vo = V(io,io,k) - V(io,im,k)*(inv_stable(V(im,im,k))*V(im,io,k));
+            Vo = V(io,io,k) - V(io,im,k)*(inv(V(im,im,k))*V(im,io,k));
             c(i,k) = - 0.5 * Po * log(2*pi);
             if sum(n) > 0
                 no = n(k) - Pm;
@@ -1393,12 +1394,12 @@ else
     for k=1:K
         SS2(:,:,k) = SS2(:,:,k) +   b0(k) * MU0(:,k) * MU0(:,k).' ...
                                 -    b(k) * MU(:,k)  * MU(:,k).' ...
-                                + inv_stable(V0(:,:,k));
+                                + inv(V0(:,:,k));
     end
 end
 V = SS2;
 for k=1:K
-    V(:,:,k) = inv_stable( V(:,:,k));
+    V(:,:,k) = inv( V(:,:,k));
 end
 if sum(n) > 0
     A = bsxfun(@times, V, reshape(n, [1 1 K]));
@@ -1613,7 +1614,7 @@ else
                 p0 = p0 + S*n0(k);
                 for s=1:S
                     [~,~,W,n] = get_posteriors(cluster,s);
-                    V0 = V0 + inv_stable( n(k)*W(:,:,k));
+                    V0 = V0 + inv( n(k)*W(:,:,k));
                 end
             end
             p0 = p0/K;
@@ -1650,9 +1651,9 @@ else
                 % ---------------------------------------------------------
                 % Update {p,V} for W0 (posterior, closed form)
                 p(k)       = p0 + S*n0(k);
-                V(:,:,k)   = inv_stable( inv_stable( V0) + Lambda);
+                V(:,:,k)   = inv( inv( V0) + Lambda);
                 % Useful values
-                W0(:,:,k)   = inv_stable( wishart_e(V(:,:,k), p(k)));
+                W0(:,:,k)   = inv( wishart_e(V(:,:,k), p(k)));
                 LogDetW0(k) = -wishart_elogdet(V(:,:,k), p(k));
                 % ---------------------------------------------------------
 
@@ -1879,10 +1880,10 @@ for i=1:size(L,1)
         % Bayesian case:
         %   inv(S(o,o)) ~ W(V(o,o) - V(o,m)*V(m,m)\V(m,o), n - Pm)
         if sum(n) > 0
-            Ao = V(io,io,k) - V(io,im,k)*(inv_stable(V(im,im,k))*V(im,io,k));
+            Ao = V(io,io,k) - V(io,im,k)*(inv(V(im,im,k))*V(im,io,k));
             Ao = (n(k)-Pm) * Ao;
         else
-            Ao = A(io,io,k) - A(io,im,k)*(inv_stable(A(im,im,k))*A(im,io,k));
+            Ao = A(io,io,k) - A(io,im,k)*(inv(A(im,im,k))*A(im,io,k));
         end
         
         % 1) obs x mean
@@ -2440,7 +2441,7 @@ for p=1:P
         hold on
         for k=1:K
             Mu1     = MU([1 p],k);
-            Sigma2  = inv_stable( A([1 p],[1 p],k));
+            Sigma2  = inv( A([1 p],[1 p],k));
             Sigma   = sqrt(Sigma2);
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');            
@@ -2537,7 +2538,7 @@ for p=1:P
         hold on
         for k=1:K
             Mu1     = MU([1 p],k);
-            Sigma2  = inv_stable( A([1 p],[1 p],k));
+            Sigma2  = inv( A([1 p],[1 p],k));
             Sigma   = sqrt(Sigma2);
             [x1,x2] = meshgrid(linspace(Mu1(1)-3*Sigma(1,1),Mu1(1)+3*Sigma(1,1),100)', ...
                                linspace(Mu1(2)-3*Sigma(2,2),Mu1(2)+3*Sigma(2,2),100)');            
