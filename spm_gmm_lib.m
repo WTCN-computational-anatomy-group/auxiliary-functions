@@ -1054,13 +1054,21 @@ if nargout > 1
     end
 end
 
-for i=1:size(L,1)
-    io = L(i,:);                % Observed channels
-    Po = sum(io);               % Number of observed channels
-    if Po == 0, continue; end
-    im = ~io;                   % Missing channels
+for k=1:K
+    if nargout > 1
+        ss1 = SS1(:,k);
+        Ak  = A(:,:,k);
+        if nargout > 2
+            ss2 = SS2(:,:,k);
+        end
+    end
+
+    for i=1:size(L,1)
+        io = L(i,:);                % Observed channels
+        Po = sum(io);               % Number of observed channels
+        if Po == 0, continue; end
+        im = ~io;                   % Missing channels
     
-    for k=1:K
         % -----------------------------------------------------------------
         % 0th order moment
         SS0k   = lSS0{i}(k);
@@ -1072,15 +1080,15 @@ for i=1:size(L,1)
             SS1k = lSS1{i}(:,k);
             MUo  = MU(io,k);
             MUm  = MU(im,k);
-            SA   = A(im,im,k)\A(im,io,k);
+            SA   = Ak(im,im)\Ak(im,io);
             
             % 1) observed
-            SS1(io,k) = SS1(io,k) + SS1k;
+            ss1(io) = ss1(io) + SS1k;
         
             % 2) missing
             % > t = mu(m) + A(m,m) \ A(m,o) * (mu(o) - g)
-            SS1(im,k) = SS1(im,k) + SS0k * MUm;
-            SS1(im,k) = SS1(im,k) + SA * (SS0k * MUo - SS1k);
+            ss1(im) = ss1(im) + SS0k * MUm;
+            ss1(im) = ss1(im) + SA * (SS0k * MUo - SS1k);
         end
         
         if nargout > 2
@@ -1095,24 +1103,32 @@ for i=1:size(L,1)
             GMUm  = SS1k * MUm.';
         
             % 1) observed x observed
-            SS2(io,io,k) = SS2(io,io,k) + SS2k;
+            ss2(io,io) = ss2(io,io) + SS2k;
             
             % 2) missing x observed
-            tmp = GMUm.' + SA * (GMUo.' - SS2k);
-            SS2(im,io,k) = SS2(im,io,k) + tmp;
-            SS2(io,im,k) = SS2(io,im,k) + tmp.';
+            tmp        = GMUm.' + SA * (GMUo.' - SS2k);
+            ss2(im,io) = ss2(im,io) + tmp;
+            ss2(io,im) = ss2(io,im) + tmp.';
             
             % 3) missing x missing
-            SS2(im,im,k) = SS2(im,im,k) + MUMUm;
-            tmp = SA * (SS0k * MUo - SS1k) * MUm.';
-            SS2(im,im,k) = SS2(im,im,k) + tmp + tmp';
-            SS2(im,im,k) = SS2(im,im,k) ...
+            ss2(im,im) = ss2(im,im) + MUMUm;
+            tmp        = SA * (SS0k * MUo - SS1k) * MUm.';
+            ss2(im,im) = ss2(im,im) + tmp + tmp';
+            ss2(im,im) = ss2(im,im) ...
                 + SA * (SS2k + MUMUo - GMUo.' - GMUo) * SA.';
     
             % 4) uncertainty ~ missing
-            SS2(im,im,k) = SS2(im,im,k) + SS0k*inv(A(im,im,k));
+            ss2(im,im) = ss2(im,im) + SS0k*inv(Ak(im,im));
         end
     end
+
+    if nargout > 1
+        SS1(:,k) = ss1;
+        if nargout > 2
+            SS2(:,:,k) = ss2;
+        end
+    end
+
 end
 
 % =========================================================================
