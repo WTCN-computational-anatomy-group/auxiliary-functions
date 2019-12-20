@@ -436,7 +436,7 @@ for em=1:iter_max
         LB             = NaN(1,subiter_max);
         LB(1)          = LMU + LA + LX;
         for i=1:subiter_max
-            
+            if false
             % -------------------------------------------------------------
             % Save previous value
             MUp     = MU;
@@ -444,30 +444,35 @@ for em=1:iter_max
             Vp      = V;
             bp      = b;
             np      = n;
-            
-            % -------------------------------------------------------------
-            % Infer missing suffstat
-            % sum{E[z]}, sum{E[z*x]}, sum{E[z*xx']}
-            [SS0,SS1,SS2] = suffstat_infer(SS0m, SS1m, SS2m, {MU,A}, obs_channels);
-            SS2 = SS2 + SS2u;
+            end
 
-            % -------------------------------------------------------------
-            % Update GMM
-            [MU,A,b,V,n] = updateclusters(SS0, SS1, SS2, [mean0 prec0]);
-            for k=1:size(MU,2)
-                [~,cholp] = chol(A(:,:,k));
-                if cholp ~= 0
-                    A(:,:,k) = Ap(:,:,k);
-                    if sum(n) > 0
-                        V(:,:,k) = Vp(:,:,k);
-                        n(k)     = np(k);
+            if numel(SS0m)==1, subsubiter_max = 1; else subsubiter_max = 5; end
+
+            for ii=1:subsubiter_max
+                % -------------------------------------------------------------
+                % Infer missing suffstat
+                % sum{E[z]}, sum{E[z*x]}, sum{E[z*xx']}
+                [SS0,SS1,SS2] = suffstat_infer(SS0m, SS1m, SS2m, {MU,A}, obs_channels);
+                SS2 = SS2 + SS2u;
+
+                % -------------------------------------------------------------
+                % Update GMM
+                [MU,A,b,V,n] = updateclusters(SS0, SS1, SS2, [mean0 prec0]);
+                for k=1:size(MU,2)
+                    [~,cholp] = chol(A(:,:,k));
+                    if cholp ~= 0
+                        A(:,:,k) = Ap(:,:,k);
+                        if sum(n) > 0
+                            V(:,:,k) = Vp(:,:,k);
+                            n(k)     = np(k);
+                        end
                     end
                 end
+                mean = {MU,b};
+                if ~sum(n), prec = {A};
+                else,       prec = {V,n};   end
             end
-            mean = {MU,b};
-            if ~sum(n), prec = {A};
-            else,       prec = {V,n};   end
-            
+ 
             % -------------------------------------------------------------
             % Marginal / Objective function
             [LMU,LA]       = kl_gausswishart(mean, prec, mean0, prec0);
@@ -480,7 +485,7 @@ for em=1:iter_max
             %   update. However, it sometimes does not, probably because of
             %   precision issues (even though everything is in double). In
             %   such cases, we go back to the previous parameters.
-            if subgain < 0
+            if false % subgain < 0
                 MU         = MUp;
                 A          = Ap;
                 V          = Vp;
@@ -504,7 +509,7 @@ for em=1:iter_max
                 end
                 fprintf('%-5s | %4d | lb = %-12.6g | gain = %-10.4g | %3s\n', 'sub', i, LB(i+1), subgain, incr);
             end
-            if subgain < subtolerance
+            if numel(SS0m)==1 || subgain < subtolerance
                 break
             end
         end
@@ -710,12 +715,11 @@ for i=1:numel(L)
         X1k = bsxfun(@plus,X1k,MU(im,k).');
         X1k = bsxfun(@plus,X1k,bsxfun(@minus, MU(io,k).', X(msk,io)) * (A(io,im,k) / A(im,im,k)));
         if sample
-            Smk = inv(A(im,im,k));
-            X1k = X1k + mvnrnd(zeros(1,Pm),Smk,Nm);
+           %Smk = inv(A(im,im,k));
+            X1k = X1k + chol(A(im,im,k))\randn(sum(im),Nm); % mvnrnd(zeros(1,Pm),Smk,Nm); %% mvnrnd is part of the statistics toolbox
         end
         X(msk,im) = X(msk,im) + bsxfun(@times, X1k, Z(msk,k));
     end
-                   
 end
 
 % =========================================================================
@@ -793,10 +797,10 @@ for i=1:size(L,1)
         %      Multivariate Analysis, 1st edition. Academic Press.
 
         if sum(n) > 0
-            Ao = V(io,io,k) - V(io,im,k)*(inv(V(im,im,k))*V(im,io,k));
+            Ao = V(io,io,k) - V(io,im,k)*(V(im,im,k)\V(im,io,k));
             Ao = (n(k)-Pm) * Ao;
         else
-            Ao = A(io,io,k) - A(io,im,k)*(inv(A(im,im,k))*A(im,io,k));
+            Ao = A(io,io,k) - A(io,im,k)*(A(im,im,k)\A(im,io,k));
         end
         
         % Quadratic term in observed values: (obs-mean) x (obs-mean)
@@ -1066,7 +1070,7 @@ for i=1:size(L,1)
             SS1k = lSS1{i}(:,k);
             MUo  = MU(io,k);
             MUm  = MU(im,k);
-            SA   = inv(A(im,im,k)) * A(im,io,k);
+            SA   = A(im,im,k)\A(im,io,k);
             
             % 1) observed
             SS1(io,k) = SS1(io,k) + SS1k;
@@ -1104,8 +1108,7 @@ for i=1:size(L,1)
                 + SA * (SS2k + MUMUo - GMUo.' - GMUo) * SA.';
     
             % 4) uncertainty ~ missing
-            SS2(im,im,k) = SS2(im,im,k) ...
-                + SS0k * inv(A(im,im,k));
+            SS2(im,im,k) = SS2(im,im,k) + SS0k*inv(A(im,im,k));
         end
     end
 end
@@ -1291,7 +1294,7 @@ if nargin == 3 && ~isempty(L) && ~all(L(:)==1)
         im = ~io;                   % Missing channels
         Pm = sum(im);               % Number of missing channels
         for k=1:K
-            Vo = V(io,io,k) - V(io,im,k)*(inv(V(im,im,k))*V(im,io,k));
+            Vo = V(io,io,k) - V(io,im,k)*(V(im,im,k)\V(im,io,k));
             c(i,k) = - 0.5 * Po * log(2*pi);
             if sum(n) > 0
                 no = n(k) - Pm;
@@ -1399,13 +1402,12 @@ else
 end
 V = SS2;
 for k=1:K
-    V(:,:,k) = inv( V(:,:,k));
+    V(:,:,k) = inv(V(:,:,k));
 end
 if sum(n) > 0
     A = bsxfun(@times, V, reshape(n, [1 1 K]));
 else
     A = V;
-    V = [];
 end
 
 % =========================================================================
@@ -1614,7 +1616,7 @@ else
                 p0 = p0 + S*n0(k);
                 for s=1:S
                     [~,~,W,n] = get_posteriors(cluster,s);
-                    V0 = V0 + inv( n(k)*W(:,:,k));
+                    V0 = V0 + inv(n(k)*W(:,:,k));
                 end
             end
             p0 = p0/K;
@@ -1651,9 +1653,10 @@ else
                 % ---------------------------------------------------------
                 % Update {p,V} for W0 (posterior, closed form)
                 p(k)       = p0 + S*n0(k);
-                V(:,:,k)   = inv( inv( V0) + Lambda);
+                V(:,:,k)   = inv(inv(V0) + Lambda); % NO NEED TO DO THIS MULTIPLE TIMES
+                                                    % MAYBE TRY: (V0*Lambda + eye(size(Lambda)))\V0
                 % Useful values
-                W0(:,:,k)   = inv( wishart_e(V(:,:,k), p(k)));
+                W0(:,:,k)   = inv(wishart_e(V(:,:,k), p(k)));
                 LogDetW0(k) = -wishart_elogdet(V(:,:,k), p(k));
                 % ---------------------------------------------------------
 
@@ -1880,10 +1883,10 @@ for i=1:size(L,1)
         % Bayesian case:
         %   inv(S(o,o)) ~ W(V(o,o) - V(o,m)*V(m,m)\V(m,o), n - Pm)
         if sum(n) > 0
-            Ao = V(io,io,k) - V(io,im,k)*(inv(V(im,im,k))*V(im,io,k));
+            Ao = V(io,io,k) - V(io,im,k)*(V(im,im,k)\V(im,io,k));
             Ao = (n(k)-Pm) * Ao;
         else
-            Ao = A(io,io,k) - A(io,im,k)*(inv(A(im,im,k))*A(im,io,k));
+            Ao = A(io,io,k) - A(io,im,k)*(A(im,im,k)\A(im,io,k));
         end
         
         % 1) obs x mean
@@ -2902,7 +2905,11 @@ function A = inv_stable(A)
 % end 
 % D     = loaddiag(D); 
 % A     = real(V * (D \ V')); 
-% A     = (A+A.')/2; 
+% A     = (A+A.')/2;
+
+A     = inv(A);
+return
+ 
 [V,D] = eig(A);
 D     = max(diag(D), eps);
 A     = real(V * bsxfun(@ldivide, D, V'));
