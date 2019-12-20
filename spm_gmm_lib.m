@@ -436,7 +436,7 @@ for em=1:iter_max
         LB             = NaN(1,subiter_max);
         LB(1)          = LMU + LA + LX;
         for i=1:subiter_max
-            if false
+
             % -------------------------------------------------------------
             % Save previous value
             MUp     = MU;
@@ -444,9 +444,8 @@ for em=1:iter_max
             Vp      = V;
             bp      = b;
             np      = n;
-            end
 
-            if numel(SS0m)==1, subsubiter_max = 1; else subsubiter_max = 5; end
+            if numel(SS0m)==1, subsubiter_max = 1; else subsubiter_max = 4; end
 
             for ii=1:subsubiter_max
                 % -------------------------------------------------------------
@@ -461,6 +460,8 @@ for em=1:iter_max
                 for k=1:size(MU,2)
                     [~,cholp] = chol(A(:,:,k));
                     if cholp ~= 0
+disp('chol problem');
+save('poor_matrix.mat');
                         A(:,:,k) = Ap(:,:,k);
                         if sum(n) > 0
                             V(:,:,k) = Vp(:,:,k);
@@ -479,13 +480,14 @@ for em=1:iter_max
             [LX,norm_term] = marginalsum(SS0m, SS1m, SS2m, mean, prec, obs_channels, SS2u);
             LB(i+1)        = LMU+LA+LX;
             subgain        = (LB(i+1)-LB(i))/(max(LB(2:i+1), [], 'omitnan')-min(LB(2:i+1), [], 'omitnan'));
+            subgain1       = (LB(i+1)-LB(i))/abs(LB(i+1));
             % -------------------------------------------------------------
             % Check success
             % > This should always improve since we use a closed-form
             %   update. However, it sometimes does not, probably because of
             %   precision issues (even though everything is in double). In
             %   such cases, we go back to the previous parameters.
-            if false % subgain < 0
+            if false %subgain < 0 %% I assume this happens because of numerical errors that can be ignored
                 MU         = MUp;
                 A          = Ap;
                 V          = Vp;
@@ -509,7 +511,7 @@ for em=1:iter_max
                 end
                 fprintf('%-5s | %4d | lb = %-12.6g | gain = %-10.4g | %3s\n', 'sub', i, LB(i+1), subgain, incr);
             end
-            if numel(SS0m)==1 || subgain < subtolerance
+            if numel(SS0m)==1 || subgain < subtolerance || subgain1 < eps('single');
                 break
             end
         end
@@ -1000,7 +1002,7 @@ for i=1:size(L,1)
     
     % ---------------------------------------------------------------------
     % Oth order moment
-    SS0{i} = sum(Z{i}, 1, 'double');
+    SS0{i} = sum(Z{i}, 1, 'double') + eps;
     if nargout == 1, return; end
 
     % ---------------------------------------------------------------------
@@ -1505,7 +1507,7 @@ for k=1:K
         LambdaMu  = LambdaMu + n(k)*W(:,:,k)*m(:,k);
     end
     m0(:,k) = Lambda \ LambdaMu;
-    
+
     % ---------------------------------------------------------------------
 
     
@@ -1648,13 +1650,15 @@ else
             % -------------------------------------------------------------
             % Update n0 (mode, Gauss-Newton [convex])
             E = inf;
+
+            % ---------------------------------------------------------
+            % Update {p,V} for W0 (posterior, closed form)
+            p(k)       = p0 + S*n0(k);
+           %V(:,:,k)   = inv(inv(V0) + Lambda); % NO NEED TO DO THIS MULTIPLE TIMES
+            V(:,:,k)   = (V0*Lambda + eye(size(Lambda)))\V0;                                    
+
             for gniter=1:100
 
-                % ---------------------------------------------------------
-                % Update {p,V} for W0 (posterior, closed form)
-                p(k)       = p0 + S*n0(k);
-                V(:,:,k)   = inv(inv(V0) + Lambda); % NO NEED TO DO THIS MULTIPLE TIMES
-                                                    % MAYBE TRY: (V0*Lambda + eye(size(Lambda)))\V0
                 % Useful values
                 W0(:,:,k)   = inv(wishart_e(V(:,:,k), p(k)));
                 LogDetW0(k) = -wishart_elogdet(V(:,:,k), p(k));
