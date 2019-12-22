@@ -193,7 +193,7 @@ end
 % Main loop
 %--------------------------------------------------------------------------
 
-function [Z,cluster,prop,lb] = loop(X, weights, cluster, props, varargin)
+function [Z,cluster,prop,lb,mg_w] = loop(X, weights, cluster, props, varargin)
 %__________________________________________________________________________
 %
 % Fit a [Bayesian] Gaussian mixture model to observed [weighted] data.
@@ -249,13 +249,19 @@ function [Z,cluster,prop,lb] = loop(X, weights, cluster, props, varargin)
 %                                    3 = plot more (gmm fit)
 % Labels         - {NoxK} Log of voxel-wise labels (from, e.g., manual
 %                  segmentations) [[]]
+% MultGaussPi    - {[1xKmg],[1xKmg]} For using multiple Gaussians per class in
+%                  proportions (Pi). Defined by a cell array with: the first 
+%                  element being a vector of length Kmg that maps indices of 
+%                  Gaussians to classes in Pi; the second element being a 
+%                  vector of the same length with mixing proportions [{}]
 % 
 % OUTPUT
 % ------
-% resp    - Responsibilities
-% cluster - Structure with fields: MU, b, A, V, n
-% prop    - Structure with fields: LogProp, Prop, Dir
-% lb      - Structure with fields: sum, last, X, Z, P, MU, A
+% resp       - Responsibilities
+% cluster    - Structure with fields: MU, b, A, V, n
+% prop       - Structure with fields: LogProp, Prop, Dir
+% lb         - Structure with fields: sum, last, X, Z, P, MU, A
+% mg_w       - Vector with weights
 % 
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
@@ -279,6 +285,7 @@ p.addParameter('SubTolerance',   1e-4,  @(X) isscalar(X) && isnumeric(X));
 p.addParameter('ObsUncertainty', 0,     @(X) isnumeric(X) || iscell(X));
 p.addParameter('Verbose',        0,     @(X) isnumeric(X) || islogical(X));
 p.addParameter('Labels',         [],    @(X) isnumeric(X) || iscell(X));
+p.addParameter('MultGaussPi',    {},    @iscell);
 p.parse(varargin{:});
 lb              = p.Results.LowerBound;
 Z               = p.Results.Resp;
@@ -292,6 +299,7 @@ subiter_max     = p.Results.SubIterMax;
 subtolerance    = p.Results.SubTolerance;
 verbose         = p.Results.Verbose;
 labels          = p.Results.Labels;
+mult_gauss      = p.Results.MultGaussPi;
 
 % -------------------------------------------------------------------------
 % Unfold inputs
@@ -380,6 +388,16 @@ else
 end
 
 % -------------------------------------------------------------------------
+% For multiple Gaussians per class in Pi
+if isempty(mult_gauss)
+    mg_ix = 1:size(MU0,2);
+    mg_w  = ones([1 size(MU0,2)]);
+else
+    mg_ix = mult_gauss{1};
+    mg_w  = mult_gauss{2};
+end
+
+% -------------------------------------------------------------------------
 % Compute log-prop if needed
 if isempty(log_prop)
     if sum(prop_posterior) > 0
@@ -405,7 +423,7 @@ for em=1:iter_max
     
     % ---------------------------------------------------------------------
     % Compute responsibilities
-    Z = responsibility(logpX, log_prop, labels);
+    Z = responsibility(logpX, log_prop, labels, log(mg_w));
     clear logpX
     
     % ---------------------------------------------------------------------
@@ -551,6 +569,13 @@ save('poor_matrix.mat');
     end        
 
     % ---------------------------------------------------------------------
+    % Update weight for multiple Gaussians per prop class
+    for k=1:size(MU0,2)
+        tmp     = SS0(mg_ix == mg_ix(k));
+        mg_w(k) = (SS0(k) + eps*eps)/sum(tmp + eps*eps);
+    end
+                    
+    % ---------------------------------------------------------------------
     % Plot GMM
     if verbose(1) >= 3        
         plot_gmm(X, weights, obs_channels, {MU,A}, prop);
@@ -563,7 +588,7 @@ save('poor_matrix.mat');
     % ---------------------------------------------------------------------
     % Compute lower bound
     lb.P(end+1) = kl_dirichlet(prop_posterior, prop_prior);
-    lb.Z(end+1) = kl_categorical(Z, weights, log_prop, labels);
+    lb.Z(end+1) = kl_categorical(Z, weights, log_prop, labels, log(mg_w));
     if isempty(obs_channels)
         [lb.MU(end+1),lb.A(end+1)] = kl_gausswishart({MU,b}, prec, {MU0,b0}, {V0,n0});
         lb.X(end+1) = sum(sum(bsxfun(@times, logpX, bsxfun(@times, Z, weights)),2),'double');
@@ -591,8 +616,8 @@ end
 
 % -------------------------------------------------------------------------
 % Format output
-cluster = struct('MU', MU, 'b', b, 'A', A, 'V', V, 'n', n);
-prop    = struct('LogProp', log_prop, 'Prop', prop, 'Dir', prop_posterior);
+cluster    = struct('MU', MU, 'b', b, 'A', A, 'V', V, 'n', n);
+prop       = struct('LogProp', log_prop, 'Prop', prop, 'Dir', prop_posterior);
 
 % =========================================================================
 function [lb,gain] = check_convergence(lb, em, verbose)
@@ -855,7 +880,7 @@ for j=1:numel(varargin)
     if ~isempty(Zj)
         for i=1:numel(Z)
             if iscell(Zj), Zji = Zj{i};
-            else,          Zji = Zj;   end
+            else,          Zji = Zj; end
             Z{i} = bsxfun(@plus, Z{i}, Zji);
         end
     end
@@ -1954,7 +1979,7 @@ switch lower(id)
 end
 
 % =========================================================================
-function klZ = kl_categorical(Z, W, logPI, labels)
+function klZ = kl_categorical(Z, W, logPI, labels, logmg_w)
 
 if ~iscell(Z)
     Z = {Z};
@@ -1975,7 +2000,7 @@ for i=1:numel(Z)
     end
     
     % E[ln p(Z|PI)] (prior ~ responsibilities)
-    klZ = klZ + sum(sum(bsxfun(@times,Z1,logPI1), 2) .* W1, 'double');
+    klZ = klZ + sum(sum(bsxfun(@times,Z1,logPI1 + logmg_w), 2) .* W1, 'double');
 
     % -E[ln q(Z)] (posterior ~ responsibilities))
     klZ = klZ - sum(sum(Z1 .* log(max(Z1,eps)), 2) .* W1, 'double');
@@ -2738,7 +2763,7 @@ end
 % =========================================================================
 
 % =========================================================================
-function [gmm,mg] = more_gmms(gmm,lkp)
+function [gmm,mg_w] = more_gmms(gmm,lkp)
 % FORMAT gmm = spm_gmm_lib('extras', 'more_gmms', gmm, lkp)
 %
 % gmm  - Cell with the following format {m,b,W,n}, where there are K
@@ -2771,12 +2796,11 @@ m  = zeros(C,K);
 b  = zeros(1,K);
 W  = zeros(C,C,K);
 n  = zeros(1,K); % A = nW, W = 1/n*inv(Cov)
-mg = ones(1,K);
+mg_w = ones(1,K);
 
 for k=1:Kb    
     kk = sum(lkp==k);
-%     w  = 1./(1 + exp(-(kk - 1)*0.25)) - 0.5;
-    w  = 1./(1 + exp(-(kk - 1)*2)) - 0.5;
+    w  = 1./(1 + exp(-(kk - 1)*0.25)) - 0.5;
     mn = MU0(:,k);
     vr = inv(A0(:,:,k));
     
@@ -2786,11 +2810,11 @@ for k=1:Kb
     W1 = (1/n0(k))*pr;
     
     m(:,lkp==k)   = mn;
-    b(lkp==k)     = b0(k)*kk;
+    b(lkp==k)     = b0(k);
     W(:,:,lkp==k) = repmat(W1,[1 1 kk]);
-    n(lkp==k)     = n0(k)*kk;
+    n(lkp==k)     = n0(k);
     
-    mg(lkp==k) = 1/kk;
+    mg_w(lkp==k) = 1/kk;
 end
 
 gmm{1} = m;
