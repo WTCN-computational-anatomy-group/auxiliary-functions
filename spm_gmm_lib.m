@@ -2804,7 +2804,7 @@ for k=1:Kb
     mn = MU0(:,k);
     vr = inv(A0(:,:,k));
     
-    mn = sqrtm(vr)*randn(C,kk)*w + repmat(mn,[1 kk]);
+    mn = sqrtm(vr)*sort(randn(C,kk),2)*w + repmat(mn,[1 kk]);
     vr = vr*(1 - w);
     pr = inv(vr);
     W1 = (1/n0(k))*pr;
