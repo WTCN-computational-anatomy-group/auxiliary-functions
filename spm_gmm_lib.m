@@ -2795,7 +2795,7 @@ A0 = bsxfun(@times,W0,reshape(n0,[1 1 Kb])); % E[Lambda]
 m  = zeros(C,K);
 b  = zeros(1,K);
 W  = zeros(C,C,K);
-n  = zeros(1,K); % A = nW, W = 1/n*inv(Cov)
+n  = zeros(1,K);
 mg_w = ones(1,K);
 
 for k=1:Kb    
