@@ -1957,7 +1957,7 @@ function varargout = kl(varargin)
 % klP = spm_gmm_lib('kl', 'Dirichlet', a, a0)
 % > KL divergence between two Dirichlet distributions
 %
-% klZ = spm_gmm_lib('kl', 'Categorical', Z, W, logPI, labels)
+% klZ = spm_gmm_lib('kl', 'Categorical', Z, W, logPI, labels, logmg_w)
 % > KL divergence between two Categorical distributions
 
 if nargin == 0
