@@ -1103,17 +1103,26 @@ for k=1:K
         % -----------------------------------------------------------------
         % 1st order moment
             SS1k = lSS1{i}(:,k);
+            
+            % 0) precompute stuff
+            ss1o = ss1(io);
+            ss1m = ss1(im);
             MUo  = MU(io,k);
             MUm  = MU(im,k);
-            SA   = Ak(im,im)\Ak(im,io);
+            
+            iAkmm = inv(Ak(im,im));
+            SA    = iAkmm*Ak(im,io);
             
             % 1) observed
-            ss1(io) = ss1(io) + SS1k;
+            ss1o = ss1o + SS1k;
         
             % 2) missing
             % > t = mu(m) + A(m,m) \ A(m,o) * (mu(o) - g)
-            ss1(im) = ss1(im) + SS0k * MUm;
-            ss1(im) = ss1(im) + SA * (SS0k * MUo - SS1k);
+            ss1m = ss1m + SS0k * MUm;
+            ss1m = ss1m + SA * (SS0k * MUo - SS1k);
+            
+            ss1(io) = ss1o;
+            ss1(im) = ss1m;
         end
         
         if nargout > 2
@@ -1122,28 +1131,33 @@ for k=1:K
             SS2k = lSS2{i}(:,:,k);
         
             % 0) precompute stuff
+            ss2oo = ss2(io,io);
+            ss2mo = ss2(im,io);
+            ss2mm = ss2(im,im);
             MUMUm = SS0k * (MUm * MUm.');
             MUMUo = SS0k * (MUo * MUo.');
             GMUo  = SS1k * MUo.';
             GMUm  = SS1k * MUm.';
         
             % 1) observed x observed
-            ss2(io,io) = ss2(io,io) + SS2k;
+            ss2oo = ss2oo + SS2k;
             
             % 2) missing x observed
-            tmp        = GMUm.' + SA * (GMUo.' - SS2k);
-            ss2(im,io) = ss2(im,io) + tmp;
-            ss2(io,im) = ss2(io,im) + tmp.';
+            ss2mo = ss2mo + GMUm.' + SA * (GMUo.' - SS2k);
             
             % 3) missing x missing
-            ss2(im,im) = ss2(im,im) + MUMUm;
-            tmp        = SA * (SS0k * MUo - SS1k) * MUm.';
-            ss2(im,im) = ss2(im,im) + tmp + tmp';
-            ss2(im,im) = ss2(im,im) ...
-                + SA * (SS2k + MUMUo - GMUo.' - GMUo) * SA.';
+            tmp   = SA * (SS0k * MUo - SS1k) * MUm.';
+            ss2mm = ss2mm + MUMUm ...
+                          + (tmp+tmp') ...
+                          + SA * (SS2k + MUMUo - GMUo.' - GMUo) * SA.';
     
             % 4) uncertainty ~ missing
-            ss2(im,im) = ss2(im,im) + SS0k*inv(Ak(im,im));
+            ss2mm = ss2mm + SS0k*iAkmm;
+            
+            ss2(io,io) = ss2oo;
+            ss2(im,io) = ss2mo;
+            ss2(io,im) = ss2mo.';
+            ss2(im,im) = ss2mm;
         end
     end
 
