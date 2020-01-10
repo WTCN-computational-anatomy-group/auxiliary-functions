@@ -390,8 +390,8 @@ end
 % -------------------------------------------------------------------------
 % For multiple Gaussians per class in Pi
 if isempty(mult_gauss)
-    mg_ix = 1:size(MU0,2);
-    mg_w  = ones([1 size(MU0,2)]);
+    mg_ix = 1:size(MU,2);
+    mg_w  = ones([1 size(MU,2)]);
 else
     mg_ix = mult_gauss{1};
     mg_w  = mult_gauss{2};
@@ -570,7 +570,7 @@ for em=1:iter_max
 
     % ---------------------------------------------------------------------
     % Update weight for multiple Gaussians per prop class
-    for k=1:size(MU0,2)
+    for k=1:size(MU,2)
         tmp     = SS0(mg_ix == mg_ix(k));
         mg_w(k) = (SS0(k) + eps*eps)/sum(tmp + eps*eps);
     end
@@ -1994,6 +1994,8 @@ end
 
 % =========================================================================
 function klZ = kl_categorical(Z, W, logPI, labels, logmg_w)
+if nargin < 4, labels = 0; end
+if nargin < 5, logmg_w = 0; end
 
 if ~iscell(Z)
     Z = {Z};
