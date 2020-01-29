@@ -614,6 +614,23 @@ for em=1:iter_max
     
 end
 
+% ---------------------------------------------------------------------
+% Compute final responsibilities
+Z = responsibility(logpX, log_prop, labels, log(mg_w));
+clear logpX
+    
+% ---------------------------------------------------------------------
+% Recompute parts of lower bound that depends on responsibilities
+lb.Z(end+1) = kl_categorical(Z, weights, log_prop, labels, log(mg_w));
+if isempty(obs_channels)
+    lb.X(end+1) = sum(sum(bsxfun(@times, logpX, bsxfun(@times, Z, weights)),2),'double');
+else
+    [SS0m,SS1m,SS2m] = suffstat_missing(X, Z, weights, obs_channels);   
+    LX               = marginalsum(SS0m, SS1m, SS2m, mean, prec, obs_channels, SS2u);
+    lb.X(end+1)      = LX;
+end
+lb = check_convergence(lb, em, verbose(1)); % Make sure lb.sum is correct
+
 % -------------------------------------------------------------------------
 % Format output
 cluster    = struct('MU', MU, 'b', b, 'A', A, 'V', V, 'n', n);
