@@ -529,7 +529,7 @@ for em=1:iter_max
                 end
                 fprintf('%-5s | %4d | lb = %-12.6g | gain = %-10.4g | %3s\n', 'sub', i, LB(i+1), subgain, incr);
             end
-            if numel(SS0m)==1 || subgain < subtolerance || subgain1 < eps('single');
+            if numel(SS0m)==1 || subgain < subtolerance || subgain1 < eps('single')
                 break
             end
         end
