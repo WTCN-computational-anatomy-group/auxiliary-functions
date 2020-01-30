@@ -5,7 +5,7 @@ function varargout = spm_imbasics(varargin)
 % FORMAT [V,W,C]    = spm_imbasics('hist',X,...)
 % FORMAT div        = spm_imbasics('dive',Dx,Dy,Dz,vx)
 % FORMAT [Dx,Dy,Dz] = spm_imbasics('grad',X,vx)
-% FORMAT spm_imbasics('smooth_img_in_mem',img,fwhm) 
+% FORMAT spm_imbasics('smooth_img_in_mem',img,fwhm)
 % FORMAT nfname1 = spm_imbasics('create_2d_slice',fname,axis_2d,clean_up)
 % FORMAT [BB,vx] = spm_imbasics('compute_bb',img,mat,dm,thr,premul)
 %
@@ -21,17 +21,17 @@ id = varargin{1};
 varargin = varargin(2:end);
 switch lower(id)
     case 'dive'
-        [varargout{1:nargout}] = dive(varargin{:});        
+        [varargout{1:nargout}] = dive(varargin{:});
     case 'grad'
         [varargout{1:nargout}] = grad(varargin{:});
     case 'smooth_img'
-        [varargout{1:nargout}] = smooth_img_in_mem(varargin{:});           
+        [varargout{1:nargout}] = smooth_img_in_mem(varargin{:});
     case 'hist'
-        [varargout{1:nargout}] = spm_hist(varargin{:});            
+        [varargout{1:nargout}] = spm_hist(varargin{:});
     case 'create_2d_slice'
-        [varargout{1:nargout}] = create_2d_slice(varargin{:});        
+        [varargout{1:nargout}] = create_2d_slice(varargin{:});
     case 'compute_bb'
-        [varargout{1:nargout}] = compute_bb(varargin{:});          
+        [varargout{1:nargout}] = compute_bb(varargin{:});
     otherwise
         help spm_imcalc
         error('Unknown function %s. Type ''help spm_imcalc'' for help.', id)
@@ -39,9 +39,9 @@ end
 %==========================================================================
 
 %==========================================================================
-function div = dive(Dx,Dy,Dz,vx)  
+function div = dive(Dx,Dy,Dz,vx)
 % Computes the divergence of an image (with voxel size)
-% FORMAT div = dive(Dx,Dy,Dz,vx) 
+% FORMAT div = dive(Dx,Dy,Dz,vx)
 % [Dx,Dy,Dz] - Gradients in x-,y- and z-direction
 % vx         - Voxel size
 % div        - Divergence
@@ -54,7 +54,7 @@ if size(Dx,3) == 1
     Dv  = [-Dy(1,:); -diff(Dy(1:end-1,:),1,1); Dy(end-1,:)];
     div = Du./vx(1) + Dv./vx(2);
 else
-    Du  = cat(2, -Dx(:,1,:), -diff(Dx(:,1:end-1,:),1,2), Dx(:,end-1,:)); 
+    Du  = cat(2, -Dx(:,1,:), -diff(Dx(:,1:end-1,:),1,2), Dx(:,end-1,:));
     Dv  = cat(1, -Dy(1,:,:), -diff(Dy(1:end-1,:,:),1,1), Dy(end-1,:,:));
     Dw  = cat(3, -Dz(:,:,1), -diff(Dz(:,:,1:end-1),1,3), Dz(:,:,end-1));
     div = Du./vx(1) + Dv./vx(2) + Dw./vx(3);
@@ -62,14 +62,14 @@ end
 %==========================================================================
 
 %==========================================================================
-function [Dx,Dy,Dz] = grad(X,vx) 
+function [Dx,Dy,Dz] = grad(X,vx)
 % Calculate 2D or 3D gradient of an image (with voxel size)
 % FORMAT [Dx,Dy,Dz] = grad(X,vx)
 % X          - Image
 % vx         - voxel size
 % [Dx,Dy,Dz] - Gradients in x-,y- and z-direction
 %__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 if nargin < 2, vx = ones([1 3],'like',X); end
 
 if size(X,3)==1
@@ -79,18 +79,18 @@ if size(X,3)==1
 else
     Dx = cat(2,diff(X,1,2),zeros(size(X,1),1,size(X,3),'like',X))./vx(1);
     Dy = cat(1,diff(X,1,1),zeros(1,size(X,2),size(X,3),'like',X))./vx(2);
-    Dz = cat(3,diff(X,1,3),zeros(size(X,1),size(X,2),1,'like',X))./vx(3);  
+    Dz = cat(3,diff(X,1,3),zeros(size(X,1),size(X,2),1,'like',X))./vx(3);
 end
 %==========================================================================
 
 %==========================================================================
-function simg = smooth_img_in_mem(img,fwhm,VoxelSize) 
+function simg = smooth_img_in_mem(img,fwhm,VoxelSize)
 % Smooth an image with a Gaussian kernel
-% FORMAT smooth_img_in_mem(img,fwhm) 
+% FORMAT smooth_img_in_mem(img,fwhm)
 % img          - Image
 % fwhm         - Full-width at half maximum
 %__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 if nargin<2, fwhm      = 10; end
 if nargin<3, VoxelSize = 1; end
 
@@ -129,7 +129,7 @@ function [V,W,C,BW,El] = spm_hist(X,varargin)
 % MANDATORY
 % ---------
 % X - NxP matrix of observed values
-% 
+%
 % OPTIONAL
 % --------
 % B - 1x1 or 1xP number of bins [64]
@@ -155,7 +155,7 @@ function [V,W,C,BW,El] = spm_hist(X,varargin)
 % (B can be smaller that the specified number of bins if KeepZero = false)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    
+
 % -------------------------------------------------------------------------
 % Parse inputs
 p = inputParser;
@@ -201,7 +201,7 @@ else
         end
         B = num2cell(B, 1);
     end
-        
+
     E  = cell(1,P);
     BW = cell(1,P);
     for c=1:P
@@ -219,7 +219,7 @@ V  = cell(1,P);
 dim = zeros(1,P);
 hasnan = zeros(1,P,'logical');
 for c=1:P
-    [I{c},V{c}]       = discretize(X(:,c),E{c});    
+    [I{c},V{c}]       = discretize(X(:,c),E{c});
     I{c}              = single(I{c});
     I{c}(isnan(I{c})) = numel(V{c});
     V{c}              = (V{c}(2:end) + V{c}(1:end-1))/2;
@@ -243,27 +243,27 @@ clear I
 % if ~isempty(Labels)
 %     nlabels = size(Labels{2},1);
 %     El      = zeros([prod(dim) nlabels],'single');
-%     
+%
 %     if 0
 %         [a,b] = unique(linI);
 %         for i=1:numel(a)
 %             msk_rhs  = linI==a(i);
-%             msk_lhs  = find(msk_rhs);        
+%             msk_lhs  = find(msk_rhs);
 %             labels_i = Labels{1}(msk_rhs);
 %             for l=1:nlabels
 %                 El(msk_lhs,l) = sum(labels_i==(l - 1));
-%             end        
+%             end
 %         end
-%     else    
+%     else
 %         for i=1:prod(dim)
-%             for l=1:nlabels                
+%             for l=1:nlabels
 %                 El(i,l) = sum(Labels{1}(linI==i)==(l - 1));
-%             end  
+%             end
 %             El(i,:)
 %         end
 %     end
-% 
-%     El = bsxfun(@rdivide,El,sum(El,2));    
+%
+%     El = bsxfun(@rdivide,El,sum(El,2));
 % else
 %     El = [];
 % end
@@ -300,7 +300,7 @@ if p.Results.Smooth
             W = subsasgn(W, struct('type', '()', 'subs', {subs}), W1);
             clear W1
         end
-        
+
     end
     W = W(:);
 end
@@ -329,7 +329,7 @@ function nfname1 = create_2d_slice(fname,deg,axis_2d,clean_up)
 % axis_2d - Axis to extract along [axis_2d=3]
 % nfname1 - Filename of 2d image
 %__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging   
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 
 if nargin<2, deg      = 0;    end
 if nargin<3, axis_2d  = 3;    end
@@ -340,44 +340,44 @@ V  = spm_vol(fname);
 dm = V.dim;
 if axis_2d     == 1
     d1 = floor(dm(1)/2) + 1;
-    bb = [d1 d1;-inf inf;-inf inf];   
+    bb = [d1 d1;-inf inf;-inf inf];
 elseif axis_2d == 2
     d1 = floor(dm(2)/2) + 1;
     bb = [-inf inf;d1 d1;-inf inf];
-elseif axis_2d == 3 
+elseif axis_2d == 3
     d1 = floor(dm(3)/2) + 1;
     bb = [-inf inf;-inf inf;d1 d1];
-end                
+end
 
 % Crop according to bounding-box
-spm_impreproc('subvol',V,bb','2d_',deg);      
-[pth,nam,ext] = fileparts(fname);   
-nfname1       = fullfile(pth,['2d_' nam ext]);   
+spm_impreproc('subvol',V,bb','2d_',deg);
+[pth,nam,ext] = fileparts(fname);
+nfname1       = fullfile(pth,['2d_' nam ext]);
 if clean_up, delete(fname); end
 
 if axis_2d == 1 || axis_2d == 2
     % Make sure 1D plane is in z dimension
     Nii  = nifti(nfname1);
     mat  = Nii.mat;
-    
+
     % Permute image data and apply permutation matrix to orientation matrix
     if axis_2d == 1
-        img = permute(Nii.dat(:,:,:),[2 3 1]);            
+        img = permute(Nii.dat(:,:,:),[2 3 1]);
         P   = [0 1 0 0; 0 0 1 0; 1 0 0 0; 0 0 0 1];
     else
-        img = permute(Nii.dat(:,:,:),[1 3 2]);        
+        img = permute(Nii.dat(:,:,:),[1 3 2]);
         P   = [1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1];
-    end   
+    end
     mat     = P*mat*P';
     dm      = [size(img) 1];
-    
+
     % Overwrite image data
     VO             = spm_vol(nfname1);
-    VO.dim(1:3)    = dm(1:3);        
+    VO.dim(1:3)    = dm(1:3);
     VO.mat         = mat;
-    VO             = spm_create_vol(VO);        
-    Nii            = nifti(VO.fname);    
-    Nii.dat(:,:,:) = img; 
+    VO             = spm_create_vol(VO);
+    Nii            = nifti(VO.fname);
+    Nii.dat(:,:,:) = img;
 end
 %==========================================================================
 

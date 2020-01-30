@@ -21,21 +21,21 @@ if nargin == 0
 end
 id = varargin{1};
 varargin = varargin(2:end);
-switch lower(id) 
+switch lower(id)
     case 'init_dat'
-        [varargout{1:nargout}] = init_dat(varargin{:});   
+        [varargout{1:nargout}] = init_dat(varargin{:});
     case 'init_model'
-        [varargout{1:nargout}] = init_model(varargin{:});           
+        [varargout{1:nargout}] = init_model(varargin{:});
     case 'modify_json_field'
-        [varargout{1:nargout}] = modify_json_field(varargin{:});           
+        [varargout{1:nargout}] = modify_json_field(varargin{:});
     case 'replace_json_field'
-        [varargout{1:nargout}] = replace_json_field(varargin{:});                   
+        [varargout{1:nargout}] = replace_json_field(varargin{:});
     case 'make_pth_relative'
-        [varargout{1:nargout}] = make_pth_relative(varargin{:});              
+        [varargout{1:nargout}] = make_pth_relative(varargin{:});
     case 'get_populations'
-        [varargout{1:nargout}] = get_populations(varargin{:});          
+        [varargout{1:nargout}] = get_populations(varargin{:});
     case 'set_subjects'
-        [varargout{1:nargout}] = set_subjects(varargin{:});          
+        [varargout{1:nargout}] = set_subjects(varargin{:});
     otherwise
         help spm_json_manager
         error('Unknown function %s. Type ''help spm_json_manager'' for help.', id)
@@ -62,7 +62,7 @@ function [dat,dict] = init_dat(input,dat,output_path,channels2inc)
 %
 % ---
 %
-% The input files can also be `.mat` files containing an already built dat 
+% The input files can also be `.mat` files containing an already built dat
 % object. In this case, it is just loaded.
 %
 % ---
@@ -74,12 +74,12 @@ function [dat,dict] = init_dat(input,dat,output_path,channels2inc)
 % dat - An already initialised model structure.
 %
 % ---
-% 
+%
 % Finally, it is possible to write the dat structure on disk, in a .mat
 % file:
 %
 % FORMAT [dat,dict] = spm_json_manager('init_dat', ..., 'path/to/dat.mat')
-% 
+%
 %--------------------------------------------------------------------------
 % JSON SYNTAX
 % -----------
@@ -90,10 +90,10 @@ function [dat,dict] = init_dat(input,dat,output_path,channels2inc)
 % mandatory
 % ---------
 % 'name':       Subject name
-% 
+%
 % optional
 % --------
-% 'population': Populatipn name ('Healty'/'Lesion'/...). 
+% 'population': Populatipn name ('Healty'/'Lesion'/...).
 %               If provided, the unique subject id is <population>_<name>.
 % 'modality':   Modality name (for imaging modality) ('CT'/'MRI'/...)
 % + 'channel':  Channel name ('T1'/'T2'/...)
@@ -217,14 +217,14 @@ J = numel(json_files);
 if J > 0
     base10 = floor(log10(J)) + 1;
     str    = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],0,J);
-    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);    
+    fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
 end
 
 % -------------------------------------------------------------------------
 % Loop over files
 tic;
 for j=1:J
-    
+
     % ---------------------------------------------------------------------
     % Display the number of files read
     if ~mod(j,10)
@@ -232,18 +232,18 @@ for j=1:J
         str = sprintf(['Initialising dat | %' num2str(base10) 'd of %' num2str(base10) 'd files read.'],j,J);
         fprintf(1, ['%-' num2str(2*base10 + 50) 's'], str);
     end
-    
+
     % ---------------------------------------------------------------------
     % Get path to JSON file
-    pth_json = fullfile(json_files(j).folder,json_files(j).name);    
-    list_metadata = spm_jsonread(pth_json);  
+    pth_json = fullfile(json_files(j).folder,json_files(j).name);
+    list_metadata = spm_jsonread(pth_json);
     if ~iscell(list_metadata), list_metadata = {list_metadata}; end
     I = numel(list_metadata);
-            
+
     % ---------------------------------------------------------------------
     % Loop over elements in the file
     % > In order to store multiple elements in a single JSON file, I
-    %   support lists of dictionaries. Each element of the list is treated 
+    %   support lists of dictionaries. Each element of the list is treated
     %   as one json object.
     for i=1:I
         metadata = list_metadata{i};
@@ -252,11 +252,11 @@ for j=1:J
         catch
             continue
         end
-          
+
         % Get poulation and subject name
         name       = metadata.name;
         population = metadata.population;
-        
+
         % Create dictionary key
         if ~isempty(population),    key = [population '_' name];
         else,                       key = name;
@@ -264,7 +264,7 @@ for j=1:J
 
         if ~dict.isKey(key)
             % Subject not in dictionary -> add subject to dictionary
-            dict(key)                 = dict.Count + 1;         
+            dict(key)                 = dict.Count + 1;
             dat{dict(key)}.name       = name;
             dat{dict(key)}.population = population;
         end
@@ -274,18 +274,18 @@ for j=1:J
         % Process imaging data
         % -----------------------------------------------------------------
         if ~isempty(metadata.modality)
-            
+
             modality = metadata.modality;
             channel  = metadata.channel;
             hospital = metadata.hospital;
-            
+
             % -------------------------------------------------------------
             % Get path to image and read
             Nii = read_nifti(metadata.pth, json_files(j).folder, json_files(j).name, 'ro');
             if isempty(Nii)
                 continue
             end
-            
+
             % -------------------------------------------------------------
             % Create modality
             if ~isfield(dat{s},'modality')
@@ -302,7 +302,7 @@ for j=1:J
                 end
             end
             % -------------------------------------------------------------
-            % Add modality (single channel)  
+            % Add modality (single channel)
             m = dat{s}.modality_map(modality);
             if isempty(channel)
                 if isfield(dat{s}.modality{m}, 'nii')
@@ -326,7 +326,7 @@ for j=1:J
                     dat{s}.modality{m}.channel_map(channel) = c;
                 end
                 % -----------------------------------------------------
-                % Add channel                
+                % Add channel
                 c = dat{s}.modality{m}.channel_map(channel);
                 if isfield(dat{s}.modality{m}.channel{c}, 'nii')
                     N = numel(dat{s}.modality{m}.channel{c}.nii);
@@ -343,24 +343,24 @@ for j=1:J
         % Process label data
         % -----------------------------------------------------------------
         if ~isempty(metadata.rater)
-            
+
             rater    = metadata.rater;
             protocol = metadata.protocol;
             nam_modality = metadata.nam_modality; % Modality of segmented image (modality{1..M})
             if isfield(metadata,'nam_channel')
-                nam_channel  = metadata.nam_channel;  % Channel of segmented image (channel{1..C})            
+                nam_channel  = metadata.nam_channel;  % Channel of segmented image (channel{1..C})
             else
                 nam_channel  = '';
             end
             ix_img      = metadata.ix_img;      % Index of segmented image (nii(1..N))
-            
+
             % -------------------------------------------------------------
             % Get path to image and read
             Nii = read_nifti(metadata.pth, json_files(j).folder, json_files(j).name, 'ro');
             if isempty(Nii)
                 continue
             end
-            
+
             % -------------------------------------------------------------
             % Create label
             if ~isfield(dat{s},'label')
@@ -384,20 +384,20 @@ for j=1:J
             end
             dat{s}.label{r}.nii(N+1)      = Nii;
             dat{s}.label{r}.json(N+1).pth = pth_json;
-            dat{s}.label{r}.protocol      = protocol;            
+            dat{s}.label{r}.protocol      = protocol;
             dat{s}.label{r}.nam_modality  = nam_modality;
             dat{s}.label{r}.nam_channel   = nam_channel;
             dat{s}.label{r}.ix_img        = ix_img;
         end
-        
+
         % -----------------------------------------------------------------
         % Process segmentation data
         % -----------------------------------------------------------------
         if ~isempty(metadata.tissue)
-                
-            type   = metadata.type;        
-            tissue = metadata.tissue;   
-            
+
+            type   = metadata.type;
+            tissue = metadata.tissue;
+
             % -------------------------------------------------------------
             % Get path to image and read
             Nii = read_nifti(metadata.pth, json_files(j).folder, json_files(j).name, 'ro');
@@ -439,9 +439,9 @@ for j=1:J
             end
             dat{s}.segmentation{t}.class{c}.nii(N+1)      = Nii;
             dat{s}.segmentation{t}.class{c}.json(N+1).pth = pth_json;
-            
+
         end
-    
+
         % -----------------------------------------------------------------
         % Append other meta data fields (if there are any)
         % -----------------------------------------------------------------
@@ -455,11 +455,11 @@ for j=1:J
             end
 
             dat{s}.(fn{k}) = metadata.(field_name);
-        end            
+        end
 
         % Make sure fields are ordered alphabetically
         dat{s} = orderfields(dat{s});
-        
+
     end % < Loop over elements (I)
 end % < Loop over files (J)
 
@@ -479,23 +479,23 @@ if ~isempty(channels2inc)
                     channel_name = dat{i}.modality{1}.channel{c2}.name;
                     if ~any(ismember(channels2inc,channel_name) == 1)
                         dat{i}.modality{1}.channel(c2) = [];
-                        dat{i}.modality{1}.channel_map.remove(channel_name);   
+                        dat{i}.modality{1}.channel_map.remove(channel_name);
                         break
-                    end   
+                    end
                 end
             end
-            
-            C   = numel(dat{i}.modality{1}.channel);            
+
+            C   = numel(dat{i}.modality{1}.channel);
             map = dat{i}.modality{1}.channel_map;
-            k   = keys(map); 
-            for i1=1:length(map)                                
+            k   = keys(map);
+            for i1=1:length(map)
                 for c=1:C
                     channel_name = dat{i}.modality{1}.channel{c}.name;
                     if strcmp(k{i1},channel_name)
                         break
                     end
                 end
-                
+
                 dat{i}.modality{1}.channel_map(k{i1}) = c;
             end
         end
@@ -606,19 +606,19 @@ J = numel(json_files);
 % Loop over files
 for j=1:J
     pth_json      = fullfile(json_files(j).folder,json_files(j).name);
-    list_metadata = spm_jsonread(pth_json);  
+    list_metadata = spm_jsonread(pth_json);
     if ~iscell(list_metadata), list_metadata = {list_metadata}; end
     I = numel(list_metadata);
-    
+
     % ---------------------------------------------------------------------
     % Loop over elements in the file
     % > In order to store multiple elements in a single JSON file, I
-    %   support lists of dictionaries. Each element of the list is treated 
+    %   support lists of dictionaries. Each element of the list is treated
     %   as one json object.
     for i=1:I
         metadata = list_metadata{i};
         metadata = check_metadata_model(metadata);
-    
+
         switch lower(metadata.type)
             % -------------------------------------------------------------
             % Shape model
@@ -781,7 +781,7 @@ if ~isempty(dat)
                 model.population_map(name)       = numel(model.population);
             end
         end
-            
+
     end
 end
 
@@ -820,10 +820,10 @@ if nargin < 4, nval = []; end
 
 a = spm_jsonread(pth_json);
 
-if isfield(a,ofield)   
+if isfield(a,ofield)
     [a.(nfield)] = a.(ofield);
     a            = rmfield(a,ofield);
-    
+
     if ~isempty(nval)
         a.(nfield) = nval;
     end
@@ -867,25 +867,25 @@ J = numel(json_files);
 % Loop over files
 for j=1:J
     pth_json      = fullfile(json_files(j).folder,json_files(j).name);
-    list_metadata = spm_jsonread(pth_json); 
+    list_metadata = spm_jsonread(pth_json);
     is_list = iscell(list_metadata);
     if ~iscell(list_metadata)
         list_metadata = {list_metadata};
     end
     I = numel(list_metadata);
-    
+
     if speak
         fprintf('%s\n', pth_json);
     end
-    
+
     % ---------------------------------------------------------------------
     % Loop over elements in the file
     % > In order to store multiple elements in a single JSON file, I
-    %   support lists of dictionaries. Each element of the list is treated 
+    %   support lists of dictionaries. Each element of the list is treated
     %   as one json object.
     for i=1:I
         metadata = list_metadata{i};
-        
+
         if isfield(metadata, 'pth')
             [~, fname, ext] = fileparts(metadata.pth);
             new_pth = fullfile(json_files(j).folder, [fname ext]);
@@ -893,10 +893,10 @@ for j=1:J
                 metadata.pth = [fname ext];
             end
         end
-        
+
         list_metadata{i} = metadata;
     end
-    
+
     if ~is_list
         list_metadata = list_metadata{1};
     end
@@ -924,20 +924,20 @@ names       = {};
 cnt         = 1;
 for s=1:S0
     population = dat{s}.population;
-    
+
     if ~any(strcmp(names,population))
         if isfield(dat{s}.modality{1},'channel')
             C = numel(dat{s}.modality{1}.channel);
         else
             C = 1;
         end
-        
+
         names{end + 1} = population;
-        
+
         populations{cnt}.name = dat{s}.population;
         populations{cnt}.C    = C;
         populations{cnt}.type = dat{s}.modality{1}.name;
-        
+
         cnt = cnt + 1;
     end
 end
@@ -968,7 +968,7 @@ if isnumeric(S)
     S1 = containers.Map;
     for p=1:P
         population0 = populations{p}.name;
-        
+
         S1(population0) = S;
     end
     S = S1;
@@ -979,14 +979,14 @@ ndat = {};
 for p=1:P
     Sp          = 0;
     population0 = populations{p}.name;
-    
+
     for s=1:S0
-        population = dat{s}.population;    
-        
+        population = dat{s}.population;
+
         if strcmpi(population0,population)
-            ndat{end + 1} = dat{s};            
+            ndat{end + 1} = dat{s};
             Sp            = Sp  + 1;
-            
+
             if Sp>=S(population0)
                 break
             end
@@ -1020,7 +1020,7 @@ if isdir(pop_dir)
     files           = dir(fullfile(pop_dir, pattern));
     [files.folder]  = deal(pop_dir);
     % filter out hidden files
-    good_idx = regexp({files.name}, '^[^.]+');  
+    good_idx = regexp({files.name}, '^[^.]+');
     good_idx = ~cellfun('isempty', good_idx);
     files    = files(good_idx);
     % search subfolders
@@ -1132,7 +1132,7 @@ function metadata = check_metadata_model(metadata)
 % Check metadata in the model case.
 
 if ~isfield(metadata,'type')
-    error('[spm_json_manager] field ''type'' is mandatory.')        
+    error('[spm_json_manager] field ''type'' is mandatory.')
 end
 if ~isfield(metadata,'modality')
     metadata.modality = '';
@@ -1147,28 +1147,28 @@ function metadata = check_metadata_dat(metadata)
 % Check metadata in the dat case.
 
 if ~isfield(metadata,'name')
-    error('[spm_json_manager] Field ''name'' is mandatory.')        
+    error('[spm_json_manager] Field ''name'' is mandatory.')
 end
 if ~isfield(metadata,'population')
-    metadata.population = '';       
+    metadata.population = '';
 end
 if ~isfield(metadata,'modality')
     metadata.modality = '';
 end
 if ~isfield(metadata,'channel')
-    metadata.channel = '';   
+    metadata.channel = '';
 end
 if ~isfield(metadata,'rater')
-    metadata.rater = '';   
+    metadata.rater = '';
 end
 if ~isfield(metadata,'protocol')
-    metadata.protocol = 'unknown';   
+    metadata.protocol = 'unknown';
 end
 if ~isfield(metadata,'hospital')
-    metadata.hospital = '';   
+    metadata.hospital = '';
 end
 if ~isfield(metadata,'tissue')
-    metadata.tissue = '';   
+    metadata.tissue = '';
 end
 if ~isfield(metadata,'pth')
     metadata.pth = '';

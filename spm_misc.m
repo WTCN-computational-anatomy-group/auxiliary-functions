@@ -25,25 +25,25 @@ id = varargin{1};
 varargin = varargin(2:end);
 switch lower(id)
     case 'compute_avg_mat'
-        [varargout{1:nargout}] = compute_avg_mat(varargin{:});  
+        [varargout{1:nargout}] = compute_avg_mat(varargin{:});
     case 'create_nii'
-        [varargout{1:nargout}] = create_nii(varargin{:});    
+        [varargout{1:nargout}] = create_nii(varargin{:});
     case 'linspace_vec'
-        [varargout{1:nargout}] = linspace_vec(varargin{:});        
+        [varargout{1:nargout}] = linspace_vec(varargin{:});
     case 'manage_parpool'
         [varargout{1:nargout}] = manage_parpool(varargin{:});
     case 'nbr_parfor_workers'
-        [varargout{1:nargout}] = nbr_parfor_workers(varargin{:});            
+        [varargout{1:nargout}] = nbr_parfor_workers(varargin{:});
     case 'vxsize'
-        [varargout{1:nargout}] = vxsize(varargin{:});              
+        [varargout{1:nargout}] = vxsize(varargin{:});
     case 'msk_modality'
-        [varargout{1:nargout}] = msk_modality(varargin{:});                
+        [varargout{1:nargout}] = msk_modality(varargin{:});
     case 'get_gain'
-        [varargout{1:nargout}] = get_gain(varargin{:});          
+        [varargout{1:nargout}] = get_gain(varargin{:});
     case 'affine_basis'
-        [varargout{1:nargout}] = affine_basis(varargin{:});            
+        [varargout{1:nargout}] = affine_basis(varargin{:});
     case 'clean_holly_mbrud'
-        [varargout{1:nargout}] = clean_holly_mbrud(varargin{:});              
+        [varargout{1:nargout}] = clean_holly_mbrud(varargin{:});
     otherwise
         help spm_parfor
         error('Unknown function %s. Type ''help spm_parfor'' for help.', id)
@@ -184,7 +184,7 @@ for i=1:size(Matrices,3)
         R1(pmatrix(i1,2),2)=1;
         R1(pmatrix(i1,3),3)=1;
         for i2=0:7,
-            F  = diag([bitand(i2,1)*2-1, bitand(i2,2)-1, bitand(i2,4)/2-1]);            
+            F  = diag([bitand(i2,1)*2-1, bitand(i2,2)-1, bitand(i2,4)/2-1]);
             R2 = F*R1;
             ss = sum(sum((R/R2-eye(3)).^2));
             if ss<minss,
@@ -303,7 +303,7 @@ function gain = get_gain(vals)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 vals = vals(:);
-gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));   
+gain = abs((vals(end - 1) - vals(end))/(max(vals(isfinite(vals))) - min(vals(isfinite(vals)))));
 %==========================================================================
 
 %==========================================================================
@@ -322,7 +322,7 @@ function [B, rind] = affine_basis(type, flat)
 %        * 'rigid'      or 6
 %        * 'similitude' or 7
 %        * 'affine'     or 12 [default]
-% 
+%
 % B    - 4x4xQ array.
 % rind - Indices of basis that shoudl be reularised (all but tr/rot)
 %

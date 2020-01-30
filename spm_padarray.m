@@ -12,7 +12,7 @@ function Y = spm_padarray(X, padsize, method, direction)
 % If padsize < 0, it is set to 0 instead.
 
 
-% Possible extensions: 
+% Possible extensions:
 % . method and direction could have a different value per dimension
 % . other methods: antisymmetric (DST/Dirichlet)
 %                  symmetry wrt voxel center rather than voxel side (DCT-I)

@@ -68,7 +68,7 @@ function y = identity(lat_dim, lat_vs)
     lat_dim = lat_dim(1:3);
     lat_vs  = [lat_vs 1 1 1];
     lat_vs  = lat_vs(1:3);
-    
+
     y = zeros([lat_dim 3], 'single');
     [y(:,:,:,1), y(:,:,:,2), y(:,:,:,3)] = ...
         ndgrid(lat_vs(1) * single(1:lat_dim(1)), ...
@@ -98,7 +98,7 @@ function y = translation(T, lat_dim, lat_vs)
     lat_vs  = lat_vs(1:3);
     T       = [T 0 0 0];
     T       = T(1:3);
-    
+
     y = zeros([lat_dim 3], 'single');
     [y(:,:,:,1), y(:,:,:,2), y(:,:,:,3)] = ...
         ndgrid(lat_vs(1) * single(1:lat_dim(1)) + T(1), ...
@@ -130,7 +130,7 @@ function y = linear(L, lat_dim, lat_vs)
     L2 = L;
     L  = eye(3);
     L(1:dL(1), 1:dL(2)) = L2;
-    
+
     y = L * reshape(identity(lat_dim, lat_vs), [], 3)';
     y = reshape(y', lat_dim, 3);
 end
@@ -159,7 +159,7 @@ function y = affine(A, lat_dim, lat_vs)
     A2 = A;
     A  = eye(4);
     A(1:dA(1), 1:dA(2)) = A2;
-    
+
     y = A(1:3,1:3) * reshape(identity(lat_dim, lat_vs), [], 3)';
     y = bsxfun(@plus, y, A(1:3,4));
     y = reshape(y', [lat_dim 3]);
@@ -193,19 +193,19 @@ function y = compose(varargin)
         y = [];
         return
     end
-    
+
     if ~isempty(varargin) && isscalar(varargin{end})
         itrp     = varargin{end};
         varargin = varargin(1:end-1);
     else
         itrp = 1;
     end
-    
+
     if isempty(varargin)
         y = [];
         return
     end
-    
+
     % --- Initialise
     if isvector(varargin{end})
         vs = varargin{end};
@@ -216,7 +216,7 @@ function y = compose(varargin)
         y = varargin{end};
         varargin = varargin(1:end-1);
     end
-    
+
     % --- Loop
     while ~isempty(varargin)
         if isvector(varargin{end})
@@ -266,7 +266,7 @@ function out = warp(in, y, vs_in, itrp, bnd)
             end
         end
     end
-    
+
     if numel(itrp) < 3
         itrp = padarray(itrp, [0 3 - numel(itrp)], 'replicate', 'post');
     end
@@ -276,12 +276,12 @@ function out = warp(in, y, vs_in, itrp, bnd)
     if numel(vs_in) < 3
         vs_in = padarray(vs_in, [0 3 - numel(vs_in)], 'replicate', 'post');
     end
-    
+
     dim_in = size(in);
     in = reshape(in, dim_in(1), dim_in(2), dim_in(3), []);
     dim_out = size(y);
     dim_out = dim_out(1:3);
-    
+
     out = zeros([dim_out size(in, 4)], 'like', in);
     for k=1:size(in, 4)
         out(:,:,:,k) = warp_scalar(in(:,:,:,k), y, vs_in, itrp, bnd);
@@ -323,7 +323,7 @@ function y = transform(A, y)
 
     dim = size(y);
     dim = dim(1:3);
-    
+
     y = A(1:3,1:3) * reshape(y, [], 3)';
     y = bsxfun(@plus, y, A(1:3,4));
     y = reshape(y', [dim 3]);
@@ -346,10 +346,10 @@ function out = warp_scalar(in, y, vs_in, itrp, bnd)
 
     % Interpolate input image with circulant boundaries
     in_coeff = spm_diffeo('bsplinc', single(in), [itrp bnd]);
-    
+
     % Convert coordinates from mm to voxels
     y = mm2vox(y, vs_in);
-    
+
     % Interpolate image on output grid
     out = spm_diffeo('bsplins', in_coeff, single(y), [itrp bnd]);
 end

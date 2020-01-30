@@ -26,29 +26,29 @@ id       = varargin{1};
 varargin = varargin(2:end);
 switch lower(id)
     case 'atlas_crop'
-        [varargout{1:nargout}] = atlas_crop(varargin{:});  
+        [varargout{1:nargout}] = atlas_crop(varargin{:});
     case 'nm_reorient'
-        [varargout{1:nargout}] = nm_reorient(varargin{:});                   
+        [varargout{1:nargout}] = nm_reorient(varargin{:});
     case 'coreg'
-        [varargout{1:nargout}] = coreg(varargin{:});                 
+        [varargout{1:nargout}] = coreg(varargin{:});
     case 'reset_origin'
-        [varargout{1:nargout}] = reset_origin(varargin{:});              
+        [varargout{1:nargout}] = reset_origin(varargin{:});
     case 'reslice'
-        [varargout{1:nargout}] = reslice(varargin{:});                     
+        [varargout{1:nargout}] = reslice(varargin{:});
     case 'rigid_align'
-        [varargout{1:nargout}] = rigid_align(varargin{:});                  
+        [varargout{1:nargout}] = rigid_align(varargin{:});
     case 'subvol'
-        [varargout{1:nargout}] = subvol(varargin{:});    
+        [varargout{1:nargout}] = subvol(varargin{:});
     case 'downsample_inplane'
-        [varargout{1:nargout}] = downsample_inplane(varargin{:});      
+        [varargout{1:nargout}] = downsample_inplane(varargin{:});
     case 'downsample_throughplane'
-        [varargout{1:nargout}] = downsample_throughplane(varargin{:});              
+        [varargout{1:nargout}] = downsample_throughplane(varargin{:});
     case 'mult_bb_crop'
-        [varargout{1:nargout}] = mult_bb_crop(varargin{:});    
+        [varargout{1:nargout}] = mult_bb_crop(varargin{:});
     case 'resize_ims'
-        [varargout{1:nargout}] = resize_ims(varargin{:});            
+        [varargout{1:nargout}] = resize_ims(varargin{:});
     case 'change_vx_size'
-        [varargout{1:nargout}] = change_vx_size(varargin{:});               
+        [varargout{1:nargout}] = change_vx_size(varargin{:});
     otherwise
         help spm_impreproc
         error('Unknown function %s. Type ''help spm_impreproc'' for help.', id)
@@ -80,7 +80,7 @@ Vtpm = spm_vol(pth_tpm);
 mat    = Vin.mat;
 mattpm = Vtpm.mat;
 
-tpm = spm_load_priors8(Vtpm);    
+tpm = spm_load_priors8(Vtpm);
 
 V = spm_vol(P);
 
@@ -106,14 +106,14 @@ Rtpm1 = [3  72.2 37.3 1]'; Rtpm2 = [3  72.2 75.9 1]';
 
 Stpm1 = [58.6 42.6 119 1]'; Stpm2 = [58.60 99.4 119 1]';
 if rem_neck==2
-    Itpm1 = [61 42 31   1]'; Itpm2 = [61 107 29 1]';   
+    Itpm1 = [61 42 31   1]'; Itpm2 = [61 107 29 1]';
 elseif rem_neck==1
-    Itpm1 = [58.6 39.4 2.5   1]'; Itpm2 = [58.60 99.4 2.5  1]';    
+    Itpm1 = [58.6 39.4 2.5   1]'; Itpm2 = [58.60 99.4 2.5  1]';
 else
     Itpm1 = [58.6 39.4 -200  1]'; Itpm2 = [58.60 99.4 -200 1]';
 end
 Atpm1 = [58.6 144 28.4 1]'; Atpm2 = [58.60 144 82.3 1]';
-Ptpm1 = [58.6 3.5  28.4 1]'; Ptpm2 = [58.60 3.5 82.3 1]'; 
+Ptpm1 = [58.6 3.5  28.4 1]'; Ptpm2 = [58.60 3.5 82.3 1]';
 
 % Voxel locations in input
 T  = mat\(Affine\mattpm);
@@ -134,7 +134,7 @@ for i=1:3
 end
 
 % Do cropping
-spm_impreproc('subvol',Vin,bb,prefix);      
+spm_impreproc('subvol',Vin,bb,prefix);
 %==========================================================================
 
 %==========================================================================
@@ -255,7 +255,7 @@ dim = V.dim;
 vx  = sqrt(sum(M(1:3,1:3).^2));
 
 if det(M(1:3,1:3))<0
-    vx(1) = -vx(1); 
+    vx(1) = -vx(1);
 end
 
 if isempty(orig)
@@ -268,7 +268,7 @@ M1   = [vx(1) 0      0         off(1)
            0      0      vx(3) off(3)
            0      0      0      1];
 
-spm_get_space(P,M1);   
+spm_get_space(P,M1);
 %==========================================================================
 
 %==========================================================================
@@ -333,7 +333,7 @@ create(Nii);
 function [V,res,source_ix] = coreg(V,ref_ix)
 % Co-register images
 % FORMAT V = coreg(V)
-% V - SPM volume object that can contain N different modalities (e.g. T1- 
+% V - SPM volume object that can contain N different modalities (e.g. T1-
 % and T2-weighted MRIs.
 %
 % WARNING: This function overwrites orientation matrices!
@@ -367,7 +367,7 @@ source_ix = ixs(ixs~=ref_ix);
 res       = cell(1,numel(source_ix));
 cnt       = 1;
 for n=source_ix
-    matlabbatch{1}.spm.spatial.coreg.estimate.source = {V(n).fname};         
+    matlabbatch{1}.spm.spatial.coreg.estimate.source = {V(n).fname};
 
     res{cnt} = spm_jobman('run',matlabbatch);
     cnt      = cnt + 1;
@@ -378,7 +378,7 @@ end
 function [V,ref_ix] = reslice(V,deg,ref_ix)
 % Re-slice images
 % FORMAT V = reslice(V)
-% V - SPM volume object that can contain N different modalities (e.g. T1- 
+% V - SPM volume object that can contain N different modalities (e.g. T1-
 % and T2-weighted MRIs.
 % ref_ix - index of reference image in V
 %
@@ -410,7 +410,7 @@ end
 
 if nargin<3
     % Get image with largest volume (for reslicing using this image as
-    % reference)        
+    % reference)
     vol = zeros(C,3);
     for n=1:C
         vx       = spm_misc('vxsize',V(n).mat);
@@ -426,18 +426,18 @@ source_ix = ixs(ixs ~= ref_ix);
 msk        = cell(1,C);
 [x0,y0,z0] = ndgrid(1:dm(ref_ix,1),1:dm(ref_ix,2),1:dm(ref_ix,3));
 for n=source_ix
-    msk{n} = V(n).private.dat(:,:,:);     
-    
-    T  = mat(:,:,n)\mat(:,:,ref_ix);    
+    msk{n} = V(n).private.dat(:,:,:);
+
+    T  = mat(:,:,n)\mat(:,:,ref_ix);
     x1 = T(1,1)*x0 + T(1,2)*y0 + T(1,3)*z0 + T(1,4);
     y1 = T(2,1)*x0 + T(2,2)*y0 + T(2,3)*z0 + T(2,4);
     z1 = T(3,1)*x0 + T(3,2)*y0 + T(3,3)*z0 + T(3,4);
-    
-    msk{n}                    = spm_bsplins(msk{n},x1,y1,z1,[0 0 0  0 0 0]);    
+
+    msk{n}                    = spm_bsplins(msk{n},x1,y1,z1,[0 0 0  0 0 0]);
     msk{n}(~isfinite(msk{n})) = 0;
     msk{n}                    = msk{n} ~= 0;
 end
-    
+
 % Use SPM batch job to reslice
 matlabbatch{1}.spm.spatial.realign.write.data = {V(ref_ix).fname, V(source_ix).fname}';
 matlabbatch{1}.spm.spatial.realign.write.roptions.which = [1 0];
@@ -451,14 +451,14 @@ spm_jobman('run',matlabbatch);
 for n=source_ix
     % Delete old data
     delete(V(n).fname);
-    
+
     % Update spm_vol object
-    [pth,nam,ext] = fileparts(V(n).fname);    
+    [pth,nam,ext] = fileparts(V(n).fname);
     V(n)          = spm_vol(fullfile(pth,['res_' nam ext]));
-    
+
     % Mask
     img                     = single(V(n).private.dat(:,:,:));
-    V(n).private.dat(:,:,:) = msk{n}.*img;     
+    V(n).private.dat(:,:,:) = msk{n}.*img;
 end
 %==========================================================================
 
@@ -506,13 +506,13 @@ function nfname = downsample_inplane(fname)
 % Down-sample a NIfTI image in the high-resolution plane
 % FORMAT nfname = downsample_inplane(fname)
 %__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging  
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 % Get image data
 
 Nii = nifti(fname);
-M0  = Nii.mat;             
-X   = Nii.dat(:,:,:);  
-dm0 = size(X);                                                   
+M0  = Nii.mat;
+X   = Nii.dat(:,:,:);
+dm0 = size(X);
 vx0 = spm_misc('vxsize',M0);
 
 % Get down-sampling factor
@@ -521,16 +521,16 @@ if d(1)>=1, d(1) = 1; end
 if d(2)>=1, d(2) = 1; end
 d(3) = 1;
 
-if round(d(1),3)<1 || round(d(2),3)<1        
-    % NN downsampling    
-    D = diag([d, 1]);          
-           
+if round(d(1),3)<1 || round(d(2),3)<1
+    % NN downsampling
+    D = diag([d, 1]);
+
     dm1 = floor(D(1:3,1:3)*dm0')';
-    M1  = M0/D;       
-    
+    M1  = M0/D;
+
     T = M0\M1;
     y = make_deformation(T,dm1);
-                   
+
     X = spm_bsplins(X,y(:,:,:,1),y(:,:,:,2),y(:,:,:,3),[0 0 0 0 0 0]);
     clear y
 
@@ -542,7 +542,7 @@ end
 fname         = Nii.dat.fname;
 [pth,nam,ext] = fileparts(fname);
 nfname        = fullfile(pth,['ds_' nam ext]);
-        
+
 spm_misc('create_nii',nfname,X,M1,Nii.dat.dtype,Nii.descrip,Nii.dat.offset,Nii.dat.scl_slope,Nii.dat.scl_inter);
 %==========================================================================
 
@@ -551,13 +551,13 @@ function nfname = downsample_throughplane(fname)
 % Down-sample a NIfTI image in the through-plane to 1 mm voxel size
 % FORMAT nfname = downsample_throughplane(fname)
 %__________________________________________________________________________
-% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging  
+% Copyright (C) 2018 Wellcome Trust Centre for Neuroimaging
 
 % Get image data
 Nii = nifti(fname);
-M0  = Nii.mat;             
-X   = Nii.dat(:,:,:);  
-dm0 = size(X);                                                   
+M0  = Nii.mat;
+X   = Nii.dat(:,:,:);
+dm0 = size(X);
 vx0 = spm_misc('vxsize',M0);
 
 % Get down-sampling factor
@@ -566,14 +566,14 @@ d = vx0(3);
 if round(d,3)<1
     % NN downsampling
     d = [1 1 d];
-    D = diag([d, 1]);          
-           
+    D = diag([d, 1]);
+
     dm1 = floor(D(1:3,1:3)*dm0')';
-    M1  = M0/D;       
-    
+    M1  = M0/D;
+
     T = M0\M1;
     y = make_deformation(T,dm1);
-                   
+
     X = spm_bsplins(X,y(:,:,:,1),y(:,:,:,2),y(:,:,:,3),[0 0 0 0 0 0]);
     clear y
 
@@ -585,7 +585,7 @@ end
 fname         = Nii.dat.fname;
 [pth,nam,ext] = fileparts(fname);
 nfname        = fullfile(pth,['dsz_' nam ext]);
-        
+
 spm_misc('create_nii',nfname,X,M1,Nii.dat.dtype,Nii.descrip,Nii.dat.offset,Nii.dat.scl_slope,Nii.dat.scl_inter);
 %==========================================================================
 
@@ -607,7 +607,7 @@ nbb = [mn(:,1) mx(:,2)];
 V0 = spm_vol(fname);
 od = V0(1).dim;
 for k=1:numel(V0)
-    spm_impreproc('subvol',V0(k),nbb','tmp');        
+    spm_impreproc('subvol',V0(k),nbb','tmp');
 end
 
 delete(fname);
@@ -616,7 +616,7 @@ fname_tmp     = fullfile(pth,['tmp' nam ext]);
 movefile(fname_tmp,fname);
 
 V  = spm_vol(fname);
-nd = V(1).dim;   
+nd = V(1).dim;
 
 nii = nifti(fname);
 
@@ -640,7 +640,7 @@ if nargin < 5, deg    = 0;      end
 
 % Get bounding-box
 if strcmp(V_ref,'spm')
-    
+
 else
     BB = world_bb(V_ref);
 end
@@ -683,14 +683,14 @@ dm   = floor(D(1:3,1:3)*dm0')';
 
 [x0,y0,z0] = ndgrid(1:dm(1),1:dm(2),1:dm(3));
 
-T = mat0\mat;    
+T = mat0\mat;
 
 x1 = T(1,1)*x0 + T(1,2)*y0 + T(1,3)*z0 + T(1,4);
 y1 = T(2,1)*x0 + T(2,2)*y0 + T(2,3)*z0 + T(2,4);
 z1 = T(3,1)*x0 + T(3,2)*y0 + T(3,3)*z0 + T(3,4);
 
 coeff               = spm_bsplinc(img0,bs);
-img                 = spm_bsplins(coeff,x1,y1,z1,bs);    
+img                 = spm_bsplins(coeff,x1,y1,z1,bs);
 img(~isfinite(img)) = 0;
 
 % Save down-sampled image
@@ -719,7 +719,7 @@ D = cat(4,T(1,1)*x0 + T(1,2)*y0 + T(1,3)*z0 + T(1,4), ...
           T(2,1)*x0 + T(2,2)*y0 + T(2,3)*z0 + T(2,4), ...
           T(3,1)*x0 + T(3,2)*y0 + T(3,3)*z0 + T(3,4));
 
-% Mask according to whether these are < 1 or > than the dimensions of the reference image.        
+% Mask according to whether these are < 1 or > than the dimensions of the reference image.
 msk = cell(1,3);
 for i=1:3
     msk{i} = D(:,:,:,i) >= 1 & D(:,:,:,i) <= dm_source(i);
@@ -762,7 +762,7 @@ function y = make_deformation(M,dm)
 y          = cat(4,M(1,1)*x0 + M(1,2)*y0 + M(1,3)*z0 + M(1,4), ...
                    M(2,1)*x0 + M(2,2)*y0 + M(2,3)*z0 + M(2,4), ...
                    M(3,1)*x0 + M(3,2)*y0 + M(3,3)*z0 + M(3,4));
-%==========================================================================  
+%==========================================================================
 
 %==========================================================================
 function Vo = resize_img(Vi,BB,vx,prefix,deg)
@@ -773,9 +773,9 @@ c  = 1;
 for V=Vi'
     % (copy to allow defaulting of NaNs differently for each volume)
     if isempty(vx)
-        vx = sqrt(sum(V.mat(1:3,1:3).^2));        
+        vx = sqrt(sum(V.mat(1:3,1:3).^2));
     end
-    
+
     voxdim = vx;
     bb     = BB;
     % default voxdim to current volume's voxdim, (from mat parameters)
@@ -802,7 +802,7 @@ for V=Vi'
         mn(2)  =  mn(2) + offset;
         mx(2)  =  mx(2) + offset;
     end
-    
+
     % voxel [1 1 1] of output should map to BB mn
     % (the combination of matrices below first maps [1 1 1] to [0 0 0])
     mat = spm_matrix([mn 0 0 0 voxdim])*spm_matrix([-1 -1 -1]);
@@ -818,7 +818,7 @@ for V=Vi'
     Vo(c).mat        = mat;
     Vo(c) = spm_create_vol(Vo(c));
     for i = 1:imgdim(3)
-        
+
         D = diag([-1 1 1 1]);
         if det(V.mat(1:3,1:3)) < 0
             D = diag([1 1 1 1]);
@@ -826,10 +826,10 @@ for V=Vi'
 
         M = inv(spm_matrix([0 0 -i])*inv(Vo(c).mat)*(D*V.mat));
         img = spm_slice_vol(V, M, imgdim(1:2), deg);
-        
+
         spm_write_plane(Vo(c), img, i);
     end
-    
+
     c = c + 1;
 end
 %==========================================================================
