@@ -9,7 +9,7 @@ function [V,W,C,BW,E] = spm_histN(X,varargin)
 % MANDATORY
 % ---------
 % X        - NxP matrix of observed values
-% 
+%
 % OPTIONAL
 % --------
 % nbins    - 1x1 or 1xP number of bins [64]
@@ -36,7 +36,7 @@ function [V,W,C,BW,E] = spm_histN(X,varargin)
 % (M can be smaller that the specified number of bins if KeepZero = false)
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    
+
 % -------------------------------------------------------------------------
 % Parse inputs
 p = inputParser;
@@ -91,7 +91,7 @@ else
         end
         B = num2cell(B, 1);
     end
-        
+
     E  = cell(1,P);
     BW = cell(1,P);
     for c=1:P
@@ -165,7 +165,7 @@ if p.Results.Smooth
             W = subsasgn(W, struct('type', '()', 'subs', {subs}), W1);
             clear W1
         end
-        
+
     end
     W = W(:);
 end

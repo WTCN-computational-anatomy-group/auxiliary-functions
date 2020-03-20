@@ -14,8 +14,8 @@ function varargout = spm_sparse(id, varargin)
 %
 %--------------------------------------------------------------------------
 % Differential operators in matrix form.
-% > Let v be the vectorized version of a scalar or vector field, 
-%   and J be the jacobian operator, then J * v returns a vectorized  
+% > Let v be the vectorized version of a scalar or vector field,
+%   and J be the jacobian operator, then J * v returns a vectorized
 %   version of the Jacobian matrix of v.
 %
 % FORMAT J = spm_sparse('jacobian',       lat_dim, lat_vs, vec_dim, bnd)
@@ -24,7 +24,7 @@ function varargout = spm_sparse(id, varargin)
 % FORMAT D = spm_sparse('euclidian_dist', lat_dim, lat_vs)
 % FORMAT A = spm_sparse('divergence',     lat_dim, lat_vs, bnd)
 % FORMAT S = spm_sparse('symjac',         lat_dim, lat_vs, vec_dim, bnd)
-% 
+%
 %--------------------------------------------------------------------------
 % FORMAT help spm_sparse>function
 % Returns the help file of the selected function.
@@ -72,10 +72,10 @@ function L = precision(mode, lat_dim, lat_vs, param, bnd)
 %               * 1/'n'/'neumann'    (mirror / boundary)
 %               * 2/'d'/'dirichlet'  (zero outside FOV)
 %
-% Computes the inverse of the covariance matrix of the smooth prior 
-% in the LDDMM framwork (i.e., the posdef, self-adjoint, differential 
-% operator that defines a metric in the velocity space). It penalizes 
-% absolute deformations and membrane, bending and linear-elastic energies. 
+% Computes the inverse of the covariance matrix of the smooth prior
+% in the LDDMM framwork (i.e., the posdef, self-adjoint, differential
+% operator that defines a metric in the velocity space). It penalizes
+% absolute deformations and membrane, bending and linear-elastic energies.
 % See Ashburner, "A fast diffeomorphic image registration algorithm",
 % NeuroImage (2007)
 %
@@ -100,17 +100,17 @@ function L = precision(mode, lat_dim, lat_vs, param, bnd)
         param(4) = 0;
         param(5) = 0;
     end
-    
+
     lambda_abs      = param(1); % sqrt(lam) ~ 1/mm
     lambda_membrane = param(2); % sqrt(lam) ~ 1
     lambda_bending  = param(3); % sqrt(lam) ~ mm
     mu_elastic      = param(4); % sqrt(mu)  ~ 1
     lambda_elastic  = param(5); % sqrt(lam) ~ 1
-    
+
     % Compute all different combination of Jacobian estimate
     % ([Jx+ Jy+], [Jx+ Jy-], [Jx- Jy+], [Jx- Jy-], ...)
     dirs = combdir(im_dim);
-    
+
     if strcmpi(mode, 'field')
         im_dim = 1;
     end
@@ -118,7 +118,7 @@ function L = precision(mode, lat_dim, lat_vs, param, bnd)
     % Note that in the 'diffeo' case, I have to rescale the matrix by the
     % voxel size because displacement fields are expressed in voxels, not
     % millimetres.
-    
+
     % Start with a zero matrix
     L = sparse(prod(lat_dim) * im_dim, prod(lat_dim) * im_dim);
     % Absolute displacement in each component (~= euclidian dist)
@@ -219,7 +219,7 @@ function K = kernel(mode, L, lat_dim, lat_vs, bnd)
 % param     - It is also possible to provide the penalty parameters instead
 %             of the full matrix.
 % lat_dim   - Dimension of the field lattice. Necessary because it is not
-%             explicitely stored in L and is needed to extract the 
+%             explicitely stored in L and is needed to extract the
 %             convolution operators from L.
 % (lat_vs)  - Voxel size of the lattice (default: 1).
 % (bnd)     - Boundary conditions:
@@ -242,7 +242,7 @@ function K = kernel(mode, L, lat_dim, lat_vs, bnd)
         L = precision(mode, lat_dim, lat_vs, param, bnd);
     end
     im_dim = length(lat_dim);
-    
+
     if strcmpi(mode, 'diffeo')
         K = zeros([lat_dim im_dim im_dim]);
         for i=1:im_dim
@@ -271,25 +271,25 @@ function J = jacobian(lat_dim, lat_vs, vec_dim, dir, bnd)
 % J         - Jacobian matrix operator s.t. Jac(v) = J * v
 %
 % Return a matrix that allows estimating the Jacobian of a vector
-% field at a given point. The partial derivative at a point is 
+% field at a given point. The partial derivative at a point is
 % estimated by:
-% > dv/dx (p) ~= ( v(p + dx) - v(p) ) / dx , 
+% > dv/dx (p) ~= ( v(p + dx) - v(p) ) / dx ,
 % where dx is one voxel.
-% The returned matrix J can be used through 
+% The returned matrix J can be used through
 % > Jac(v) = reshape(J * v(:), [lat_dim field_dim vec_dim]),
 % where Jac(v)(x) is the Jacobian at point x.
 % If vector_dim is provided, the field v is considered to be vectorized
-% over both the lattice and the vectors (v = [v1; v2; v3]), and the 
-% returned matrix J has dimensions 
+% over both the lattice and the vectors (v = [v1; v2; v3]), and the
+% returned matrix J has dimensions
 % (prod(lattice_dim) * vector_dim) x (prod(lattice_dim)).
-% Else, it is considered to be vectorized only over the lattice 
-% (v = [v1 v2 v3]), and the returned matrix J has dimensions 
+% Else, it is considered to be vectorized only over the lattice
+% (v = [v1 v2 v3]), and the returned matrix J has dimensions
 % (prod(lattice_dim)) x (prod(lattice_dim)).
 %
 % The sum of square derivatives at point v is: v'*(J'*J)*v
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    
+
     if nargin < 5
         bnd = 0;
         if nargin < 4
@@ -302,17 +302,17 @@ function J = jacobian(lat_dim, lat_vs, vec_dim, dir, bnd)
             end
         end
     end
-        
+
     % Multidimensional gradient functor
     CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
-    
+
     % Concatenate gradient functors
-    % > CG * f allows to compute the gradient at f, where f is a scalar 
+    % > CG * f allows to compute the gradient at f, where f is a scalar
     %   field.
-    CG = cell2mat(CG); 
-    
+    CG = cell2mat(CG);
+
     % Vector gradient functor
-    % > J * v allows to compute the jacobian at v, where v is a vector 
+    % > J * v allows to compute the jacobian at v, where v is a vector
     %   field.
     J = kron(speye(vec_dim), CG);
 end
@@ -332,26 +332,26 @@ function H = hessian(lat_dim, lat_vs, vec_dim, dir, bnd)
 %             * 2/'d'/'dirichlet'  (zero outside FOV)
 % H         - Hessian matrix operator s.t. Hess(v) = H * v
 %
-% Returns a matrix that allows estimating the Hessian of a vector 
-% field at a given point. The partial derivative at a point is 
-% estimated by d2v/dxdy (p) ~= ( dv/dx(p + dy) - dv/dx(p) ) / dy , 
+% Returns a matrix that allows estimating the Hessian of a vector
+% field at a given point. The partial derivative at a point is
+% estimated by d2v/dxdy (p) ~= ( dv/dx(p + dy) - dv/dx(p) ) / dy ,
 % where dy is one voxel.
-% The returned matrix J can be used through 
-% > Hess(v) = reshape(H * v(:), [lat_dim n_comb vec_dim]), 
-% where Hess(v)(i,:,:,j) is the Hessian at point v_i (stored sparse) 
+% The returned matrix J can be used through
+% > Hess(v) = reshape(H * v(:), [lat_dim n_comb vec_dim]),
+% where Hess(v)(i,:,:,j) is the Hessian at point v_i (stored sparse)
 % for component j, and n_comb = lat_dim * (lat_dim+1) / 2.
 % If vector_dim is provided, the field v is considered to be vectorized
-% over both the lattice and the vectors (v = [v1; v2; v3]), and the 
-% returned matrix H has dimensions 
+% over both the lattice and the vectors (v = [v1; v2; v3]), and the
+% returned matrix H has dimensions
 % (prod(lattice_dim) * vector_dim) x (prod(lattice_dim)).
-% Else, it is considered to be vectorized only over the lattice 
-% (v = [v1 v2 v3]), and the returned matrix J has dimensions 
+% Else, it is considered to be vectorized only over the lattice
+% (v = [v1 v2 v3]), and the returned matrix J has dimensions
 % (prod(lattice_dim)) x (prod(lattice_dim)).
 %
 % The sum of square second derivatives at point v is: v'*(H'*H)*v
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    
+
     if nargin < 5
         bnd = 0;
         if nargin < 4
@@ -365,12 +365,12 @@ function H = hessian(lat_dim, lat_vs, vec_dim, dir, bnd)
         end
     end
     im_dim = length(lat_dim);
-    
+
     % Multidimensional gradient functor
     CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
-    
+
     % Multidimensional hessian functor
-    % > CGG{index(i,j)} * f allows to compute the second derivative along 
+    % > CGG{index(i,j)} * f allows to compute the second derivative along
     %   directions i and j, where f is a scalar field.
     % I don't use the symmetric approximation because the sqrt(2)
     % multiplication causes imprecision errors.
@@ -383,14 +383,14 @@ function H = hessian(lat_dim, lat_vs, vec_dim, dir, bnd)
         end
     end
     clear CG
-    
+
     % Concatenate hessian functors
-    % > CGG * f allows to compute the hessian at f, where 
+    % > CGG * f allows to compute the hessian at f, where
     %   f is a scalar field.
-    CGG = -cell2mat(CGG); 
-    
+    CGG = -cell2mat(CGG);
+
     % Vector hessian functor
-    % > H * v allows to compute the hessian at v, where v is a vector 
+    % > H * v allows to compute the hessian at v, where v is a vector
     %   field.
     H = kron(speye(vec_dim), CGG);
 end
@@ -410,8 +410,8 @@ function L = laplacian(lat_dim, lat_vs, dir, bnd)
 % L         - Laplacian matrix operator s.t. Lap(v) = L * f
 %
 % Returns a matrix that allows estimating the laplacian of a scalar field
-% at a given point. The partial derivative at a point is 
-% estimated by d2f/dx2 (p) ~= ( df/dx(p + dx) - df/dx(p) ) / dx , 
+% at a given point. The partial derivative at a point is
+% estimated by d2f/dx2 (p) ~= ( df/dx(p + dx) - df/dx(p) ) / dx ,
 % where dx is one voxel.
 % The returned matrix can be used through
 % > Lapl(f) = reshape(L * f(:), [lat_dim]),
@@ -434,20 +434,20 @@ function L = laplacian(lat_dim, lat_vs, dir, bnd)
 
     % Multidimensional gradient functor
     CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
-    
+
     % Multidimensional diagonal of hessian functor
-    % > CGG{i} * f allows to compute the unmixed second derivative along 
+    % > CGG{i} * f allows to compute the unmixed second derivative along
     %   direction i,  where f is a scalar field.
     CGG = cell(1, im_dim);
     for i=1:im_dim
         CGG{i} = CG{i} * CG{i};
     end
     clear CG
-    
+
     % Concatenate diagonal of hessian functors
-    % > L * f allows to compute the laplacian at f, where 
+    % > L * f allows to compute the laplacian at f, where
     %   f is a scalar field.
-    L = -cell2mat(CGG); 
+    L = -cell2mat(CGG);
 end
 
 function D = euclidian_dist(lat_dim, lat_vs)
@@ -456,22 +456,22 @@ function D = euclidian_dist(lat_dim, lat_vs)
 % (lat_vs)  - Voxel size of the lattice (default: 1).
 % D         - Distance matrix operator s.t. Dist(v) = D * v
 %
-% Returns a matrix that allows *estimating* the euclidian norm of a  
-% vector field at a given point. 
-% The returned matrix D can be used through 
-% > Dist(v) = reshape(D * v(:), [lat_dim vec_dim]), 
+% Returns a matrix that allows *estimating* the euclidian norm of a
+% vector field at a given point.
+% The returned matrix D can be used through
+% > Dist(v) = reshape(D * v(:), [lat_dim vec_dim]),
 % where Dist(v)([x,j]) is the value (in mm) of component j at point x.
 %
 % The sum of square distance components at point v is: v'*(D'*D)*v,
 % which is not the sum of square euclidian distances!
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    
+
     if nargin < 2
         lat_vs = ones(1, length(lat_dim));
     end
     vector_dim = length(lat_dim);
-    
+
     D = cell(1, vector_dim);
     for i=1:vector_dim
         D{i} = speye(prod(lat_dim));
@@ -496,10 +496,10 @@ function A = divergence(lat_dim, lat_vs, dir, bnd)
 %             * 2/'d'/'dirichlet'  (zero outside FOV)
 % A         - Divergence matrix operator s.t. Div(v) = A * v
 %
-% Returns a matrix that allows estimating the divergence of a vector 
-% field at a given point. 
-% The returned matrix A can be used through 
-% > Div(v) = reshape(A * v(:), lat_dim), 
+% Returns a matrix that allows estimating the divergence of a vector
+% field at a given point.
+% The returned matrix A can be used through
+% > Div(v) = reshape(A * v(:), lat_dim),
 % where Div(v)(x) is the divergence at point x.
 %
 % The sum of square divergences at point v is: v'*(A'*A)*v
@@ -515,12 +515,12 @@ function A = divergence(lat_dim, lat_vs, dir, bnd)
             end
         end
     end
-    
+
     % Multidimensional gradient functor (column shape)
     CG = multi_gradient(lat_dim, dir, lat_vs, bnd);
-    
+
     % Divergence functor (row shape)
-    % > A * v allows to compute the divergence at v, where v is a vector 
+    % > A * v allows to compute the divergence at v, where v is a vector
     %   field.
     A = cell2mat(CG');
 end
@@ -541,16 +541,16 @@ function S = symjac(lat_dim, lat_vs, vec_dim, dir, bnd)
 % S         - Jacobian matrix operator s.t. SymJac(v) = S * v
 %
 % Returns a matrix that allows estimating the symmetric part of the
-% jacobian of a vector field at a given point. 
-% The returned matrix S can be used through 
+% jacobian of a vector field at a given point.
+% The returned matrix S can be used through
 % > SymJac(v) = reshape(S * v, [lat_dim field_dim vec_dim]),
-% where SymJac(v)(i) is the symmetric part of the Jacobian at point 
+% where SymJac(v)(i) is the symmetric part of the Jacobian at point
 % v_i.
 %
 % The sum of square symmetric parts at point v is: v'*(S'*S)*v
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
-    
+
     if nargin < 5
         bnd = 0;
         if nargin < 4
@@ -563,11 +563,11 @@ function S = symjac(lat_dim, lat_vs, vec_dim, dir, bnd)
             end
         end
     end
-    
+
     im_dim = length(lat_dim);
     J = jacobian(lat_dim, lat_vs, im_dim, dir, bnd);
-    
-    % Compute a matrix that links a the element of a Jacobian (x_i, f_j) 
+
+    % Compute a matrix that links a the element of a Jacobian (x_i, f_j)
     % with itself and its symmetric component (x_j, f_i).
     link_sym = spalloc(im_dim * vec_dim, im_dim * vec_dim, im_dim * vec_dim);
     for i=1:im_dim
@@ -580,10 +580,10 @@ function S = symjac(lat_dim, lat_vs, vec_dim, dir, bnd)
             end
         end
     end
-    
+
     % Expand so that it works for any element of the vector field
     S = kron(link_sym, speye(prod(lat_dim)));
-    
+
     % Compute the symmetric part
     S = S * J;
 end
@@ -592,7 +592,7 @@ end
 
 function G = simple_gradient(dim, dir, vs, bnd)
 % Simple gradient functor
-% > G * f allows to compute the gradient along the first direction at 
+% > G * f allows to compute the gradient along the first direction at
 %   f, where f is a scalar field.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
@@ -605,7 +605,7 @@ function G = simple_gradient(dim, dir, vs, bnd)
             end
         end
     end
-    
+
     if dir > 0
         % Right-hand approximation
         G = spdiags(repmat([-1, 1], dim, 1), [0, 1], dim, dim);
@@ -657,7 +657,7 @@ end
 
 function CG = multi_gradient(dim, dir, vs, bnd)
 % Multidimensional gradient functor
-    % > CG{i} * f allows to compute the gradient along direction i at f,  
+    % > CG{i} * f allows to compute the gradient along direction i at f,
     %   where f is a scalar field.
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
@@ -680,15 +680,15 @@ function CG = multi_gradient(dim, dir, vs, bnd)
     if numel(dir) == 1
         dir = repmat(dir, [1 im_dim]);
     end
-    
+
     % Create gradient operators for each dimension
     G = cell(im_dim, 1);
     for i=1:im_dim
         G{i} = simple_gradient(dim(i), dir(i), vs(i), bnd(i));
     end
-    
+
     % Extend matrix
-    CG = cell(im_dim, 1); 
+    CG = cell(im_dim, 1);
     for i=1:im_dim
         GorI = cell(im_dim, 1);
         for j=1:im_dim

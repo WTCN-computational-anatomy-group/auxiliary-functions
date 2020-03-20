@@ -62,17 +62,17 @@ function varargout = spm_prob(varargin)
 %
 % INPUT FORMAT
 % ------------
-% 
+%
 % - Single observations or single parameters should be scalar (or 1
 %   dimensional vectors in the multivariate case).
-% - Multiple observations should be of dimension > 3, with the 4th 
+% - Multiple observations should be of dimension > 3, with the 4th
 %   dimension (+5th in the multivariate case) being the feature space.
 %   This allows us to deal with images or volumes in which each voxel is an
 %   independent random variable.
 % - Implicit expansion is performed if observations and parameters have
 %   different dimensions.
 % - Update functions need pre-computed ML estimators or sufficient
-%   statistics. We do not deal with multiple observations of the same 
+%   statistics. We do not deal with multiple observations of the same
 %   random variable.
 %--------------------------------------------------------------------------
 
@@ -150,8 +150,8 @@ function varargout = normal(varargin)
 % --------------------
 %
 % The Normal distribution is parameterised by a mean parameter (mu) and
-% a (co)variance (sigma) or precision (lambda) parameter. 
-% For multivariate distributions, sigma is a KxK covariance matrix. 
+% a (co)variance (sigma) or precision (lambda) parameter.
+% For multivariate distributions, sigma is a KxK covariance matrix.
 % In the univariate case, it reduces to a scalar value, the variance.
 %
 % FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, sigma)
@@ -170,8 +170,8 @@ function varargout = normal(varargin)
 %
 % The Normal distribution can be used as a conjugate prior for the mean
 % parameter of another Normal distribution with known covariance.
-% It is then parameterised by an expected mean (mu), a degrees of freedom 
-% (n) and a known covariance (sigma) or precision (lambda). 
+% It is then parameterised by an expected mean (mu), a degrees of freedom
+% (n) and a known covariance (sigma) or precision (lambda).
 %
 % FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, n, sigma)
 % FORMAT pdf = spm_prob('Normal', 'pdf',    x, mu, n, lambda, 'precision')
@@ -230,7 +230,7 @@ function pdf = normal_pdf(x, mu, varargin)
         pdf = normal_pdf(x, mu, varargin{2}./varargin{1});
         return
     end
-    
+
     % Else, set default values
     if nargin < 4
         mode = 'covariance';
@@ -244,14 +244,14 @@ function pdf = normal_pdf(x, mu, varargin)
         mode = varargin{2};
     end
     precision = startsWith(mode, 'p', 'IgnoreCase', true);
-    
+
     % Usual PDF
     if precision
         pdf = (exp(spm_matcomp('LogDet', varargin{1}/(2*pi))))^(0.5) * exp(-0.5*(x(:)-mu(:))'*varargin{1}*(x(:)-mu(:)));
     else
         pdf = (exp(spm_matcomp('LogDet', varargin{1}*2*pi)))^(-0.5) * exp(-0.5*(x(:)-mu(:))'*(varargin{1}\(x(:)-mu(:))));
     end
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -274,7 +274,7 @@ function pdf = normal_logpdf(x, mu, varargin)
         pdf = normal_pdf(x, mu, varargin{2}/varargin{1});
         return
     end
-    
+
     % Else, set default values
     if nargin < 4
         mode = 'covariance';
@@ -289,7 +289,7 @@ function pdf = normal_logpdf(x, mu, varargin)
     end
     precision = startsWith(mode, 'p', 'IgnoreCase', true);
     K = size(varargin{1}, 1);
-    
+
     if precision
         pdf = -0.5*( K*log(2*pi) - spm_matcomp('LogDet', varargin{1}) + (x(:)-mu(:))'*varargin{1}*(x(:)-mu(:)) );
     else
@@ -322,7 +322,7 @@ function kl = normal_kl(mu1, par1, mu0, par0, varargin)
                      + par0 * (mu0(:)-mu1(:))'*(varargin{1}\(mu0(:)-mu1(:))) );
         return
     end
-    
+
     % Else, set default values
     if nargin < 5
         mode = 'covariance';
@@ -331,7 +331,7 @@ function kl = normal_kl(mu1, par1, mu0, par0, varargin)
     end
     precision = startsWith(mode, 'p', 'IgnoreCase', true);
     K = size(par1, 1);
-    
+
     % Common KL-divergence
     if precision
         kl = 0.5 * ( trace(par1\par0) ...
@@ -346,7 +346,7 @@ function kl = normal_kl(mu1, par1, mu0, par0, varargin)
                      - K ...
                      + (mu0(:)-mu1(:))'*(par1\(mu0(:)-mu1(:))) );
     end
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -377,7 +377,7 @@ function varargout = gamma(varargin)
 %   [Vlog]      Variance of the log (V[ln x])
 %
 % The Gamma distribution is a conjugate prior for a Normal precision (or
-% precision magnitude) with known mean, for a Gamma rate with known shape 
+% precision magnitude) with known mean, for a Gamma rate with known shape
 % or in general for any rate parameter of an Exponential family
 % distribution.
 %
@@ -405,7 +405,7 @@ function varargout = gamma(varargin)
 % Normal precision conjugate
 % --------------------------
 %
-% The Gamma distribution is parameterised by a mean precision parameter 
+% The Gamma distribution is parameterised by a mean precision parameter
 % (lambda) and a degrees of freedom (n). It can be a precision *magnitude*
 % parameter of K > 1.
 %
@@ -423,7 +423,7 @@ function varargout = gamma(varargin)
 %   >> Kullback-Leibler divergence from G0 to G1 = KL(G1||G0).
 %
 % FORMAT [lam1, n1] = spm_prob('Gamma', 'up', lam, n,     lam0, n0, ('normal'))
-% FORMAT [lam1, n1] = spm_prob('Gamma', 'up', s0, s1, s2, lam0, n0, 
+% FORMAT [lam1, n1] = spm_prob('Gamma', 'up', s0, s1, s2, lam0, n0,
 %                                             (mu=0), (Lam=eye), ('normal'))
 %   >> Posterior parameters of the Gamma distribution.
 %
@@ -431,7 +431,7 @@ function varargout = gamma(varargin)
 % Gamma rate conjugate
 % --------------------
 %
-% The Gamma distribution is parameterised by a mean rate parameter 
+% The Gamma distribution is parameterised by a mean rate parameter
 % (beta), a degrees of freedom (n), and a known shape parameter (alpha).
 %
 % FORMAT pdf = spm_prob('Gamma', 'pdf',    x, beta, n, alpha, 'gamma')
@@ -497,7 +497,7 @@ function pdf = gamma_pdf(x, varargin)
         end
         a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
         b   = bsxfun(@rdivide, a, varargin{1});
-    elseif nargin > 4 
+    elseif nargin > 4
         if startsWith(varargin{4}, 'n', 'IgnoreCase', true)
             a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
             b   = bsxfun(@rdivide, a, varargin{1});
@@ -509,10 +509,10 @@ function pdf = gamma_pdf(x, varargin)
         a = varargin{1};
         b = varargin{2};
     end
-    
+
     % Usual pdf
     pdf = gampdf(x, a, 1./b);
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -529,7 +529,7 @@ function pdf = gamma_logpdf(x, varargin)
         end
         a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
         b   = bsxfun(@rdivide, a, varargin{1});
-    elseif nargin > 4 
+    elseif nargin > 4
         if startsWith(varargin{4}, 'n', 'IgnoreCase', true)
             a   = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
             b   = bsxfun(@rdivide, a, varargin{1});
@@ -541,13 +541,13 @@ function pdf = gamma_logpdf(x, varargin)
         a = varargin{1};
         b = varargin{2};
     end
-    
+
     % Usual log-pdf
     pdf = bsxfun(@plus, bsxfun(@times, a, log(b)), ...
                         bsxfun(@times, a-1, log(x)));
     pdf = bsxfun(@minus, pdf, bsxfun(@times, b, x));
     pdf = bsxfun(@minus, pdf, gammaln(a));
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -582,9 +582,9 @@ function kl = gamma_kl(varargin)
         a1 = varargin{1};
         b1 = varargin{2};
         a0 = varargin{3};
-        b0 = varargin{4};  
+        b0 = varargin{4};
     end
-    
+
     % Usual KL
     % KL = - a0*log(b0/b1) + a1*(b0/b1 - 1) + (a1-a0)*psi(a1)
     %      + ln G(a0) - ln G(a1)
@@ -593,7 +593,7 @@ function kl = gamma_kl(varargin)
     kl = bsxfun(@minus, kl, bsxfun(@times, a1, bsxfun(@rdivide, b0, b1)-1));
     kl = bsxfun(@plus,  kl, gammaln(a0)) ;
     kl = bsxfun(@minus, kl, gammaln(a1)) ;
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -610,7 +610,7 @@ function [par1, n1] = gamma_up(varargin)
         % GAMMA
         % -----
         varargin = varargin(1:end-1);
-        
+
         if nargin > 4
             % Sufficient statistics case
             ss0   = varargin{1};
@@ -630,7 +630,7 @@ function [par1, n1] = gamma_up(varargin)
             n1      = n + n0;
             par1 = n1 / (n0/beta0 + n/beta);
         end
-        
+
     else
         % ------
         % NORMAL
@@ -638,7 +638,7 @@ function [par1, n1] = gamma_up(varargin)
         if ischar(varargin{end})
             varargin = varargin(1:end-1);
         end
-    
+
         if nargin > 4
             % Sufficient statistics case
             ss0     = varargin{1};
@@ -672,9 +672,9 @@ function [par1, n1] = gamma_up(varargin)
             n1      = n + n0;
             par1 = n1 / (n0/lambda0 + n/lambda);
         end
-    
+
     end
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -690,7 +690,7 @@ function out = gamma_e(varargin)
         % GAMMA CONJ
         % ----------
             out = varargin{2};
-            
+
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
@@ -698,7 +698,7 @@ function out = gamma_e(varargin)
         % NORMAL CONJ
         % -----------
             out = varargin{2};
-            
+
     else
         % -----
         % GAMMA
@@ -721,7 +721,7 @@ function out = gamma_v(varargin)
         % ----------
         a = bsxfun(@times, varargin{3}, varargin{2});
         b = bsxfun(@rdivide, a, varargin{1});
-                             
+
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
@@ -733,14 +733,14 @@ function out = gamma_v(varargin)
         end
         a = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
         b = bsxfun(@rdivide, a, varargin{1});
-                                 
+
     else
         % -----
         % GAMMA
         % -----
         a = varargin{1};
         b = varargin{2};
-        
+
     end
     out = bsxfun(@rdivide, a, b.^2);
 end
@@ -759,7 +759,7 @@ function out = gamma_elog(varargin)
         % ----------
         a = bsxfun(@times, varargin{3}, varargin{2});
         b = bsxfun(@rdivide, a, varargin{1});
-            
+
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
@@ -771,7 +771,7 @@ function out = gamma_elog(varargin)
         end
         a = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
         b = bsxfun(@rdivide, a, varargin{1});
-              
+
     else
         % -----
         % GAMMA
@@ -779,7 +779,7 @@ function out = gamma_elog(varargin)
         a = varargin{1};
         b = varargin{2};
     end
-    
+
     out = bsxfun(@minus, psi(a), log(b));
 end
 
@@ -796,7 +796,7 @@ function out = gamma_vlog(varargin)
         % GAMMA CONJ
         % ----------
         a = bsxfun(@times, varargin{3}, varargin{2});
-        
+
     elseif ( ischar(varargin{end}) && ...
              startsWith(varargin{end}, 'n', 'IgnoreCase', true) ) || ...
            (nargin == 3)
@@ -807,14 +807,14 @@ function out = gamma_vlog(varargin)
             varargin{3} = 1;
         end
         a = 0.5 * bsxfun(@times, varargin{3}, varargin{2});
-        
+
     else
         % -----
         % GAMMA
         % -----
         a = varargin{1};
     end
-    
+
     out = psi(1,a);
 end
 
@@ -835,7 +835,7 @@ function varargout = wishart(varargin)
 %   [V]         Variance (V[X])
 %   [Vlogdet]   Variance of the log determinant (V[ln det X])
 %
-% The Wishart distribution is a conjugate prior for a multivariate Normal 
+% The Wishart distribution is a conjugate prior for a multivariate Normal
 % precision matrix with known mean.
 %
 %--------------------------------------------------------------------------
@@ -844,7 +844,7 @@ function varargout = wishart(varargin)
 %
 % The Wishart distribution is parameterised by a scale matrix (V) and a
 % degrees of freedom (n). It can be seen as the distribution of the sum of
-% n independent centered multivariate Normal variables with precision 
+% n independent centered multivariate Normal variables with precision
 % matrix V.
 %
 % FORMAT pdf = spm_prob('Wishart', 'pdf',    X, V, n)
@@ -865,7 +865,7 @@ function varargout = wishart(varargin)
 % Normal precision matrix conjugate
 % ---------------------------------
 %
-% The Wishart distribution is parameterised by a mean precision parameter 
+% The Wishart distribution is parameterised by a mean precision parameter
 % (Lambda) and a degrees of freedom (n).
 %
 % FORMAT pdf = spm_prob('Wishart', 'pdf',    X, Lambda, n, 'normal')
@@ -908,7 +908,7 @@ function varargout = wishart(varargin)
         case 'vloget'
             [varargout{1:nargout}] = wishart_vlogdet(varargin{:});
         case 'logz'
-            [varargout{1:nargout}] = wishart_logZ(varargin{:});            
+            [varargout{1:nargout}] = wishart_logZ(varargin{:});
         case 'help'
             help spm_prob>wishart
         otherwise
@@ -928,14 +928,14 @@ function pdf = wishart_pdf(X, varargin)
         pdf = wishart_pdf(X, varargin{1}/varargin{2}, varargin{2});
         return
     end
-    
+
     % Usual pdf
     V   = varargin{1};
     n   = varargin{2};
     K   = size(V, 1);
     pdf = det(X)^(n-K-1) * exp(-0.5*trace(V\X)) ...
           / ( 2^(n*K/2) * det(V)^(n/2) * exp(LogGamma(0.5*n, K)) );
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -949,7 +949,7 @@ function pdf = wishart_logpdf(X, varargin)
         pdf = wishart_logpdf(X, varargin{1}/varargin{2}, varargin{2});
         return
     end
-    
+
     % Usual pdf
     V   = varargin{1};
     n   = varargin{2};
@@ -959,7 +959,7 @@ function pdf = wishart_logpdf(X, varargin)
           - 0.5*n*K*log(2) ...
           - 0.5*n*spm_matcomp('LogDet', V) ...
           - LogGamma(0.5*n, K);
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -974,7 +974,7 @@ function kl = wishart_kl(varargin)
                       varargin{3}/varargin{4}, varargin{4});
         return
     end
-    
+
     % Usual KL
     V1 = varargin{1};
     n1 = varargin{2};
@@ -985,7 +985,7 @@ function kl = wishart_kl(varargin)
          + 0.5*n1*(trace(V0\V1) - K) ...
          + 0.5*(n1 - n0)*DiGamma(0.5*n1, K) ...
          + LogGamma(0.5*n0, K) - LogGamma(0.5*n1, K);
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -994,7 +994,7 @@ function [Lam1, n1] = wishart_up(varargin)
 % FORMAT [Lam1, n1]  = wishart_up(Lam, n,        Lam0, n0)
 % FORMAT [Lam1, n1]  = wishart_up(ss0, ss1, ss2, Lam0, n0, (mu=0))
 
-    
+
     if nargin > 4
         % Sufficient statistics case
         ss0  = varargin{1};
@@ -1024,8 +1024,8 @@ function [Lam1, n1] = wishart_up(varargin)
                             n  * spm_matcomp('Inv',Lam));
         else,  Lam1 = Lam; end
     end
-    
-    
+
+
 end
 
 % -------------------------------------------------------------------------
@@ -1097,9 +1097,9 @@ function varargout = beta(varargin)
 % Relationship to other distributions
 % -----------------------------------
 %
-% The Beta distribution is a conjugate prior for the proportion parameter 
-% of the Bernoulli, Binomial, negative Binomial and Geometric 
-% distributions. 
+% The Beta distribution is a conjugate prior for the proportion parameter
+% of the Bernoulli, Binomial, negative Binomial and Geometric
+% distributions.
 %
 % The beta prameter is a special case of the Dirichlet distribution when
 % the number of classes is K = 2, i.e., the underlying trial is binary.
@@ -1108,7 +1108,7 @@ function varargout = beta(varargin)
 % General distribution
 % --------------------
 %
-% The Beta distribution is parameterised by two strictly positive shape 
+% The Beta distribution is parameterised by two strictly positive shape
 % parameters, a and b, and is defined over [0,1]. Parameters a and b can be
 % seen as concentration parameters, i.e., they reflect both class
 % proportions and their variance.
@@ -1138,7 +1138,7 @@ function varargout = beta(varargin)
 % - b = n(1-p)
 % The expected value of the distribution becomes E[x] = p
 % The variance of the distribution becomes       V[x] = p(1-p)/(n+1)
-% Then, the Beta distribution is parameterised by a mean probability  
+% Then, the Beta distribution is parameterised by a mean probability
 % parameter (p) and a degrees of freedom (n).
 %
 % FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, 'ber')
@@ -1168,7 +1168,7 @@ function varargout = beta(varargin)
 % - b = kn(1-p)
 % The expected value of the distribution becomes E[x] = p
 % The variance of the distribution becomes       V[x] = p(1-p)/(kn+1)
-% Then, the Beta distribution is parameterised by a mean probability  
+% Then, the Beta distribution is parameterised by a mean probability
 % parameter (p), a degrees of freedom (n) and a number of trials (k).
 %
 % FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, k, 'bin')
@@ -1193,13 +1193,13 @@ function varargout = beta(varargin)
 % ---------------------------------------
 %
 % To make the distribution easier to manipulate when used as a conjugate
-% prior for a negative Binomial distribution, we reparameterise it by 
+% prior for a negative Binomial distribution, we reparameterise it by
 % setting:
 % - a = rnp/(1-p)
 % - b = rn
 % The expected value of the distribution becomes E[x] = p
 % The variance of the distribution becomes       V[x] = p(1-p)^2/(rn+1-p)
-% Then, the Beta distribution is parameterised by a mean probability  
+% Then, the Beta distribution is parameterised by a mean probability
 % parameter (p), a degrees of freedom (n) and a number of failures (r).
 %
 % FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, r, 'nbin')
@@ -1224,13 +1224,13 @@ function varargout = beta(varargin)
 % -------------------------------
 %
 % To make the distribution easier to manipulate when used as a conjugate
-% prior for a Geometric distribution, we reparameterise it by 
+% prior for a Geometric distribution, we reparameterise it by
 % setting:
 % - a = n
 % - b = n(1-p)/p
 % The expected value of the distribution becomes E[x] = p
 % The variance of the distribution becomes       V[x] = (1-p)/(n+p)
-% Then, the Beta distribution is parameterised by a mean probability  
+% Then, the Beta distribution is parameterised by a mean probability
 % parameter (p) and a degrees of freedom (n).
 %
 % FORMAT pdf = spm_prob('Beta', 'pdf',    x, p, n, 'geom')
@@ -1319,7 +1319,7 @@ function pdf = beta_pdf(x, varargin)
         pdf = beta_pdf(x, a, b);
         return
     end
-    
+
     % Usual pdf
     a   = varargin{1};
     b   = varargin{2};
@@ -1364,7 +1364,7 @@ function pdf = beta_logpdf(x, varargin)
         pdf = beta_logpdf(x, a, b);
         return
     end
-    
+
     % Usual log-pdf
     a   = varargin{1};
     b   = varargin{2};
@@ -1388,7 +1388,7 @@ function e = beta_e(varargin)
         e = p;
         return
     end
-    
+
     % Usual expected value
     % E[x] = a/(a+b)
     a = varargin{1};
@@ -1434,7 +1434,7 @@ function el = beta_elog(varargin)
         el = beta_elog(a, b);
         return
     end
-    
+
     % Usual expected value
     % E[ln x] = psi(a) - psi(a+b)
     a  = varargin{1};
@@ -1480,7 +1480,7 @@ function v = beta_v(varargin)
         v = beta_v(a, b);
         return
     end
-    
+
     % Usual variance
     % V[x] = ab/[(a+b)^2*(a+b+1)]
     a  = varargin{1};
@@ -1528,7 +1528,7 @@ function vl = beta_vlog(varargin)
         vl = beta_vlog(a, b);
         return
     end
-    
+
     % Usual variance
     % V[ln x] = psi_1(a) - psi_1(a+b)
     a  = varargin{1};
@@ -1590,9 +1590,9 @@ function kl = beta_kl(varargin)
         kl = beta_kl(a1, b1, a0, b0);
         return
     end
-    
+
     % Usual KL-divergence
-    % KL(a1,b1||a0,b0) = ln B(a0,b0) - ln B(a1,b1) 
+    % KL(a1,b1||a0,b0) = ln B(a0,b0) - ln B(a1,b1)
     %                    + (a1-a0)psi(a1) + (b1-b0)psi(b1)
     %                    + (a0-a1+b0-b1)psi(a1+b1)
     a1 = varargin{1};

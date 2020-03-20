@@ -4,12 +4,12 @@ function [L,C,SUMD,D] = spm_kmeans(X, K, varargin)
 % Learn a K-means clustering from observed [weighted] data.
 %
 % FORMAT [L,C,SUMD,D] = spm_kmeans(X,K,...)
-% 
+%
 % MANDATORY
 % ---------
 % X - NxP matrix of observed values
 % K - Number of cluster
-% 
+%
 % OPTIONAL
 % --------
 % W - Nx1 Vector of weights associated with each observation [1]
@@ -108,11 +108,11 @@ r0  = 0;
 % -------------------------------------------------------------------------
 % For each replicate
 for r=1:Replicates
-    
+
     % ---------------------------------------------------------------------
     % Initial centroids
     C1 = start(p.Results.Start, X, WW, K, dist_fun, r);
-    
+
     % ---------------------------------------------------------------------
     % Iterate
     E0 = inf;
@@ -141,7 +141,7 @@ for r=1:Replicates
     if p.Results.Verbose
         fprintf('r = %2d | imax = %3d | E = %3g\n', r, i, E);
     end
-    
+
     % ---------------------------------------------------------------------
     % Keep best replicate
     if E < E00
@@ -155,7 +155,7 @@ for r=1:Replicates
         end
         r0 = r;
     end
-    
+
 end
 if p.Results.Verbose && Replicates > 1
     fprintf('Best | r = %2d | E = %3g\n', r0, E00);
@@ -211,7 +211,7 @@ L      = single2int(L);
 if ~missing
     msk      = any(isnan(X),2);
     L(msk)   = 0;
-    D(msk,:) = NaN; 
+    D(msk,:) = NaN;
 end
 % Reshape output
 L = reshape(L, [dim 1]);
@@ -220,7 +220,7 @@ D = reshape(D, [dim size(C,1)]);
 % =========================================================================
 function [L,C,SUMD,D] = order(method,L,C,SUMD,D,W)
 % FORMAT [L,C,SUMD,D] = order(method,L,C,SUMD,D,W)
-% 
+%
 % Order centroids (and centroid related data) w.r.t. a given measure.
 
 switch method
@@ -232,7 +232,7 @@ switch method
     case 'magnitude'
         measure = sqrt(sum(C.^2, 2));
     case 'intensity'
-        measure = C(:,1);        
+        measure = C(:,1);
     otherwise
         return
 end
@@ -253,7 +253,7 @@ function [C,K] = start(method, X, WW, K, dist, r)
 % method - Method to use to select starting centroids
 %               'plus', 'sample', 'uniform' or provided matrix
 % X      - Vector of NxP observed values
-% WW     - 
+% WW     -
 % K      - Number of clusters
 % dist   - Distance function handle
 % r      - Replicate index
@@ -277,7 +277,7 @@ if isnumeric(method)
 end
 
 switch method
-    
+
     case 'plus'
     % K-means ++
     % The first centroids is selected at random from the observed values
@@ -295,7 +295,7 @@ switch method
             i = randvalue(P);
             C(k,:) = X(i,:);
         end
-        
+
     case 'sample'
     % Sample uniform
     % All centroids are selected at random from the observed values.
@@ -305,10 +305,10 @@ switch method
         i = randperm(size(X,1));
         i = i(1:K);
         C = X(i,:);
-        
+
     case 'uniform'
     % Range uniform
-    % All centroids are selected at random from the continuous range of 
+    % All centroids are selected at random from the continuous range of
     % observed values.
     % They are all unique (to avoid starting with several identical
     % centroids)
@@ -316,7 +316,7 @@ switch method
         maxval = max(X, [], 1, 'omitnan');
         C = rand([K size(X,2)],'single');
         C = bsxfun(@times, C, maxval - minval) + minval;
-        
+
     otherwise
         error('Undefined method!')
 end

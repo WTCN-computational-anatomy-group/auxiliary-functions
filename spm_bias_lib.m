@@ -22,7 +22,7 @@ function varargout = spm_bias_lib(varargin)
 % [g,H]     = spm_bias_lib('derivatives', p, obs, basis, resp, cluster, codes, binvar)
 % [ll,bias] = spm_bias_lib('objective',   obs, resp, bias, mean, prec, codes, binvar)
 % [TODO] ll    = spm_bias_lib('prior',       coeff, precision)
-% 
+%
 %--------------------------------------------------------------------------
 % Visualisation
 % -------------
@@ -40,21 +40,21 @@ id = varargin{1};
 varargin = varargin(2:end);
 switch lower(id)
     case 'fwhm2nbcomp'
-        [varargout{1:nargout}] = fwhm2nbcomp(varargin{:}); 
+        [varargout{1:nargout}] = fwhm2nbcomp(varargin{:});
     case 'dcbasis'
-        [varargout{1:nargout}] = dcbasis(varargin{:});   
+        [varargout{1:nargout}] = dcbasis(varargin{:});
     case 'dfbasis'
-        [varargout{1:nargout}] = dfbasis(varargin{:}); 
+        [varargout{1:nargout}] = dfbasis(varargin{:});
     case 'reconstruct'
-        [varargout{1:nargout}] = reconstruct(varargin{:});  
+        [varargout{1:nargout}] = reconstruct(varargin{:});
     case 'regulariser'
-        [varargout{1:nargout}] = regulariser(varargin{:});   
+        [varargout{1:nargout}] = regulariser(varargin{:});
     case 'derivatives'
-        [varargout{1:nargout}] = derivatives(varargin{:});  
+        [varargout{1:nargout}] = derivatives(varargin{:});
     case 'objective'
-        [varargout{1:nargout}] = objective(varargin{:});          
+        [varargout{1:nargout}] = objective(varargin{:});
     case 'plot'
-        [varargout{1:nargout}] = biasplot(varargin{:});     
+        [varargout{1:nargout}] = biasplot(varargin{:});
     otherwise
         help spm_bias_lib
         error('Unknown function %s. Type ''help spm_bias_lib'' for help.', id)
@@ -68,9 +68,9 @@ function nbcmp = fwhm2nbcomp(lattice, vs, fwhm)
 % voxel_size   - Voxel size of the lattice [vx vy ...]
 % fwhm         - Full-width half-max of the highest frequency basis (mm)
 %
-% The number of components is chosen so that the full-width half-max of 
-% the highest frequency basis function is smaller than fwhm. The bias 
-% field cannot model effects whose spatial frequency is higher than this 
+% The number of components is chosen so that the full-width half-max of
+% the highest frequency basis function is smaller than fwhm. The bias
+% field cannot model effects whose spatial frequency is higher than this
 % value.
 %
 % If only one value is provided for voxel_size or fwhm, the same value is
@@ -101,7 +101,7 @@ function varargout = dcbasis(lattice, nb_component)
 % lattice      - Dimensions of the lattice [dx dy ...]
 % nb_component - Number of basis functions along each dimension [nx ny ...]
 %
-% Bx - Smooth basis along the x dimension [dx*nx] 
+% Bx - Smooth basis along the x dimension [dx*nx]
 % By - Smooth basis along the y dimension [dy*ny]
 % ...
 %
@@ -130,7 +130,7 @@ function varargout = dfbasis(lattice, nb_component)
 % lattice      - Dimensions of the lattice [dx dy ...]
 % nb_component - Number of basis functions along each dimension [nx ny ...]
 %
-% Bx - Smooth basis along the x dimension [dx*nx] 
+% Bx - Smooth basis along the x dimension [dx*nx]
 % By - Smooth basis along the y dimension [dy*ny]
 % ...
 %
@@ -165,10 +165,10 @@ function L = regulariser(mode, lattice, nb_component, vs, bnd)
 %
 % L            - Precision matrix [(nx*ny*...)^2]
 %
-% If numerical parameters are provided, a weighted combination of the  
+% If numerical parameters are provided, a weighted combination of the
 % three types of regularisation is returned.
 % If an energy name is provided, the matrix that allows to compute it is
-% returned (without weighting: the regularisation parameter should be 
+% returned (without weighting: the regularisation parameter should be
 % multiplied with this matrix)
 %
 % If only one value is provided for nb_component or voxel_size, the
@@ -343,7 +343,7 @@ switch lower(mode)
                 end
                 L(:,h1,:,h1) = L(:,h1,:,h1) + coeff * reshape(L1, [nbprm 1 nbprm]);
             end
-            
+
             for h2=h1+1:ndim        % Second Hessian dimension
                 L1 = 1;
                 for d=1:ndim        % Kronecker loop
@@ -358,7 +358,7 @@ switch lower(mode)
                 L(:,h1,:,h2) = L(:,h1,:,h2) + 0.5 * reshape(L1,  [nbprm 1 nbprm]);
                 L(:,h2,:,h1) = L(:,h2,:,h1) + 0.5 * reshape(L1', [nbprm 1 nbprm]);
             end
-            
+
         end
         L = reshape(L, nbprm*ndim, nbprm*ndim);
     case {'linear-elastic2' 'linearelastic2' 'le2'}
@@ -373,7 +373,7 @@ switch lower(mode)
                 end
             end
             L(:,h1,:,h1) = L(:,h1,:,h1) + 0.5 * reshape(L1, [nbprm 1 nbprm]);
-            
+
             for h2=h1+1:ndim        % Second Hessian dimension
                 L1 = 1;
                 for d=1:ndim        % Kronecker loop
@@ -388,7 +388,7 @@ switch lower(mode)
                 L(:,h1,:,h2) = L(:,h1,:,h2) + 0.5 * reshape(L1,  [nbprm 1 nbprm]);
                 L(:,h2,:,h1) = L(:,h2,:,h1) + 0.5 * reshape(L1', [nbprm 1 nbprm]);
             end
-            
+
         end
         L = reshape(L, nbprm*ndim, nbprm*ndim);
 end
@@ -437,7 +437,7 @@ if ~isempty(coeff)
         otherwise
             error('Unknown bias mode %s. Should be ''add'' or ''mult''.', mode)
     end
-    
+
 % -------------------------------------------------------------------------
 % No coefficients provided
 else
@@ -529,7 +529,7 @@ end
 % -------------------------------------------------------------------------
 % Initialise arrays to store statistics for gradient and Hessian
 if ~isempty(p)
-    g = zeros(N,1);    % <- 0.5 * Spp * x_p^2 - x_p * [Sp*(mu-0.5*x)] 
+    g = zeros(N,1);    % <- 0.5 * Spp * x_p^2 - x_p * [Sp*(mu-0.5*x)]
     H = zeros(N,1);    % <- 1.5 * Spp * x_p^2 - x_p * [Sp*(mu-0.5*x)]
 else
     g = zeros(N,P);    % [p]   <- 0.5 * Spp * x_p^2 - x_p * [Sp*(mu-0.5*x)]
@@ -540,7 +540,7 @@ end
 % -------------------------------------------------------------------------
 % For each combination of missing voxels
 for i=1:numel(L)
-    
+
     % ---------------------------------------------------------------------
     % Get mask of missing modalities (with this particular code)
     c        = L(i);
@@ -554,7 +554,7 @@ for i=1:numel(L)
     Po      = P-Pm;
     Nc      = sum(msk);
     if Nc == 0, continue; end
-    
+
     % ---------------------------------------------------------------------
     % Convert channel indices to observed indices
     if isempty(p)
@@ -567,13 +567,13 @@ for i=1:numel(L)
             continue;
         end
     end
-    
+
     X1 = X(msk,observed);
-    
+
     for k=1:K
-        
+
         Z1 = Z(msk,k);
-        
+
         % -----------------------------------------------------------------
         % Compute expected precision (see GMM+missing data)
         if sum(n) > 0
@@ -583,7 +583,7 @@ for i=1:numel(L)
             Ao = A(observed,observed,k) - A(observed,missing,k)*(A(missing,missing,k)\A(missing,observed,k));
         end
         MUo = MU(observed,k);
-        
+
         % -----------------------------------------------------------------
         % Compute statistics
         sk1 = zeros(Nc,numel(list_p));
@@ -605,7 +605,7 @@ for i=1:numel(L)
         end
         sk1 = bsxfun(@times, sk1, Z1);
         sk2 = bsxfun(@times, sk2, Z1);
-        
+
         % -----------------------------------------------------------------
         % Accumulate
         if isempty(p)
@@ -616,7 +616,7 @@ for i=1:numel(L)
             H(msk) = H(msk) + sk2;
         end
         clear sk1 sk2
-        
+
     end
     % ---------------------------------------------------------------------
     % Normalisation term
@@ -625,7 +625,7 @@ for i=1:numel(L)
     else
         g(msk) = g(msk) - 1;
     end
-    
+
 end
 
 % -------------------------------------------------------------------------
@@ -693,10 +693,10 @@ function lb = objective(X, Z, B, mean, prec, codes, binwidth)
 %
 % MANDATORY
 % ---------
-% obs    - NxP      observations (non-corrected) 
+% obs    - NxP      observations (non-corrected)
 % resp   - NxK      responsibilities
 % bias   - NxP      bias field (exponentiated)
-% mean   - PxK      GMM mean:      MU or {MU,b} 
+% mean   - PxK      GMM mean:      MU or {MU,b}
 % prec   - PxPxK    GMM precision: A  or {V,n}
 %
 % OPTIONAL
@@ -724,7 +724,7 @@ if nargin >= 6
                 L = codes{2};
             end
         end
-    end 
+    end
     if isempty(L)
         L = unique(C);
     end
@@ -762,9 +762,9 @@ id = varargin{1};
 varargin = varargin(2:end);
 switch lower(id)
     case {'lowerbound','lb'}
-        [varargout{1:nargout}] = plot_lowerbound(varargin{:});  
+        [varargout{1:nargout}] = plot_lowerbound(varargin{:});
     case {'bias'}
-        [varargout{1:nargout}] = plot_bias(varargin{:});       
+        [varargout{1:nargout}] = plot_bias(varargin{:});
     otherwise
         help spm_bias_lib>plot
         error('Unknown function %s. Type ''help spm_bias_lib>plot'' for help.', id)
@@ -782,7 +782,7 @@ f = findobj('Type', 'Figure', 'Name', figname);
 if isempty(f)
     f = figure('Name', figname, 'NumberTitle', 'off');
 end
-set(0, 'CurrentFigure', f);   
+set(0, 'CurrentFigure', f);
 clf(f);
 
 % -------------------------------------------------------------------------
@@ -811,7 +811,7 @@ f = findobj('Type', 'Figure', 'Name', figname);
 if isempty(f)
     f = figure('Name', figname, 'NumberTitle', 'off');
 end
-set(0, 'CurrentFigure', f);   
+set(0, 'CurrentFigure', f);
 clf(f);
 
 % -------------------------------------------------------------------------
@@ -845,7 +845,7 @@ for p=1:P
     axis off
     box on
     title(sprintf('Original %d', p));
-    
+
     subplot(nrow, ncol, sub2ind([ncol nrow], 2, p));
     tmp = tmp .* B(:,:,z,p);
     minval = min(minval, min(tmp(:)));
@@ -856,10 +856,10 @@ for p=1:P
     axis off
     box on
     title(sprintf('Corrected %d', p));
-    
+
     caxis(handles{p,1}.Parent, [minval maxval]);
     caxis(handles{p,2}.Parent, [minval maxval]);
-    
+
     subplot(nrow, ncol, sub2ind([ncol nrow], 3, p));
     tmp = B(:,:,z,p);
     handles{p,3} = imagesc(tmp(end:-1:1,end:-1:1)');

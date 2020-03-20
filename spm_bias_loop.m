@@ -6,7 +6,7 @@ function [B,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, varargin)
 %
 % This function is the core of the fitting process. However, it needs all
 % inputs to be well formatted and initialised and is, thus, not the usual
-% entry point. To fit a bias field without having to bother with these 
+% entry point. To fit a bias field without having to bother with these
 % issues, use spm_bias instead.
 %
 % FORMAT [bias,coeff,lb] = spm_bias_loop(obs,resp,cluster,bases,...)
@@ -23,7 +23,7 @@ function [B,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, varargin)
 %   V  - PxPxK scale matrices
 %   n  - 1xK   precision d.f. [0=ML]
 % bases   <- {Bx, By, ...}, where Bd are NdxJd basis functions
-%       
+%
 % KEYWORD
 % -------
 % Coefficients   - Pre-computed bias coefficients [0]
@@ -44,15 +44,15 @@ function [B,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, varargin)
 %                                    1 = write (lower bound)
 %                                    2 = plot (lower bound)
 %                                    3 = plot more (gmm fit)
-% 
+%
 % OUTPUT
 % ------
-% 
+%
 % bias  - NxP         Bias field
 % coeff - prod(Jd)xP  Bias coefficients
 % lb    - Structure with fields: sum, last, X, B
 % ok    - True if at least one improved value was found
-% 
+%
 %__________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
 
@@ -211,7 +211,7 @@ if isempty(JointOptim)
 end
 if JointOptim
     R = 1;  % < Iterations needed (Joint: 1, Iter: P)
-    Q = P;  % < Size of Grad/Hess (Joint: P, Iter: 1)      
+    Q = P;  % < Size of Grad/Hess (Joint: P, Iter: 1)
 else
     R = P;
     Q = 1;
@@ -226,9 +226,9 @@ for gnit=1:IterMax
     % ---------------------------------------------------------------------
     % Choose the right regularisation
     prm = get_param(prms, gnit);
-    
+
     for r=1:R % < Joint: one loop, Iter: P loops
-    
+
         if JointOptim
             list_p = 1:P;
             whichd = [];
@@ -236,7 +236,7 @@ for gnit=1:IterMax
             list_p = r;
             whichd = r;
         end
-        
+
         % -----------------------------------------------------------------
         % Compute grad/hess
         [g,H] = spm_bias_lib('derivatives', whichd, B.*X, bases, Z, cluster, {C,L}, (bsxfun(@times, B, BW).^2)/12);
@@ -322,13 +322,13 @@ for gnit=1:IterMax
         end
         oneok = oneok || ok;
 
-        
+
         % -----------------------------------------------------------------
         % Plot Bias
         if Verbose(1) >= 3
             spm_bias_lib('Plot', 'Bias', X, B, lattice);
         end
-        
+
         % -----------------------------------------------------------------
         % Check convergence
         [lb,gain(r)] = check_convergence(lb, gnit, ls, list_p, Verbose(1));
@@ -336,7 +336,7 @@ for gnit=1:IterMax
     if sum(gain) < Tolerance
         break;
     end
-    
+
 end
 ok = oneok; % At least one success
 

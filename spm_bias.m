@@ -4,7 +4,7 @@ function varargout = spm_bias(X, varargin)
 % Estimate a spatial bias field by fitting a GMM to the data.
 %
 % FORMAT [B,X,...] = spm_bias(X,...)
-% 
+%
 % MANDATORY
 % ---------
 % X - [LAT]xP Multichannel image or volume
@@ -132,12 +132,12 @@ lb  = struct('sum', NaN, 'X', [], 'XB', [], 'B', [], ...
 ThisRegParam = RegParam(1);
 RegParam     = RegParam(2:end);
 for em=1:IterMax
-    
-    
+
+
     % ---------------------------------------------------------------------
     % Save previous lower bound value
     obj0 = lb.sum(end);
-    
+
     % ---------------------------------------------------------------------
     % Optimise GMM
     [Z,cluster,prop,lb] = spm_gmm_loop(reshape(field, [], P).*reshape(X, [], P), ...
@@ -163,14 +163,14 @@ for em=1:IterMax
     else,          prec = {A};
     end
     cluster = {mean prec};
-    
-    
+
+
     % ---------------------------------------------------------------------
     % Plot Bias
     if Verbose(1) >= 3
         spm_bias_lib('Plot', 'Bias', X, field, latX);
     end
-    
+
     % ---------------------------------------------------------------------
     % Optimise Bias Field
     [field,coeff,lb,ok] = spm_bias_loop(X, Z, cluster, bases, ...
@@ -186,7 +186,7 @@ for em=1:IterMax
     if ~ok
         break;
     end
-    
+
     % ---------------------------------------------------------------------
     % Check convergence
     obj  = lb.sum(end);

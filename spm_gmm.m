@@ -4,11 +4,11 @@ function varargout = spm_gmm(X, varargin)
 % Fit a [Bayesian] Gaussian mixture model to observed [weighted] data.
 %
 % FORMAT [Z,MU,A,PI,...] = spm_gmm(X,...)
-% 
+%
 % MANDATORY
 % ---------
 % X - NxP matrix of observed values
-% 
+%
 % OPTIONAL
 % --------
 % K  - Number of cluster [0=guess from options, 2 if cannot guess]
@@ -134,7 +134,7 @@ end
 % ---
 % default value
 if K == 0, K = 2; end
-        
+
 % -------------------------------------------------------------------------
 % Proportion / Dirichlet
 if size(PropPrior, 1) > 1
@@ -308,7 +308,7 @@ if sum(missmsk) > 0
     present = ones(N0, 1, 'logical');
     present(missmsk) = false;
     clear missing
-    
+
     Z = expand(Z, present, N0, K, 0);
     if size(PI,1) > 1 && nargout >= 4
         PI = expand(PI, present, N0, K, PI0);
@@ -317,7 +317,7 @@ if sum(missmsk) > 0
         X = expand(X, present, N0, P, NaN);
     end
 end
-    
+
 % -------------------------------------------------------------------------
 % Reshape everything (use input lattice)
 Z = reshape(Z, [latX K]);
@@ -409,7 +409,7 @@ K = size(MU,2);
 if numel(PI) <= K
     PI = PI(:)';
     PI = spm_padarray(PI, [0 K - numel(PI)], 'replicate', 'post');
-    
+
     if abs(sum(PI)-1) > eps('single')
         % Dirichlet prior
         a     = PI;
@@ -479,7 +479,7 @@ logpX = spm_gmm_lib('Marginal', X, [{MU} prec], const, msk_obs, E);
 % Compute responsibilities
 Z = spm_gmm_lib('Responsibility', logpX, logPI);
 clear logpX logPI
- 
+
 % -------------------------------------------------------------------------
 % Cell 2 Matrix
 if Missing
@@ -494,20 +494,20 @@ end
 if nargout >= 2 && Missing
     X = spm_gmm_lib('InferMissing', X, Z, {MU,A}, code_image);
 end
- 
+
 % -------------------------------------------------------------------------
 % Replace discarded missing values
 if sum(missmsk) > 0
     present = ones(N0, 1, 'logical');
     present(missmsk) = false;
     clear missing
-    
+
     Z = expand(Z, present, N0, K, 0);
     if nargout >= 2
         X = expand(X, present, N0, P, NaN);
     end
 end
-    
+
 % -------------------------------------------------------------------------
 % Reshape everything (use input lattice)
 Z = reshape(Z, [latX K]);
@@ -536,7 +536,7 @@ function TellMeMore
 %   p({x}_n | {Mu, A}_k) = int p({x}_n | {z}_n, {Mu, A}_k) p({z}_n) d{z}_n
 % Since  this integral is intractable,  we use the Expectation-Maximisation
 % algorithm:  we alternate between computing  the posterior distribution of
-% responsibilities (given known means and precision matrices)  and updating 
+% responsibilities (given known means and precision matrices)  and updating
 % the mean and precisions (given the known posterior).
 %
 % Bayesian GMM
@@ -565,8 +565,8 @@ function TellMeMore
 % Histogram GMM
 % -------------
 % To speed up computation,  we sometimes prefer  to use an histogram  (that
-% is,  binned observations)  rather than  the full set  of observations.  A 
-% first way of doing this,  is by assuming that each bin centre corresponds 
+% is,  binned observations)  rather than  the full set  of observations.  A
+% first way of doing this,  is by assuming that each bin centre corresponds
 % to several identical observations (the bin count). In other words, we now
 % have weighted observations.
 % However, using weighted observations makes estimating the precisions less
@@ -600,24 +600,24 @@ function Options
 % _________________________________________________________________________
 %
 % FORMAT [Z,MU,A,PI,...] = spm_gmm(X,...)
-% 
+%
 % MANDATORY
 % ---------
 % X is a set of multidimensional observations. It usually takes the form of
 %   a  matrix,  in which  case  its first  dimension (N)  is the number  of
-%   observations and its second dimension (P) is their dimension.  However, 
+%   observations and its second dimension (P) is their dimension.  However,
 %   it is possible  to provide a multidimensional array,  in which case the
-%   dimension P  must be provided  in some way.  This might be  through the 
-%   size of user-provided  starting estimates or priors,  or directly using 
+%   dimension P  must be provided  in some way.  This might be  through the
+%   size of user-provided  starting estimates or priors,  or directly using
 %   the 'InputDim' option. If the 'Missing' option is activated, X might
 %   contain missing values (NaN), which will be inferred by the model.  If
 %   the 'Missing'  option is  not activated,  all rows  containing  missing
 %   values will be excuded.
-% 
+%
 % OPTIONAL
 % --------
 % K is the  number of  clusters in the  mixture.  If not provided,  we will
-%   first try to guess it from user-provided options (starting estimates or 
+%   first try to guess it from user-provided options (starting estimates or
 %   priors). If this is not possible, the default value is 2.
 %
 % W is a  vector of  weights  associated  with each  observation.  Usually,
@@ -632,12 +632,12 @@ function Options
 % PropPrior  may take two forms (+ the default):
 %            0) It can be empty (the default),  in which case the algorithm
 %            searches for maximum-likelihood proportion.
-%            1) It  can  be  a  vector of  concentration  parameters  for a 
-%            Dirichlet prior.  Dirichlet distributions are conjugate priors 
-%            for proportions,  e.g.  Categorical parameters.  In this case, 
-%            it  must  consist  of   K  strictly  positive  values.   Their 
-%            normalised value is the prior expected proportion, while their 
-%            sum  corresponds  to the precision  of the  distribution  (the 
+%            1) It  can  be  a  vector of  concentration  parameters  for a
+%            Dirichlet prior.  Dirichlet distributions are conjugate priors
+%            for proportions,  e.g.  Categorical parameters.  In this case,
+%            it  must  consist  of   K  strictly  positive  values.   Their
+%            normalised value is the prior expected proportion, while their
+%            sum  corresponds  to the precision  of the  distribution  (the
 %            larger the precision, the stonger the prior).
 %            2) It can be a  matrix  (or multidimensional array)  of  fixed
 %            observation-wise    proportions.    We   often   talk    about
@@ -647,10 +647,10 @@ function Options
 %            dimension.
 %
 % GaussPrior {Mu(PxK),b(1x[K]),V([PxP]x[K]),n(1x[K])}
-%            The Gauss-Wishart  distribution is a  conjugate prior  for the 
+%            The Gauss-Wishart  distribution is a  conjugate prior  for the
 %            parameters  (mean  and  precision matrix)  of  a  multivariate
 %            Gaussian distribution.  Its  parameters are  Mu,  the expected
-%            mean,  b,  the prior degrees of freedom for the mean,  V,  the 
+%            mean,  b,  the prior degrees of freedom for the mean,  V,  the
 %            scale  matrix  and n,  the prior degrees  of freedom  for  the
 %            precision.  The expected precision matrix is n*V.  This option
 %            allows to defines these parameters for each cluster: it should
@@ -659,33 +659,33 @@ function Options
 %            will be  automatically determined.  Typically,  one could only
 %            provide the  degrees of freedom  (b and n),  in which case the
 %            starting  estimates will be  used as  prior expected means and
-%            precisions.  Also, dimensions that are written in brackets are 
+%            precisions.  Also, dimensions that are written in brackets are
 %            automatically expanded if needed.
 %            By  default,   this  option   is  empty,   and  the  algorithm
 %            searches for maximum-likelihood parameters.
 %
-% Prune      contains a  threshold  for  the  final  estimated proportions. 
+% Prune      contains a  threshold  for  the  final  estimated proportions.
 %            Classes  that are under this threshold  will be considered  as
 %            non-informative and pruned out. By default, the threshold is 0
 %            and no pruning is performed.
 %
 % Missing     'infer': (default) missing values are inferred by making  use
-%                      of  some properties of  the  Gaussian  distribution. 
-%                      However, the fit is  slower due to  this  inferrence 
+%                      of  some properties of  the  Gaussian  distribution.
+%                      However, the fit is  slower due to  this  inferrence
 %                      scheme.
 %            'remove': all rows  with missing values are exclude,  and  the
-%                      fit   is   performed    without   inferrence.    For 
-%                      computational efficiency, when no values are missing 
-%                      from the input set  (i.e., there are no NaNs),  this 
+%                      fit   is   performed    without   inferrence.    For
+%                      computational efficiency, when no values are missing
+%                      from the input set  (i.e., there are no NaNs),  this
 %                      option is activated by default.
 %
 % Start      Method used to select starting estimates:
 %              'kmeans': A K-means  clustering is  used to  obtain a  first
 %                        classification of the observations.  Centroids are
 %                        used  to  initialise   the  means,   intra-cluster
-%                        co-variance   is  used   to  initialise  precision 
+%                        co-variance   is  used   to  initialise  precision
 %                        matrices  (unless initial  precision matrices  are
-%                        user-provided)   and  cluster  size   is  used  to 
+%                        user-provided)   and  cluster  size   is  used  to
 %                        initialise proportions. Options can be provided to
 %                        the K-means algorithm using the 'KMeans' option.
 %            'linspace': Centroids  are  chosen so  that they are  linearly
@@ -694,15 +694,15 @@ function Options
 %               'prior': The prior  expected means  and  precision matrices
 %                        are used as initial estimates.
 %              'sample': Random samples are selected from the input dataset
-%                        and used as initial means.  Precision matrices are 
+%                        and used as initial means.  Precision matrices are
 %                        set as explained below.
 %             'uniform': Random values are uniformly sampled from the input
-%                        range  of  values   and  used  as  initial  means. 
+%                        range  of  values   and  used  as  initial  means.
 %                        Precision matrices are set as explained below.
 %               MU(PxK): Initial means are user-provided.
 %            The  method  can  be  provided along  with  initial  precision
-%            matrices,  in  a  cell:  {METHOD, A([PxP]x[K])}.  By  default, 
-%            the  initial  precision matrix  is  common to all classes  and 
+%            matrices,  in  a  cell:  {METHOD, A([PxP]x[K])}.  By  default,
+%            the  initial  precision matrix  is  common to all classes  and
 %            chosen so that the input range is well covered:
 %            -> A = diag(a) with a(p) = (range(p)/(2K))^(-2)
 %
@@ -710,7 +710,7 @@ function Options
 %
 % IterMax    is the maximum number of EM iterations. Default is 1000.
 %
-% Tolerance  is the  convergence  threshold  below  which the algorithm  is 
+% Tolerance  is the  convergence  threshold  below  which the algorithm  is
 %            stopped. The convergence criterion is a normalised lower bound
 %            gain (lcur-lprev)(lmax-lmin). The default tolerance is 1e-4.
 %
@@ -729,8 +729,8 @@ function Options
 %            2: Graphical mode. The evolution of the lower bound and its
 %               different components is plotted.
 %            3: Graphical mode +.  A representation  of the  fit  (marginal
-%               distribution,  joint  2D  distributions,  proportions)   is 
-%               plotted.  This slows things down  dramatically  and  should 
+%               distribution,  joint  2D  distributions,  proportions)   is
+%               plotted.  This slows things down  dramatically  and  should
 %               only be used for education or debugging purpose.
 % _________________________________________________________________________
 % Copyright (C) 2018 Wellcome Centre for Human Neuroimaging
@@ -991,7 +991,7 @@ n = [];
 V = [];
 
 switch method{1}
-    
+
     case 'kmeans'
     % Use kmeans to produce a first clustering of the data
         P = size(X,2);
@@ -1054,7 +1054,7 @@ switch method{1}
                 A(:,:,k) = spm_matcomp('Inv', A(:,:,k));
             end
         end
-        
+
     case 'prior'
     % Use prior expected value
         if isempty(pr.MU) || isempty(pr.V) || isempty(pr.n)
@@ -1065,7 +1065,7 @@ switch method{1}
         V  = pr.V;
         n  = pr.n;
         A  = bsxfun(@times, V, reshape(n, [1 1 K]));
-        
+
     case 'sample'
     % Sample uniform
     % All centroids are selected at random from the observed values.
@@ -1075,10 +1075,10 @@ switch method{1}
         i   = randperm(size(X,1));
         i   = i(1:K);
         MU = X(i,:)';
-        
+
     case 'uniform'
     % Range uniform
-    % All centroids are selected at random from the continuous range of 
+    % All centroids are selected at random from the continuous range of
     % observed values.
     % They are all unique (to avoid starting with several identical
     % centroids)
@@ -1087,10 +1087,10 @@ switch method{1}
         MU = rand(K,size(X,2));
         MU = bsxfun(@times, MU, maxval - minval) + minval;
         MU = MU';
-        
+
     case 'linspace'
     % Range uniform
-    % All centroids are selected at random from the continuous range of 
+    % All centroids are selected at random from the continuous range of
     % observed values.
     % They are all unique (to avoid starting with several identical
     % centroids)
@@ -1101,7 +1101,7 @@ switch method{1}
             ticks = linspace(minval(p), maxval(p), 2*K+1);
             MU(p,:) = ticks(2:2:end-1);
         end
-        
+
     otherwise
     % Provided
         if ~iscell(method{1})
@@ -1117,8 +1117,8 @@ switch method{1}
 end
 
 % Precision matrix
-% - If nothing is provided, we split the range in 2K pieces and set the 
-%   standard deviation (sigma) to that value. This way, half of each 
+% - If nothing is provided, we split the range in 2K pieces and set the
+%   standard deviation (sigma) to that value. This way, half of each
 %   Gaussian covers (1/K)th of the range of values.
 % - If scalars,are provided, we use them as precisions in diagonal
 %   precision matrices.
