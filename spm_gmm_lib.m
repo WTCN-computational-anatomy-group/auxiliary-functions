@@ -617,7 +617,6 @@ end
 % ---------------------------------------------------------------------
 % Compute final responsibilities
 Z = responsibility(logpX, log_prop, labels, log(mg_w));
-clear logpX
     
 % ---------------------------------------------------------------------
 % Recompute parts of lower bound that depends on responsibilities
@@ -630,6 +629,7 @@ else
     lb.X(end+1)      = LX;
 end
 lb = check_convergence(lb, em, verbose(1)); % Make sure lb.sum is correct
+clear logpX
 
 % -------------------------------------------------------------------------
 % Format output
