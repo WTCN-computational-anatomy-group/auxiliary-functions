@@ -70,6 +70,8 @@ function varargout = spm_gmm_lib(varargin)
 % mask-  M  x P        Mask of observed channels per 'missing code'
 %--------------------------------------------------------------------------
 
+% $Id$
+
 if nargin == 0
     help spm_gmm_lib
     error('Not enough argument. Type ''help spm_gmm_lib'' for help.');
@@ -203,7 +205,7 @@ function [Z,cluster,prop,lb,mg_w] = loop(X, weights, cluster, props, varargin)
 % entry point. To fit a GMM without having to bother with these issues, use
 % spm_gmm instead.
 %
-% FORMAT [resp,cluster,prop,lb] = spm_gmm_lib('loop',obs,weights,cluster,prop,...)
+% FORMAT [resp,cluster,prop,lb,mg_w] = spm_gmm_lib('loop',obs,weights,cluster,prop,...)
 %
 % MANDATORY
 % ---------
@@ -457,10 +459,8 @@ for em=1:iter_max
 
             % -------------------------------------------------------------
             % Save previous value
-            MUp     = MU;
             Ap      = A;
             Vp      = V;
-            bp      = b;
             np      = n;
 
             if numel(SS0m)==1, subsubiter_max = 1; else subsubiter_max = 4; end
@@ -478,8 +478,7 @@ for em=1:iter_max
                 for k=1:size(MU,2)
                     [~,cholp] = chol(A(:,:,k));
                     if cholp ~= 0
-% disp('chol problem');
-% save('poor_matrix.mat');
+                        warning('A not positive definite - reverting to previous version')
                         A(:,:,k) = Ap(:,:,k);
                         if sum(n) > 0
                             V(:,:,k) = Vp(:,:,k);
@@ -489,7 +488,7 @@ for em=1:iter_max
                 end
                 mean = {MU,b};
                 if ~sum(n), prec = {A};
-                else,       prec = {V,n};   end
+                else        prec = {V,n};   end
             end
 
             % -------------------------------------------------------------
@@ -499,25 +498,7 @@ for em=1:iter_max
             LB(i+1)        = LMU+LA+LX;
             subgain        = (LB(i+1)-LB(i))/(max(LB(2:i+1), [], 'omitnan')-min(LB(2:i+1), [], 'omitnan'));
             subgain1       = (LB(i+1)-LB(i))/abs(LB(i+1));
-            % -------------------------------------------------------------
-            % Check success
-            % > This should always improve since we use a closed-form
-            %   update. However, it sometimes does not, probably because of
-            %   precision issues (even though everything is in double). In
-            %   such cases, we go back to the previous parameters.
-            if false %subgain < 0 %% I assume this happens because of numerical errors that can be ignored
-                MU         = MUp;
-                A          = Ap;
-                V          = Vp;
-                b          = bp;
-                n          = np;
-                mean = {MU,b};
-                if ~sum(n), prec = {A};
-                else,       prec = {V,n};   end
-                subgain        = 0;
-                [LMU,LA]       = kl_gausswishart(mean, prec, mean0, prec0);
-                [LX,norm_term] = marginalsum(SS0m, SS1m, SS2m, mean, prec, obs_channels, SS2u);
-            end
+
             % -------------------------------------------------------------
             % Print stuff
             if numel(verbose) > 1 && verbose(2) > 0
@@ -535,8 +516,8 @@ for em=1:iter_max
         end
 
     else
-    % ---------------------------------------------------------------------
-    % Classical M-step
+        % ---------------------------------------------------------------------
+        % Classical M-step
 
         % -----------------------------------------------------------------
         % Compute sufficient statistics
@@ -548,18 +529,14 @@ for em=1:iter_max
         [MU,A,b,V,n] = updateclusters(SS0, SS1, SS2, [mean0 prec0]);
         for k=1:size(MU,2)
             [~,cholp] = chol(A(:,:,k));
-            if cholp == 0
-                A(:,:,k) = A(:,:,k);
-                if sum(n) > 0
-                    V(:,:,k) = V(:,:,k);
-                end
+            if cholp ~= 0
+                warning('A not positive definite');
             end
         end
         mean = {MU,b};
         if ~sum(n), prec =  {A};
-        else,       prec = {V,n};   end
+        else        prec = {V,n};   end
         norm_term = normalisation(mean, prec);
-
     end
 
     % ---------------------------------------------------------------------
@@ -617,7 +594,8 @@ end
 % ---------------------------------------------------------------------
 % Compute final responsibilities
 Z = responsibility(logpX, log_prop, labels, log(mg_w));
-    
+clear logpX
+
 % ---------------------------------------------------------------------
 % Recompute parts of lower bound that depends on responsibilities
 lb.Z(end+1) = kl_categorical(Z, weights, log_prop, labels, log(mg_w));
@@ -629,7 +607,6 @@ else
     lb.X(end+1)      = LX;
 end
 lb = check_convergence(lb, em, verbose(1)); % Make sure lb.sum is correct
-clear logpX
 
 % -------------------------------------------------------------------------
 % Format output
@@ -821,7 +798,7 @@ for i=1:size(L,1)
     im = ~io;                   % Missing channels
     Pm = sum(im);               % Number of missing channels
     if Po == 0, continue; end
-    if iscell(E), E1 = E{i}; else, E1 = E(:,io); end % Uncertainty
+    if iscell(E), E1 = E{i}; else E1 = E(:,io); end % Uncertainty
 
     % ---------------------------------------------------------------------
     % Allocate logpX
@@ -869,8 +846,8 @@ end
 if arraymode, logpX = logpX{1}; end
 
 % =========================================================================
-function Z = responsibility(varargin)
-% FORMAT Z = spm_gmm_lib('responsibility', logpX, logPI, ...)
+function [Z,lb] = responsibility(varargin)
+% FORMAT [Z,lb] = spm_gmm_lib('responsibility', logpX, logPI, ...)
 % logpX - {NoxK} Marginal log-likelihood
 % logPI - {NoxK} Prior log-probabilities (or 1XK)
 % ...   -        Other log-priors
@@ -897,17 +874,23 @@ for j=1:numel(varargin)
     if ~isempty(Zj)
         for i=1:numel(Z)
             if iscell(Zj), Zji = Zj{i};
-            else,          Zji = Zj; end
+            else           Zji = Zj; end
             Z{i} = bsxfun(@plus, Z{i}, Zji);
         end
     end
 end
 
 % Exponentiate and normalise
+lb = 0;
 for i=1:numel(Z)
-    Z{i} = bsxfun(@minus, Z{i}, max(Z{i}, [], 2));
+    mx   = max(Z{i}, [], 2);
+    Z{i} = bsxfun(@minus, Z{i}, mx);
     Z{i} = exp(Z{i});
-    Z{i} = bsxfun(@rdivide, Z{i}, sum(Z{i}, 2));
+    sz   = sum(Z{i}, 2);
+    if nargout>=2
+        lb = lb + sum(log(sz),1) + sum(mx,1);
+    end
+    Z{i} = bsxfun(@rdivide, Z{i}, sz);
 end
 
 if arraymode, Z = Z{1}; end
@@ -1019,7 +1002,7 @@ if nargin < 3, W = 1; end
 % Multiply responsibility with observation weight
 for i=1:size(L,1)
     if iscell(W), Z{i} = bsxfun(@times, Z{i}, W{i});
-    else,         Z{i} = bsxfun(@times, Z{i}, W);    end
+    else         Z{i} = bsxfun(@times, Z{i}, W);    end
 end
 
 %--------------------------------------------------------------------------
@@ -1057,10 +1040,10 @@ for i=1:size(L,1)
             xm  = double(X{i}(:,m));
             zx  = zk.*xm;
             SS1{i}(m,k)   = sum(zx);
-            SS2{i}(m,m,k) = sum(zx.*xm);
+            SS2{i}(m,m,k) = zx'*xm;
             for m1=(m+1):Po
                 xm  = double(X{i}(:,m1));
-                SS2{i}(m,m1,k) = sum(zx.*xm);
+                SS2{i}(m,m1,k) = zx'*xm;
                 SS2{i}(m1,m,k) = SS2{i}(m,m1,k);
             end
         end
@@ -1122,8 +1105,8 @@ for k=1:K
             SS1k = lSS1{i}(:,k);
 
             % 0) precompute stuff
-            ss1o = ss1(io);
-            ss1m = ss1(im);
+            ss1o = ss1(io,:);
+            ss1m = ss1(im,:);
             MUo  = MU(io,k);
             MUm  = MU(im,k);
 
@@ -1223,7 +1206,7 @@ if sum(E) == 0, return; end
 % Multiply responsibility with observation weight
 for i=1:size(L,1)
     if iscell(W), Z{i} = bsxfun(@times, Z{i}, W{i});
-    else,         Z{i} = bsxfun(@times, Z{i}, W);    end
+    else          Z{i} = bsxfun(@times, Z{i}, W);    end
 end
 
 % -------------------------------------------------------------------------
@@ -1232,7 +1215,7 @@ for i=1:size(L,1)
     io = L(i,:);                % Observed channels
     Po = sum(io);               % Number of observed channels
     if Po == 0, continue; end
-    if iscell(E), E1 = E{i}; else, E1 = E(:,io); end % Uncertainty
+    if iscell(E), E1 = E{i}; else E1 = E(:,io); end % Uncertainty
 
     list_p = 1:P;
     list_p = list_p(io);
@@ -1271,7 +1254,7 @@ if sum(E) == 0, return; end
 
 %--------------------------------------------------------------------------
 % Multiply responsibility with observation weight
- Z = bsxfun(@times, Z, W);
+Z = bsxfun(@times, Z, W);
 
 % -------------------------------------------------------------------------
 % 2nd order moment: uncertainty ~ binning
@@ -1457,26 +1440,23 @@ end
 
 % -------------------------------------------------------------------------
 % Scale/Precision
+V = zeros(size(SS2));
 if sum(n0) == 0
     % ---------------------------------------------------------------------
     % Without prior
     n   = [];
     for k=1:K
-        SS2(:,:,k) = SS2(:,:,k) / SS0(k) - (MU(:,k) * MU(:,k).');
+        V(:,:,k) = inv(SS2(:,:,k) / SS0(k) - (MU(:,k) * MU(:,k).'));
     end
 else
     % ---------------------------------------------------------------------
     % With prior
     n = n0 + SS0;
     for k=1:K
-        SS2(:,:,k) = SS2(:,:,k) +   b0(k) * MU0(:,k) * MU0(:,k).' ...
-                                -    b(k) * MU(:,k)  * MU(:,k).' ...
-                                + inv(V0(:,:,k));
+        V(:,:,k) = inv(SS2(:,:,k) + b0(k) * MU0(:,k) * MU0(:,k).' ...
+                                  -  b(k) * MU(:,k)  * MU(:,k).' ...
+                                  + inv(V0(:,:,k)));
     end
-end
-V = SS2;
-for k=1:K
-    V(:,:,k) = inv(V(:,:,k));
 end
 if sum(n) > 0
     A = bsxfun(@times, V, reshape(n, [1 1 K]));
@@ -1626,7 +1606,7 @@ if ~constrained
 
         % -----------------------------------------------------------------
         % Update n0 (mode, Gauss-Newton [convex])
-        E = inf;
+        E     = inf;
         for gniter=1:1000
 
             % -------------------------------------------------------------
@@ -2023,9 +2003,9 @@ klZ = zeros(1, 'like', Z{1});
 
 for i=1:numel(Z)
     Z1 = Z{i};
-    if iscell(W), W1 = W{i}; else, W1 = W; end
-    if iscell(logPI), logPI1 = logPI{i}; else, logPI1 = logPI; end
-    if iscell(labels), labels1 = labels{i}; else, labels1 = labels; end
+    if iscell(W), W1 = W{i}; else W1 = W; end
+    if iscell(logPI), logPI1 = logPI{i}; else logPI1 = logPI; end
+    if iscell(labels), labels1 = labels{i}; else labels1 = labels; end
 
     if ~isempty(labels1)
         % E[ln p(Z|labels)]
@@ -2033,7 +2013,7 @@ for i=1:numel(Z)
     end
 
     % E[ln p(Z|PI)] (prior ~ responsibilities)
-    klZ = klZ + sum(sum(bsxfun(@times,Z1,logPI1 + logmg_w), 2) .* W1, 'double');
+    klZ = klZ + sum(sum(bsxfun(@times,Z1,bsxfun(@plus,logPI1,logmg_w)), 2) .* W1, 'double');
 
     % -E[ln q(Z)] (posterior ~ responsibilities))
     klZ = klZ - sum(sum(Z1 .* log(max(Z1,eps)), 2) .* W1, 'double');
@@ -2666,8 +2646,8 @@ if isa(pal, 'function_handle')
 end
 
 dm = [size(f) 1 1];
-c   = zeros([dm(1:2) 3]); % output RGB image
-s   = zeros(dm(1:2));     % normalising term
+c  = zeros([dm(1:2) 3]); % output RGB image
+s  = zeros(dm(1:2));     % normalising term
 
 for k=1:dm(3)
     s = s + f(:,:,k);
@@ -2933,7 +2913,7 @@ function ld = logdet(A)
 % $Id$
 
 % Cholseki decomposition of A (A = C' * C, with C upper-triangular)
-[C, p] = chol(numeric(A));
+[C, p] = chol(A);
 
 if p > 0
    % A should usually be positive definite, but check anyway.
